@@ -14,18 +14,21 @@
 #   fetch    only download and verify the cloud image
 #   ssh      open a shell in the VM (or run: scripts/e2e-vm.sh ssh -- cmd)
 #   logs     show the tilde service log in the VM
+#   tunnel   forward https://localhost:9443 to Tilde in the VM (Ctrl+C stops)
 #   down     shut the VM down
 #   reset    shut down and delete the VM disk; the next "up" starts fresh
 #
 # Needs: qemu-system-x86 qemu-utils genisoimage (apt), access to /dev/kvm.
 # Environment: TILDE_VM_DIR (default ~/.cache/tilde-e2e-vm),
-# TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048).
+# TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048),
+# TILDE_VM_UI_PORT (default 9443, for "tunnel").
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${TILDE_VM_DIR:-$HOME/.cache/tilde-e2e-vm}"
 PORT="${TILDE_VM_SSH_PORT:-2522}"
 MEM="${TILDE_VM_MEM:-2048}"
+UI_PORT="${TILDE_VM_UI_PORT:-9443}"
 
 IMAGE_URL="https://cloud-images.ubuntu.com/noble/current"
 IMAGE_NAME="noble-server-cloudimg-amd64.img"
@@ -142,10 +145,11 @@ down() {
 }
 
 install_build() {
-  need go
-  log "Building tilde and the e2e tests"
+  need go npm
+  log "Building tilde (with the UI) and the e2e tests"
   local out="$DIR/build"
   mkdir -p "$out"
+  make -s -C "$ROOT" web >/dev/null
   # Built here, not into bin/, so a running "make dev-server" is untouched.
   (cd "$ROOT/server" && CGO_ENABLED=1 go build -trimpath -o "$out/tilde" ./cmd/tilde)
   (cd "$ROOT/server" && go test -c -tags e2e -o "$out/e2e.test" ./e2e)
@@ -174,7 +178,9 @@ install_build() {
 run_tests() {
   log "Running the e2e tests"
   local status=0
-  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS ./e2e.test -test.v -test.count=1" || status=$?
+  # The full output is kept in $DIR/last-test.log for flaky failures.
+  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS ./e2e.test -test.v -test.count=1" 2>&1 |
+    tee "$DIR/last-test.log" || status=$?
   if [ "$status" -ne 0 ]; then
     log "Tests failed; tilde service log:"
     vm_ssh sudo journalctl -u tilde --no-pager -n 100 || true
@@ -194,7 +200,12 @@ case "$cmd" in
     if [ $# -gt 0 ]; then vm_ssh "$@"; else vm_ssh -t; fi
     ;;
   logs) vm_ssh sudo journalctl -u tilde --no-pager -n 200 ;;
+  tunnel)
+    running || die "the VM is not running; start it with: $0 up"
+    log "Tilde in the VM: https://localhost:$UI_PORT (user $TEST_USER, password $TEST_PASS)"
+    vm_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443"
+    ;;
   down) down ;;
   reset) down; rm -f "$DISK" "$SEED" "$PIDFILE"; log "VM disk deleted; the next run starts fresh" ;;
-  *) die "unknown command '$cmd' (test, up, fetch, ssh, logs, down, reset)" ;;
+  *) die "unknown command '$cmd' (test, up, fetch, ssh, logs, tunnel, down, reset)" ;;
 esac
