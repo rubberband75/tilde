@@ -53,16 +53,17 @@ docs/                   design docs
 ```bash
 make deps          # npm ci in web/
 make build         # frontend + bin/tilde with the UI embedded (needs libpam0g-dev, cgo)
-make test          # go vet + go test -race, frontend type check
+make test          # gofmt/Prettier checks, go vet + go test -race, vue-tsc, Vitest
 make server-nopam  # build without libpam (logins always fail; for CI/tests)
 make dev-server    # Go server, plain HTTP on 127.0.0.1:8443, single-user (your account)
 make dev-web       # Vite on http://localhost:5173, proxies /api to the Go server
 make icons         # refresh bundled icons from /usr/share/icons/Mint-Y or GitHub
 make e2e-vm        # e2e tests in a disposable QEMU VM (scripts/e2e-vm.sh)
+make fmt           # gofmt + Prettier
 ```
 
 Single Go test: `cd server && go test ./internal/worker -run TestFileLifecycle -v`.
-Frontend only: `cd web && npm run typecheck` / `npm run build`.
+Frontend only: `cd web && npm run typecheck` / `npm test` / `npm run build`.
 
 ## Rules that must not be broken
 
@@ -124,6 +125,8 @@ and ask.
 - Anything involving PAM, root, setuid or logind needs the e2e suite in a
   disposable VM: `make e2e-vm` (see `docs/development.md`). Never run e2e
   against a machine with real data.
+- Frontend unit tests (Vitest) sit next to the code as `*.test.ts`; add them
+  for store and helper logic. `make test` also fails on unformatted code.
 - For UI changes, build and look at it: `make dev-server` + `make dev-web`,
   then open http://localhost:5173.
 

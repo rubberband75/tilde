@@ -35,7 +35,8 @@ sudo ./bin/tilde serve --listen 127.0.0.1:8443   # https, self-signed
 ## Tests
 
 ```bash
-make test        # go vet, go test -race ./..., vue-tsc
+make test        # gofmt + Prettier checks, go vet, go test -race ./..., vue-tsc, Vitest
+make fmt         # fix formatting (gofmt -w, prettier --write)
 ```
 
 - `internal/worker/worker_test.go` runs the worker's real HTTP API over yamux
@@ -45,8 +46,14 @@ make test        # go vet, go test -race ./..., vue-tsc
 - `internal/server/server_test.go`: tokens, rate limiting, Origin checks,
   auth required, SPA fallback.
 - `internal/protocol`: the pipe handshake never consumes bytes meant for yamux.
+- `web/src/**/*.test.ts` (Vitest, jsdom): the window store (open, focus,
+  minimize, close guards, layout persistence), path helpers and session-expiry
+  handling in the API client. Put tests next to the code they cover.
 
 `make server-nopam` and `go test -tags nopam ./...` work without libpam.
+
+CI (`.github/workflows/ci.yml`) runs `make test` and the builds on every push
+and pull request.
 
 ## End-to-end tests (real PAM, real privilege drop)
 

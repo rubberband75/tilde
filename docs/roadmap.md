@@ -105,4 +105,5 @@ to; tick items off as they land.
 ## Packaging
 
 - [x] systemd unit without sandboxing, `/etc/default/tilde`, PAM file, `make install`
+- [x] CI on GitHub Actions: format checks, Go and frontend tests, builds (D30)
 - [ ] `.deb` package (depends on libpam0g), release workflow

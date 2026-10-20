@@ -177,6 +177,14 @@ VM in virt-manager as the e2e target (manual install, not scriptable; still
 the place to check Cinnamon-specific behavior by hand); containers (no real
 logind session or PAM stack).
 
+**D30 — Repository, CI and frontend tooling** (2026-10-20, accepted)
+Public repository at github.com/rubberband75/tilde with GitHub Actions
+running `make test` and the builds (Ubuntu 24.04, Node 22). Frontend unit
+tests with Vitest + jsdom next to the code; Prettier for formatting (no
+semicolons, single quotes, 120 columns, matching the existing code).
+`make test` fails on unformatted Go or frontend code. No ESLint for now:
+strict TypeScript through vue-tsc covers most of what it would catch.
+
 ---
 
 ## Open decisions
