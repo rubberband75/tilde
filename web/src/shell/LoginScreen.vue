@@ -84,8 +84,8 @@ onMounted(() => userInput.value?.focus())
   width: 320px;
   padding: 28px 28px 24px;
   border-radius: 10px;
-  background: rgba(34, 34, 38, 0.92);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  background: var(--login-bg);
+  box-shadow: var(--login-shadow);
   user-select: text;
 }
 .avatar {

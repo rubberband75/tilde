@@ -44,7 +44,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
   background: var(--panel-bg);
   color: var(--panel-fg);
   z-index: 50000;
-  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
+  box-shadow: var(--panel-edge-shadow);
 }
 .launchers {
   display: flex;

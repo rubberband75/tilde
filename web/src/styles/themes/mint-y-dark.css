@@ -44,6 +44,8 @@
   --panel-item-active-bg: #41584d;
   --panel-item-active-border: #35a854;
   --panel-icon-size: 24px;
+  --panel-item-hover-fg: #ffffff;
+  --panel-edge-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
 
   /* Cinnamon menu and popups (.menu, .menu-favorites-box, StEntry) */
   --menu-bg: #222226;
@@ -52,14 +54,20 @@
   --menu-radius: 6px;
   --menu-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
   --menu-item-hover-bg: #303036;
+  --menu-item-hover-fg: #ffffff;
   --menu-box-bg: #303036;
   --menu-entry-bg: #303036;
+  --menu-entry-fg: #d3d3d3;
 
   /* GTK popup menus (context menus inside apps) */
   --popup-bg: #2e2e33;
   --popup-border: #202023;
   --popup-item-hover-bg: #35a854;
   --popup-item-hover-fg: #ffffff;
+
+  /* Login dialog */
+  --login-bg: rgba(34, 34, 38, 0.92);
+  --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
 
   /* Window decorations */
   --wm-titlebar-height: 32px;
@@ -107,6 +115,7 @@
   --tooltip-fg: #ffffff;
   --danger: #f04a50;
   --warning: #f27835;
+  --warning-fg: #000000;
   --progress-bg: #202023;
 
   /* Terminal (gtk-dark.css: vte-terminal) */

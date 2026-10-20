@@ -35,6 +35,6 @@ const date = computed(() => new Intl.DateTimeFormat(undefined, { dateStyle: 'ful
 }
 .clock:hover {
   background: var(--panel-item-hover-bg);
-  color: #fff;
+  color: var(--panel-item-hover-fg);
 }
 </style>

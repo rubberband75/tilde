@@ -246,7 +246,7 @@ watch(open, async (v) => {
 .start-menu li:hover,
 .start-menu .apps li:focus-visible {
   background: var(--menu-item-hover-bg);
-  color: #fff;
+  color: var(--menu-item-hover-fg);
   outline: none;
 }
 .start-menu li.empty {
@@ -280,7 +280,7 @@ watch(open, async (v) => {
   border: 1px solid var(--menu-entry-bg);
   border-radius: 3px;
   background: var(--menu-entry-bg);
-  color: #d3d3d3;
+  color: var(--menu-entry-fg);
   outline: none;
 }
 .start-menu .search:focus {
