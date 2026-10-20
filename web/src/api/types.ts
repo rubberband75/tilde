@@ -83,3 +83,53 @@ export interface TerminalInfo {
   rows: number
   exited: boolean
 }
+
+// File operation jobs (docs/api.md, D31)
+
+export type JobOp = 'copy' | 'move' | 'drop' | 'delete'
+export type JobState = 'preparing' | 'running' | 'waiting' | 'done' | 'failed' | 'cancelled'
+export type ConflictAction = 'replace' | 'skip' | 'rename' | 'merge'
+
+export interface Conflict {
+  id: number
+  source: Entry
+  dest: Entry
+  suggested: string
+  actions: ConflictAction[]
+}
+
+export interface JobError {
+  path: string
+  error: string
+  code: string
+}
+
+export interface Job {
+  id: string
+  op: JobOp
+  sources: string[]
+  dest?: string
+  state: JobState
+  current?: string
+  totalItems: number
+  doneItems: number
+  totalBytes: number
+  doneBytes: number
+  conflict?: Conflict
+  errors: JobError[]
+  errorCount: number
+  error?: string
+  started: string
+  finished?: string
+}
+
+export interface Resolution {
+  conflict: number
+  action: ConflictAction
+  name?: string
+  applyToAll: boolean
+}
+
+/** Frames on the events WebSocket (GET /api/v1/events). */
+export type WorkerEvent =
+  { type: 'snapshot'; jobs: Job[] } | { type: 'job'; job: Job } | { type: 'job-removed'; id: string }

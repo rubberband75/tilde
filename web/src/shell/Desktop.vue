@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import DesktopIcons from './DesktopIcons.vue'
+import Dialogs from './Dialogs.vue'
+import JobsPanel from './JobsPanel.vue'
 import Notices from './Notices.vue'
 import Panel from './Panel.vue'
 import WindowLayer from '@/wm/WindowLayer.vue'
@@ -25,8 +27,10 @@ onBeforeUnmount(() => ro?.disconnect())
       <DesktopIcons />
       <WindowLayer />
       <Notices />
+      <JobsPanel />
     </div>
     <Panel />
+    <Dialogs />
   </div>
 </template>
 

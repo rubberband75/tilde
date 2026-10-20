@@ -1,5 +1,17 @@
 import type { Component } from 'vue'
 import type { Entry } from '@/api/types'
+import type { ClipboardOp } from '@/stores/clipboard'
+import type { ConfirmOptions } from '@/stores/dialogs'
+
+export type { ClipboardOp, ConfirmOptions }
+
+/** The file clipboard shared by Files windows and the desktop. */
+export interface FileClipboard {
+  readonly op: ClipboardOp | null
+  readonly paths: readonly string[]
+  set(op: ClipboardOp, paths: string[]): void
+  clear(): void
+}
 
 /**
  * Everything the shell needs to know about an app (D18). Built-in
@@ -65,4 +77,8 @@ export interface AppContext {
   /** Open a file or folder with the app registered for its type. */
   openEntry(entry: Entry): void
   notify(message: string, kind?: 'info' | 'error'): void
+  /** Ask a question in a modal dialog; resolves true if confirmed. */
+  confirm(opts: ConfirmOptions): Promise<boolean>
+  /** The shared file clipboard (cut, copy, paste). Reactive. */
+  readonly clipboard: FileClipboard
 }

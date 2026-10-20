@@ -16,7 +16,10 @@ import type { Entry } from '@/api/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
+import { deletePermanently, moveToTrash, paste, type FileOpsHost } from '@/lib/fileops'
 import { openEntry } from '@/shell/actions'
+import { useClipboard } from '@/stores/clipboard'
+import { useDialogs } from '@/stores/dialogs'
 import { useNotices } from '@/stores/notices'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
@@ -32,6 +35,9 @@ interface Item {
 const session = useSession()
 const wm = useWindows()
 const notices = useNotices()
+const dialogs = useDialogs()
+const clipboard = useClipboard()
+const host: FileOpsHost = { confirm: dialogs.confirm, notify: notices.push, clipboard }
 
 const desktopDir = ref('')
 const trashFilesDir = ref('')
@@ -99,12 +105,26 @@ const selectedEntries = computed(() =>
   items.value.filter((i) => i.entry && selected.value.has(i.key)).map((i) => i.entry!),
 )
 
+const cutPaths = computed(() => new Set(clipboard.op === 'cut' ? clipboard.paths : []))
+
 async function trashSelected() {
+  await moveToTrash(
+    host,
+    selectedEntries.value.map((e) => e.path),
+    trashFilesDir.value,
+  )
+}
+
+async function deleteSelected() {
+  await deletePermanently(
+    host,
+    selectedEntries.value.map((e) => e.path),
+  )
+}
+
+function copySelected(op: 'copy' | 'cut') {
   const paths = selectedEntries.value.map((e) => e.path)
-  if (!paths.length) return
-  const results = await fsApi.trash(paths)
-  for (const r of results) if (r.error) notices.push(`Could not move ${r.path} to the trash: ${r.error}`, 'error')
-  emitFsChanged(desktopDir.value, trashFilesDir.value)
+  if (paths.length) clipboard.set(op, paths)
 }
 
 async function newFolder() {
@@ -118,7 +138,12 @@ async function newFolder() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Delete') void trashSelected()
+  const ctrl = e.ctrlKey || e.metaKey
+  if (e.key === 'Delete' && e.shiftKey) void deleteSelected()
+  else if (e.key === 'Delete') void trashSelected()
+  else if (ctrl && e.key.toLowerCase() === 'c') copySelected('copy')
+  else if (ctrl && e.key.toLowerCase() === 'x') copySelected('cut')
+  else if (ctrl && e.key.toLowerCase() === 'v') void paste(host, desktopDir.value)
   if (e.key === 'Enter') items.value.filter((i) => selected.value.has(i.key)).forEach((i) => i.open())
 }
 
@@ -169,7 +194,7 @@ onBeforeUnmount(() => {
           v-for="item in items"
           :key="item.key"
           class="desktop-icon"
-          :class="{ selected: selected.has(item.key) }"
+          :class="{ selected: selected.has(item.key), cut: cutPaths.has(item.key) }"
           :title="item.name"
           @click="select(item, $event)"
           @dblclick="item.open()"
@@ -186,11 +211,18 @@ onBeforeUnmount(() => {
           <ContextMenuItem class="item" @select="menuTarget.open()">Open</ContextMenuItem>
           <template v-if="menuTarget.entry">
             <ContextMenuSeparator class="separator" />
+            <ContextMenuItem class="item" @select="copySelected('cut')">Cut</ContextMenuItem>
+            <ContextMenuItem class="item" @select="copySelected('copy')">Copy</ContextMenuItem>
+            <ContextMenuSeparator class="separator" />
             <ContextMenuItem class="item" @select="trashSelected">Move to Trash</ContextMenuItem>
+            <ContextMenuItem class="item" @select="deleteSelected">Delete Permanently…</ContextMenuItem>
           </template>
         </template>
         <template v-else>
           <ContextMenuItem class="item" @select="newFolder">New Folder</ContextMenuItem>
+          <ContextMenuItem class="item" :disabled="!clipboard.op" @select="paste(host, desktopDir)">
+            Paste
+          </ContextMenuItem>
           <ContextMenuItem class="item" @select="wm.open('terminal', { cwd: desktopDir })">
             Open in Terminal
           </ContextMenuItem>
@@ -238,6 +270,9 @@ onBeforeUnmount(() => {
 }
 .desktop-icon.selected {
   background: var(--desktop-icon-selected-bg);
+}
+.desktop-icon.cut {
+  opacity: 0.6;
 }
 .label {
   max-width: 100%;

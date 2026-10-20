@@ -24,6 +24,7 @@ import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
+import { deletePermanently, moveToTrash, paste } from '@/lib/fileops'
 import { formatDate, formatSize, mimeLabel } from '@/lib/format'
 
 const props = defineProps<{ ctx: AppContext }>()
@@ -108,6 +109,10 @@ const items = computed<Item[]>(() => {
 })
 
 const selectedItems = computed(() => items.value.filter((i) => selected.value.has(i.key)))
+/** Paths of selected files and folders (not trash items or drives). */
+const selectedPaths = computed(() => selectedItems.value.flatMap((i) => (i.entry && !i.trash ? [i.entry.path] : [])))
+const cutPaths = computed(() => new Set(props.ctx.clipboard.op === 'cut' ? props.ctx.clipboard.paths : []))
+const canPaste = computed(() => isPath.value && !!props.ctx.clipboard.op)
 
 const title = computed(() => {
   if (isComputer.value) return 'Computer'
@@ -257,15 +262,24 @@ function onBackgroundPointer(e: PointerEvent) {
 }
 
 async function trashSelected() {
-  const paths = selectedItems.value.flatMap((i) => (i.entry && !i.trash ? [i.entry.path] : []))
-  if (!paths.length) return
-  const results = await fsApi.trash(paths)
-  for (const r of results) {
-    if (r.code === 'other_drive')
-      props.ctx.notify(`${baseName(r.path)} is on another drive; trashing it there is not supported yet.`, 'error')
-    else if (r.error) props.ctx.notify(`Could not move ${baseName(r.path)} to the trash: ${r.error}`, 'error')
-  }
-  emitFsChanged(location.value, trashFilesDir.value)
+  if (isTrash.value) return deleteSelected()
+  await moveToTrash(props.ctx, selectedPaths.value, trashFilesDir.value)
+}
+
+/** Shift+Delete, or Delete inside the trash: gone for good, after asking. */
+async function deleteSelected() {
+  const paths = isTrash.value
+    ? selectedItems.value.flatMap((i) => (i.trash ? [i.trash.entry.path] : []))
+    : selectedPaths.value
+  await deletePermanently(props.ctx, paths)
+}
+
+function copySelected(op: 'copy' | 'cut') {
+  if (selectedPaths.value.length) props.ctx.clipboard.set(op, selectedPaths.value)
+}
+
+async function pasteInto(dest = location.value) {
+  if (isPath.value) await paste(props.ctx, dest)
 }
 
 async function restoreSelected() {
@@ -280,7 +294,13 @@ async function restoreSelected() {
 }
 
 async function emptyTrash() {
-  if (!window.confirm('Empty all items from the Trash? They will be permanently deleted.')) return
+  const ok = await props.ctx.confirm({
+    title: 'Empty all items from the Trash?',
+    message: 'All items in the Trash will be permanently deleted.',
+    confirm: 'Empty Trash',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await fsApi.emptyTrash()
   } catch (e) {
@@ -406,7 +426,11 @@ function onKey(e: KeyboardEvent) {
   const alt = e.altKey
   const ctrl = e.ctrlKey || e.metaKey
   if (e.key === 'Enter') selectedItems.value.slice(0, 1).forEach(open)
+  else if (e.key === 'Delete' && e.shiftKey) void deleteSelected()
   else if (e.key === 'Delete') void trashSelected()
+  else if (ctrl && e.key.toLowerCase() === 'c') copySelected('copy')
+  else if (ctrl && e.key.toLowerCase() === 'x') copySelected('cut')
+  else if (ctrl && e.key.toLowerCase() === 'v') void pasteInto()
   else if (e.key === 'F2') startRename()
   else if (e.key === 'F5') void load()
   else if (e.key === 'Backspace' || (alt && e.key === 'ArrowUp')) goUp()
@@ -523,7 +547,7 @@ onBeforeUnmount(() => offFs?.())
                 :key="item.key"
                 data-item
                 class="cell"
-                :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden }"
+                :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden, cut: cutPaths.has(item.key) }"
                 :title="item.name"
                 @click="click(item, $event)"
                 @dblclick="open(item)"
@@ -558,7 +582,7 @@ onBeforeUnmount(() => offFs?.())
                   v-for="item in items"
                   :key="item.key"
                   data-item
-                  :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden }"
+                  :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden, cut: cutPaths.has(item.key) }"
                   @click="click(item, $event)"
                   @dblclick="open(item)"
                   @contextmenu="onItemContext(item)"
@@ -590,6 +614,7 @@ onBeforeUnmount(() => offFs?.())
             <template v-if="isTrash">
               <template v-if="selectedItems.length">
                 <ContextMenuItem class="item" @select="restoreSelected">Restore</ContextMenuItem>
+                <ContextMenuItem class="item" @select="deleteSelected">Delete Permanently…</ContextMenuItem>
               </template>
               <template v-else>
                 <ContextMenuItem class="item" :disabled="!items.length" @select="emptyTrash">
@@ -616,10 +641,22 @@ onBeforeUnmount(() => offFs?.())
                 Open in Terminal
               </ContextMenuItem>
               <ContextMenuSeparator class="separator" />
+              <ContextMenuItem class="item" @select="copySelected('cut')">Cut</ContextMenuItem>
+              <ContextMenuItem class="item" @select="copySelected('copy')">Copy</ContextMenuItem>
+              <ContextMenuItem
+                v-if="selectedItems.length === 1 && selectedItems[0]!.entry?.type === 'dir'"
+                class="item"
+                :disabled="!canPaste"
+                @select="pasteInto(selectedItems[0]!.entry!.path)"
+              >
+                Paste Into Folder
+              </ContextMenuItem>
+              <ContextMenuSeparator class="separator" />
               <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="startRename()">
                 Rename…
               </ContextMenuItem>
               <ContextMenuItem class="item" @select="trashSelected">Move to Trash</ContextMenuItem>
+              <ContextMenuItem class="item" @select="deleteSelected">Delete Permanently…</ContextMenuItem>
               <template v-if="selectedItems.some((i) => i.entry?.type === 'file')">
                 <ContextMenuSeparator class="separator" />
                 <ContextMenuItem class="item" @select="downloadSelected">Download</ContextMenuItem>
@@ -627,6 +664,7 @@ onBeforeUnmount(() => offFs?.())
             </template>
             <template v-else>
               <ContextMenuItem class="item" @select="newFolder">New Folder</ContextMenuItem>
+              <ContextMenuItem class="item" :disabled="!canPaste" @select="pasteInto()">Paste</ContextMenuItem>
               <ContextMenuItem class="item" @select="fileInput?.click()">Upload Files…</ContextMenuItem>
               <ContextMenuItem class="item" @select="openTerminal()">Open in Terminal</ContextMenuItem>
               <ContextMenuSeparator class="separator" />
@@ -790,7 +828,8 @@ onBeforeUnmount(() => offFs?.())
   padding: 6px 4px;
   border-radius: 4px;
 }
-.cell.hidden {
+.cell.hidden,
+.cell.cut {
   opacity: 0.65;
 }
 .cell:hover {
@@ -855,7 +894,8 @@ onBeforeUnmount(() => offFs?.())
 .list td.date {
   color: var(--view-dim-fg);
 }
-.list tr.hidden {
+.list tr.hidden,
+.list tr.cut {
   opacity: 0.65;
 }
 .list tbody tr:hover {

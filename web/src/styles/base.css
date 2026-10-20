@@ -152,3 +152,54 @@ select {
 .dim {
   color: var(--view-dim-fg);
 }
+
+/* GTK-style message dialog (confirmations, file conflicts) */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--dialog-overlay);
+  z-index: 200000;
+}
+.dialog {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 20px 20px 16px;
+  background: var(--window-bg);
+  color: var(--window-fg);
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  box-shadow: var(--wm-shadow);
+  z-index: 200001;
+  outline: none;
+}
+.dialog .title {
+  margin: 0 0 8px;
+  font-size: 1.15em;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+.dialog .message {
+  margin: 0 0 16px;
+  color: var(--view-dim-fg);
+  overflow-wrap: anywhere;
+}
+.dialog .actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.btn.destructive {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-fg);
+}
+.btn.destructive:hover:not(:disabled) {
+  filter: brightness(1.08);
+}

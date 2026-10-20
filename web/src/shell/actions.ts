@@ -2,6 +2,8 @@ import { appForMime } from '@/apps/registry'
 import type { AppContext } from '@/apps/types'
 import { fsApi } from '@/api/fs'
 import type { Entry } from '@/api/types'
+import { useClipboard } from '@/stores/clipboard'
+import { useDialogs } from '@/stores/dialogs'
 import { useNotices } from '@/stores/notices'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
@@ -28,6 +30,8 @@ export function createContext(windowId: string): AppContext {
   const wm = useWindows()
   const notices = useNotices()
   const session = useSession()
+  const dialogs = useDialogs()
+  const clipboard = useClipboard()
   return {
     windowId,
     get args() {
@@ -47,5 +51,16 @@ export function createContext(windowId: string): AppContext {
     launch: (appId, args) => void wm.open(appId, args),
     openEntry,
     notify: (message, kind) => notices.push(message, kind),
+    confirm: (opts) => dialogs.confirm(opts),
+    clipboard: {
+      get op() {
+        return clipboard.op
+      },
+      get paths() {
+        return clipboard.paths
+      },
+      set: (op, paths) => clipboard.set(op, paths),
+      clear: () => clipboard.clear(),
+    },
   }
 }
