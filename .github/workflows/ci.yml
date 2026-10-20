@@ -1,0 +1,45 @@
+# Unit tests, format checks and builds on every push and pull request.
+# The e2e suite needs real PAM, root and logind, so it runs in a VM
+# instead (scripts/e2e-vm.sh, docs/development.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      # The oldest Node the README supports.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install libpam headers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpam0g-dev
+
+      - run: make deps
+      - run: make test
+
+      - name: Build with the UI embedded
+        run: make build && ./bin/tilde version
+
+      - name: Build without PAM, and compile the e2e tests
+        run: |
+          cd server
+          CGO_ENABLED=0 go build -tags nopam ./...
+          go vet -tags e2e ./e2e/
