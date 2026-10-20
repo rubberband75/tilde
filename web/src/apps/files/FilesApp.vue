@@ -18,11 +18,9 @@ import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
 import { formatDate, formatSize, mimeLabel } from '@/lib/format'
-import { useSession } from '@/stores/session'
 
 const props = defineProps<{ ctx: AppContext }>()
-const session = useSession()
-const home = session.info?.home ?? '/'
+const home = props.ctx.home
 
 const COMPUTER = 'computer://'
 const TRASH = 'trash://'

@@ -9,10 +9,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { api, ApiError, wsUrl } from '@/api/client'
 import type { TerminalInfo } from '@/api/types'
 import type { AppContext } from '@/apps/types'
-import { useWindows } from '@/stores/windows'
 
 const props = defineProps<{ ctx: AppContext }>()
-const wm = useWindows()
 
 const host = ref<HTMLElement | null>(null)
 const status = ref<'connecting' | 'connected' | 'reconnecting' | 'closed'>('connecting')
@@ -160,7 +158,7 @@ onMounted(async () => {
   term.onTitleChange((title) => props.ctx.setTitle(title || 'Terminal'))
 
   ro = new ResizeObserver(() => {
-    if (!wm.interacting) scheduleFit()
+    if (!props.ctx.isInteracting()) scheduleFit()
   })
   ro.observe(host.value)
 
@@ -179,7 +177,7 @@ onMounted(async () => {
 
 // Fit once a drag or resize ends rather than on every pointer move.
 watch(
-  () => wm.interacting,
+  () => props.ctx.isInteracting(),
   (busy) => {
     if (!busy) scheduleFit()
   },
@@ -187,9 +185,9 @@ watch(
 
 // Keyboard focus follows window focus.
 watch(
-  () => wm.focusedId,
-  (id) => {
-    if (id === props.ctx.windowId) term?.focus()
+  () => props.ctx.isFocused(),
+  (focused) => {
+    if (focused) term?.focus()
   },
 )
 
@@ -232,7 +230,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: var(--radius);
   background: var(--warning);
-  color: #000;
+  color: var(--warning-fg);
   font-size: var(--font-size-small);
 }
 </style>

@@ -3,6 +3,7 @@ import type { AppContext } from '@/apps/types'
 import { fsApi } from '@/api/fs'
 import type { Entry } from '@/api/types'
 import { useNotices } from '@/stores/notices'
+import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
 
 /** Opens a folder in Files, or a file with the app registered for its type. */
@@ -26,6 +27,7 @@ export function openEntry(entry: Entry): void {
 export function createContext(windowId: string): AppContext {
   const wm = useWindows()
   const notices = useNotices()
+  const session = useSession()
   return {
     windowId,
     get args() {
@@ -37,7 +39,11 @@ export function createContext(windowId: string): AppContext {
     saveState: (patch) => wm.saveState(windowId, patch),
     setCloseGuard: (guard) => wm.setCloseGuard(windowId, guard),
     onClose: (fn) => wm.onClose(windowId, fn),
+    get home() {
+      return session.info?.home ?? '/'
+    },
     isFocused: () => wm.focusedId === windowId,
+    isInteracting: () => wm.interacting,
     launch: (appId, args) => void wm.open(appId, args),
     openEntry,
     notify: (message, kind) => notices.push(message, kind),

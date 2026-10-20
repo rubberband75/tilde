@@ -43,8 +43,15 @@ export interface AppContext {
   setCloseGuard(guard: (() => boolean | Promise<boolean>) | null): void
   /** Run when the user closes the window (not when the page reloads). */
   onClose(fn: () => void): void
-  /** True while this window is focused. */
+  /** The logged-in user's home directory. */
+  readonly home: string
+  /** True while this window is focused. Reactive inside watch/computed. */
   isFocused(): boolean
+  /**
+   * True while the user drags or resizes any window. Apps with expensive
+   * layout (the terminal) wait for it to end. Reactive inside watch/computed.
+   */
+  isInteracting(): boolean
   /** Launch another app. */
   launch(appId: string, args?: Record<string, unknown>): void
   /** Open a file or folder with the app registered for its type. */
