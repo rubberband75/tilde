@@ -361,13 +361,12 @@ func (w *Worker) handleRename(rw http.ResponseWriter, r *http.Request) {
 		writeErr(rw, badRequest{"invalid file name"})
 		return
 	}
-	if !req.Overwrite && from != to {
-		if _, err := os.Lstat(to); err == nil {
-			writeErr(rw, fs.ErrExist)
-			return
-		}
+	if req.Overwrite || from == to {
+		err = os.Rename(from, to)
+	} else {
+		err = renameNoReplace(from, to)
 	}
-	if err := os.Rename(from, to); err != nil {
+	if err != nil {
 		writeErr(rw, err)
 		return
 	}

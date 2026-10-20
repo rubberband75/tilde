@@ -1,6 +1,6 @@
 module tilde
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -8,3 +8,5 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/msteinert/pam/v2 v2.1.0
 )
+
+require golang.org/x/sys v0.41.0 // indirect

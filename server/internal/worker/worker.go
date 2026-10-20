@@ -43,6 +43,8 @@ type Worker struct {
 	umask      os.FileMode
 	trash      *Trash
 	terms      *terminalManager
+	events     *eventHub
+	jobs       *jobManager
 }
 
 // Options overrides locations, mainly for tests.
@@ -60,13 +62,17 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		opt.ConfigHome = xdgDir("XDG_CONFIG_HOME", filepath.Join(info.Home, ".config"))
 	}
 	host, _ := os.Hostname()
+	trash := NewTrash(opt.DataHome)
+	events := newEventHub()
 	return &Worker{
 		info:       info,
 		hostname:   host,
 		configHome: opt.ConfigHome,
 		umask:      readUmask(),
-		trash:      NewTrash(opt.DataHome),
+		trash:      trash,
 		terms:      newTerminalManager(info.Shell, info.Home),
+		events:     events,
+		jobs:       newJobManager(events, filepath.Join(trash.Dir(), "files")),
 	}
 }
 
@@ -115,6 +121,15 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/trash/restore", w.handleTrashRestore)
 	m.HandleFunc("POST /api/v1/trash/empty", w.handleTrashEmpty)
 
+	m.HandleFunc("GET /api/v1/jobs", w.handleJobList)
+	m.HandleFunc("POST /api/v1/jobs", w.handleJobStart)
+	m.HandleFunc("GET /api/v1/jobs/{id}", w.handleJobGet)
+	m.HandleFunc("DELETE /api/v1/jobs/{id}", w.handleJobDelete)
+	m.HandleFunc("POST /api/v1/jobs/{id}/cancel", w.handleJobCancel)
+	m.HandleFunc("POST /api/v1/jobs/{id}/resolve", w.handleJobResolve)
+
+	m.HandleFunc("GET /api/v1/events", w.handleEvents)
+
 	m.HandleFunc("GET /api/v1/terminals", w.handleTerminalList)
 	m.HandleFunc("POST /api/v1/terminals", w.handleTerminalCreate)
 	m.HandleFunc("DELETE /api/v1/terminals/{id}", w.handleTerminalDelete)
@@ -138,8 +153,11 @@ func (w *Worker) handleHello(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Shutdown hangs up all terminals, as logging out does.
-func (w *Worker) Shutdown() { w.terms.closeAll() }
+// Shutdown stops file jobs and hangs up all terminals, as logging out does.
+func (w *Worker) Shutdown() {
+	w.jobs.cancelAll()
+	w.terms.closeAll()
+}
 
 // Serve runs the API on conn until the yamux session ends.
 func Serve(ctx context.Context, conn io.ReadWriteCloser, h http.Handler) error {

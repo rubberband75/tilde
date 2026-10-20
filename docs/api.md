@@ -10,7 +10,8 @@ Errors look like:
 
 Common codes: `bad_request`, `not_found`, `permission_denied`, `exists`,
 `other_drive`, `not_empty`, `not_a_directory`, `is_a_directory`, `no_space`,
-`read_only`, `internal_error`, `not_logged_in`, `session_ended`, `bad_origin`.
+`read_only`, `internal_error`, `not_logged_in`, `session_ended`, `bad_origin`,
+`stale`, `busy`.
 
 TypeScript types for these responses live in `web/src/api/types.ts`; keep
 them in sync.
@@ -61,7 +62,7 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/fs/content?path=[&download=1]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download |
 | PUT | `/api/v1/fs/content?path=[&overwrite=1]` | Body is the file. `201 Entry`; `409 exists` without overwrite |
 | POST | `/api/v1/fs/mkdir` | `{path}` → `201 Entry` |
-| POST | `/api/v1/fs/rename` | `{from, to, overwrite?}` → `Entry`. Same filesystem only (`409 other_drive` otherwise) |
+| POST | `/api/v1/fs/rename` | `{from, to, overwrite?}` → `Entry`. Same filesystem only (`409 other_drive` otherwise); without `overwrite` an existing `to` gives `409 exists`, atomically |
 | POST | `/api/v1/fs/trash` | `{paths: []}` → `{results: [{path, name?, error?, code?}]}` |
 
 ### Trash (freedesktop home trash, `~/.local/share/Trash`)
@@ -71,6 +72,59 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/trash` | `{dir, items: [{name, originalPath, deletedAt, entry}]}`, newest first |
 | POST | `/api/v1/trash/restore` | `{names: []}` → `{restored: [paths]}`; recreates missing parent folders |
 | POST | `/api/v1/trash/empty` | `204` |
+
+### File operation jobs (D31)
+
+Copy, move and delete run in the background as jobs. Progress reaches every
+client on the events WebSocket.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/api/v1/jobs` | `{op, sources: [], dest?}` → `202 Job`. `op`: `copy`, `move`, `drop` (move within a filesystem, copy across, as Nemo's drag and drop), `delete` (permanent; no `dest`) |
+| GET | `/api/v1/jobs` | `{jobs: Job[]}`, oldest first. Finished jobs stay until dismissed, at most an hour |
+| GET | `/api/v1/jobs/{id}` | `Job` |
+| POST | `/api/v1/jobs/{id}/cancel` | `204`. Files already copied stay; a partly copied file is removed |
+| POST | `/api/v1/jobs/{id}/resolve` | `{conflict, action, name?, applyToAll}` → `204`; `409 stale` if that conflict was already answered (another client), `400` if the action is not in `conflict.actions` |
+| DELETE | `/api/v1/jobs/{id}` | Dismiss a finished job → `204`; `409 busy` while it runs |
+
+`Job`:
+
+```json
+{
+  "id": "j3", "op": "copy", "sources": ["/home/me/a"], "dest": "/media/usb",
+  "state": "running",   // preparing | running | waiting | done | failed | cancelled
+  "current": "/home/me/a/b.txt",
+  "totalItems": 120, "doneItems": 30, "totalBytes": 52428800, "doneBytes": 1048576,
+  "conflict": null,     // set while waiting, see below
+  "errors": [{"path": "...", "error": "...", "code": "permission_denied"}],
+  "errorCount": 1,      // errors keeps the first 100
+  "error": "",          // why a failed job could not run at all
+  "started": "...", "finished": null
+}
+```
+
+`conflict`: `{id, source: Entry, dest: Entry, suggested, actions}`. `actions` is
+`replace, skip, rename` for files, `merge, skip, rename` for two folders, and
+`skip, rename` when a file would replace a folder. `rename` takes `name`
+(`suggested` is free). `applyToAll` repeats the answer for later conflicts of
+the same kind (file or folder) in this job.
+
+Behavior: links are copied as links, never followed; special files are
+skipped with an error; permission bits and modification times are kept (not
+setuid/setgid or ownership). Copying into the item's own folder makes
+"name (copy)". Moving onto another filesystem copies, then deletes each
+source item once it is copied. Errors on single items do not stop the job;
+they are listed when it ends. Deleting an item in `Trash/files` also removes
+its `.trashinfo`. Logging out cancels running jobs.
+
+### Events (WebSocket)
+
+`GET (WS) /api/v1/events`: JSON text frames from the worker. The first is
+`{"type":"snapshot","jobs":[...]}`; then `{"type":"job","job":{...}}` whenever
+a job changes (progress at most every 150 ms) and `{"type":"job-removed","id"}`.
+Events carry whole objects, so a client never has to merge partial updates.
+A client that falls too far behind is closed with 1013 and should reconnect.
+Phase 4 adds filesystem change events here.
 
 ### Terminals
 
@@ -95,6 +149,5 @@ Terminal WebSocket:
 
 ## Planned
 
-- `GET (WS) /api/v1/events`: inotify changes, job progress, notifications.
-- `POST /api/v1/jobs` copy/move/delete with progress and conflict prompts.
+- Filesystem change (inotify) and notification events on `/api/v1/events`.
 - `POST /api/auth/unlock` for the lock screen.

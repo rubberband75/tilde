@@ -185,6 +185,25 @@ semicolons, single quotes, 120 columns, matching the existing code).
 `make test` fails on unformatted Go or frontend code. No ESLint for now:
 strict TypeScript through vue-tsc covers most of what it would catch.
 
+**D31 — File operations run as worker jobs** (2026-10-20, accepted)
+Copy, move and delete are background jobs in the worker (`/api/v1/jobs`),
+with progress pushed over a new events WebSocket (`/api/v1/events`, the
+control socket D11 planned; inotify joins it in phase 4) and conflicts that
+any of the user's clients can answer. Spec choices, close to Nemo/GIO with a
+few simplifications: folder-over-folder offers Merge/Skip/Rename (never
+Replace, which would silently delete a tree); a file never replaces a folder;
+"apply to all" is per kind (file or folder); errors on single items do not
+prompt (GIO asks Skip/Retry) but are collected and shown when the job ends;
+links are copied as links and special files skipped; permission bits and
+mtimes are kept, ownership and setuid are not; files are written to a
+temporary name and committed atomically, so a cancelled copy leaves no
+partial file and a replaced file survives a failed copy; moves use
+`renameat2(RENAME_NOREPLACE)` and fall back to copy-then-delete across
+filesystems; drag and drop (`drop`) moves within a filesystem and copies
+across, like Nemo. Logging out cancels running jobs. Rejected: a synchronous
+copy endpoint (blocks a request for minutes, no progress or conflicts),
+polling for progress (the events socket is needed for inotify anyway).
+
 ---
 
 ## Open decisions
@@ -192,11 +211,10 @@ strict TypeScript through vue-tsc covers most of what it would catch.
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
 | Absolute session lifetime | 12 h re-login vs lock-only like Mint | 12 h, confirm | Phase 5 |
-| File operations | background jobs with progress, cancel, Replace/Skip/Rename; streaming huge directories; symlink policy | jobs from day one | Phase 3 |
 | Freedesktop compatibility beyond trash | thumbnail cache spec (`~/.cache/thumbnails`) and host thumbnailers; drives via udisks2 over D-Bus | follow the specs | Phase 3–4 |
 | Per-drive trash | `$topdir/.Trash-$uid` for other filesystems | implement with udisks | Phase 4 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |
-| Events | control WebSocket with inotify, job progress, notifications | per D11 | Phase 3–4 |
+| Events | inotify and notifications on the events WebSocket (job progress done, D31) | per D11 | Phase 4 |
 | Packaging | `.deb` with systemd unit (depends on libpam0g); update method | nfpm or debhelper | Before first release |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |
