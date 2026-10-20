@@ -71,7 +71,8 @@ export function iconsForMime(mime: string): string[] {
   if (archiveTypes.has(mime)) names.push('package-x-generic')
   if (mime.includes('shellscript')) names.push('text-x-script')
   if (mime === 'application/x-executable' || mime === 'application/x-sharedlib') names.push('application-x-executable')
-  if (mime.includes('opendocument.text') || mime.includes('wordprocessing') || mime === 'application/msword') names.push('x-office-document')
+  if (mime.includes('opendocument.text') || mime.includes('wordprocessing') || mime === 'application/msword')
+    names.push('x-office-document')
   if (mime.includes('spreadsheet') || mime.includes('ms-excel')) names.push('x-office-spreadsheet')
   if (mime.includes('presentation') || mime.includes('ms-powerpoint')) names.push('x-office-presentation')
   names.push(`${major}-x-generic`)
@@ -94,8 +95,7 @@ export function iconsForEntry(e: Entry, placeIcons?: Map<string, string>): strin
 const glyphs: Record<string, string> = {
   folder:
     '<svg viewBox="0 0 48 48"><path d="M5 12a3 3 0 0 1 3-3h11l4 4h17a3 3 0 0 1 3 3v21a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" fill="#7aa86a"/><path d="M5 18h38v19a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" fill="#8fbf7d"/></svg>',
-  file:
-    '<svg viewBox="0 0 48 48"><path d="M12 5h17l9 9v29H12z" fill="#e8e8e8"/><path d="M29 5v9h9" fill="#c9c9c9"/></svg>',
+  file: '<svg viewBox="0 0 48 48"><path d="M12 5h17l9 9v29H12z" fill="#e8e8e8"/><path d="M29 5v9h9" fill="#c9c9c9"/></svg>',
   terminal:
     '<svg viewBox="0 0 48 48"><rect x="5" y="8" width="38" height="32" rx="3" fill="#2d2d33"/><path d="M12 18l6 5-6 5M21 30h10" stroke="#8fd98a" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
   computer:
@@ -104,8 +104,7 @@ const glyphs: Record<string, string> = {
     '<svg viewBox="0 0 48 48"><path d="M12 14h24l-2 28H14z" fill="#9a9aa0"/><rect x="9" y="9" width="30" height="5" rx="1" fill="#b4b4ba"/></svg>',
   drive:
     '<svg viewBox="0 0 48 48"><rect x="6" y="14" width="36" height="20" rx="3" fill="#8a8a90"/><circle cx="35" cy="24" r="2.5" fill="#35a854"/></svg>',
-  info:
-    '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" fill="#5b8fbf"/><rect x="22" y="21" width="4" height="13" fill="#fff"/><circle cx="24" cy="15.5" r="2.5" fill="#fff"/></svg>',
+  info: '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" fill="#5b8fbf"/><rect x="22" y="21" width="4" height="13" fill="#fff"/><circle cx="24" cy="15.5" r="2.5" fill="#fff"/></svg>',
 }
 
 export function fallbackGlyph(names: string[]): string {

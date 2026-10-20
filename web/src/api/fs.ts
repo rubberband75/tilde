@@ -10,7 +10,8 @@ export const fsApi = {
   stat: (path: string) => api.get<Entry>('/api/v1/fs/stat', { path }),
   mkdir: (path: string) => api.post<Entry>('/api/v1/fs/mkdir', { path }),
   rename: (from: string, to: string) => api.post<Entry>('/api/v1/fs/rename', { from, to }),
-  trash: (paths: string[]) => api.post<{ results: TrashResult[] }>('/api/v1/fs/trash', { paths }).then((r) => r.results),
+  trash: (paths: string[]) =>
+    api.post<{ results: TrashResult[] }>('/api/v1/fs/trash', { paths }).then((r) => r.results),
 
   trashList: () => api.get<{ dir: string; items: TrashItem[] }>('/api/v1/trash'),
   restore: (names: string[]) => api.post<{ restored: string[] }>('/api/v1/trash/restore', { names }),
@@ -24,7 +25,12 @@ export const fsApi = {
    * Uploads a file. Uses XMLHttpRequest because fetch cannot report upload
    * progress.
    */
-  upload(path: string, file: Blob, onProgress?: (loaded: number, total: number) => void, overwrite = false): Promise<Entry> {
+  upload(
+    path: string,
+    file: Blob,
+    onProgress?: (loaded: number, total: number) => void,
+    overwrite = false,
+  ): Promise<Entry> {
     const url = buildUrl('/api/v1/fs/content', { path, overwrite: overwrite ? '1' : undefined })
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()

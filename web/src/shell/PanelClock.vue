@@ -9,14 +9,19 @@ onMounted(() => {
   const sync = () => {
     now.value = new Date()
   }
-  setTimeout(() => {
-    sync()
-    timer = setInterval(sync, 60_000)
-  }, 60_000 - (Date.now() % 60_000))
+  setTimeout(
+    () => {
+      sync()
+      timer = setInterval(sync, 60_000)
+    },
+    60_000 - (Date.now() % 60_000),
+  )
 })
 onBeforeUnmount(() => clearInterval(timer))
 
-const time = computed(() => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now.value))
+const time = computed(() =>
+  new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now.value),
+)
 const date = computed(() => new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(now.value))
 </script>
 

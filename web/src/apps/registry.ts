@@ -45,9 +45,7 @@ export function getApp(id: string): AppManifest | undefined {
 /** The app that opens mime, by exact match first, then "type/*". */
 export function appForMime(mime: string): AppManifest | undefined {
   const major = mime.split('/')[0]
-  return (
-    apps.find((a) => a.mimeTypes?.includes(mime)) ?? apps.find((a) => a.mimeTypes?.includes(`${major}/*`))
-  )
+  return apps.find((a) => a.mimeTypes?.includes(mime)) ?? apps.find((a) => a.mimeTypes?.includes(`${major}/*`))
 }
 
 const components = new Map<string, Component>()

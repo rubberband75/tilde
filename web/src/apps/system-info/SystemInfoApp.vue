@@ -51,7 +51,9 @@ onMounted(async () => {
               <strong>{{ m.mountPoint }}</strong>
               <span class="dim">{{ m.device }} · {{ m.fsType }}</span>
             </div>
-            <div class="bar"><div class="fill" :style="{ width: `${m.size ? ((m.size - m.free) / m.size) * 100 : 0}%` }" /></div>
+            <div class="bar">
+              <div class="fill" :style="{ width: `${m.size ? ((m.size - m.free) / m.size) * 100 : 0}%` }" />
+            </div>
             <div class="dim">{{ formatSize(m.free) }} free of {{ formatSize(m.size) }}</div>
           </div>
         </li>

@@ -190,7 +190,13 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
       <component :is="comp" v-if="comp" :ctx="ctx" />
     </div>
     <template v-if="!maximized">
-      <div v-for="edge in edges" :key="edge" class="handle" :class="edge" @pointerdown.stop="startResize($event, edge)" />
+      <div
+        v-for="edge in edges"
+        :key="edge"
+        class="handle"
+        :class="edge"
+        @pointerdown.stop="startResize($event, edge)"
+      />
     </template>
   </section>
 </template>

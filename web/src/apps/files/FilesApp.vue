@@ -9,7 +9,14 @@
 // (docs/roadmap.md, phase 3), thumbnails, inotify-driven refresh, drag and
 // drop between windows.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ContextMenuContent, ContextMenuItem, ContextMenuPortal, ContextMenuRoot, ContextMenuSeparator, ContextMenuTrigger } from 'reka-ui'
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from 'reka-ui'
 import { baseName, dirName, fsApi, joinPath, uniqueName } from '@/api/fs'
 import type { Entry, Mount, Place, TrashItem } from '@/api/types'
 import type { AppContext } from '@/apps/types'
@@ -254,7 +261,8 @@ async function trashSelected() {
   if (!paths.length) return
   const results = await fsApi.trash(paths)
   for (const r of results) {
-    if (r.code === 'other_drive') props.ctx.notify(`${baseName(r.path)} is on another drive; trashing it there is not supported yet.`, 'error')
+    if (r.code === 'other_drive')
+      props.ctx.notify(`${baseName(r.path)} is on another drive; trashing it there is not supported yet.`, 'error')
     else if (r.error) props.ctx.notify(`Could not move ${baseName(r.path)} to the trash: ${r.error}`, 'error')
   }
   emitFsChanged(location.value, trashFilesDir.value)
@@ -452,10 +460,20 @@ onBeforeUnmount(() => offFs?.())
         </button>
       </nav>
       <div class="view-switch">
-        <button class="btn icon-only" :class="{ active: viewMode === 'grid' }" title="Icon View" @click="setView('grid')">
+        <button
+          class="btn icon-only"
+          :class="{ active: viewMode === 'grid' }"
+          title="Icon View"
+          @click="setView('grid')"
+        >
           <SymbolicIcon name="grid" />
         </button>
-        <button class="btn icon-only" :class="{ active: viewMode === 'list' }" title="List View" @click="setView('list')">
+        <button
+          class="btn icon-only"
+          :class="{ active: viewMode === 'list' }"
+          title="List View"
+          @click="setView('list')"
+        >
           <SymbolicIcon name="list" />
         </button>
       </div>
@@ -574,16 +592,22 @@ onBeforeUnmount(() => offFs?.())
                 <ContextMenuItem class="item" @select="restoreSelected">Restore</ContextMenuItem>
               </template>
               <template v-else>
-                <ContextMenuItem class="item" :disabled="!items.length" @select="emptyTrash">Empty Trash</ContextMenuItem>
+                <ContextMenuItem class="item" :disabled="!items.length" @select="emptyTrash">
+                  Empty Trash
+                </ContextMenuItem>
                 <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
               </template>
             </template>
             <template v-else-if="isComputer">
-              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">Open</ContextMenuItem>
+              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">
+                Open
+              </ContextMenuItem>
               <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
             </template>
             <template v-else-if="selectedItems.length">
-              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">Open</ContextMenuItem>
+              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">
+                Open
+              </ContextMenuItem>
               <ContextMenuItem
                 v-if="selectedItems.length === 1 && selectedItems[0]!.entry?.type === 'dir'"
                 class="item"
@@ -592,7 +616,9 @@ onBeforeUnmount(() => offFs?.())
                 Open in Terminal
               </ContextMenuItem>
               <ContextMenuSeparator class="separator" />
-              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="startRename()">Rename…</ContextMenuItem>
+              <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="startRename()">
+                Rename…
+              </ContextMenuItem>
               <ContextMenuItem class="item" @select="trashSelected">Move to Trash</ContextMenuItem>
               <template v-if="selectedItems.some((i) => i.entry?.type === 'file')">
                 <ContextMenuSeparator class="separator" />

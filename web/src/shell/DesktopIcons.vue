@@ -3,7 +3,14 @@
 // Desktop folder (from ~/.config/user-dirs.dirs). Icons fill columns top to
 // bottom, like Nemo's desktop.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ContextMenuContent, ContextMenuItem, ContextMenuPortal, ContextMenuRoot, ContextMenuSeparator, ContextMenuTrigger } from 'reka-ui'
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from 'reka-ui'
 import { fsApi, joinPath, uniqueName } from '@/api/fs'
 import type { Entry } from '@/api/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
@@ -88,7 +95,9 @@ function onBackgroundContext(e: MouseEvent) {
   }
 }
 
-const selectedEntries = computed(() => items.value.filter((i) => i.entry && selected.value.has(i.key)).map((i) => i.entry!))
+const selectedEntries = computed(() =>
+  items.value.filter((i) => i.entry && selected.value.has(i.key)).map((i) => i.entry!),
+)
 
 async function trashSelected() {
   const paths = selectedEntries.value.map((e) => e.path)
@@ -182,7 +191,9 @@ onBeforeUnmount(() => {
         </template>
         <template v-else>
           <ContextMenuItem class="item" @select="newFolder">New Folder</ContextMenuItem>
-          <ContextMenuItem class="item" @select="wm.open('terminal', { cwd: desktopDir })">Open in Terminal</ContextMenuItem>
+          <ContextMenuItem class="item" @select="wm.open('terminal', { cwd: desktopDir })">
+            Open in Terminal
+          </ContextMenuItem>
           <ContextMenuSeparator class="separator" />
           <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
         </template>

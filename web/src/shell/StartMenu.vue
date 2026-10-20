@@ -19,7 +19,9 @@ const category = ref<string>('All Applications')
 const search = ref<HTMLInputElement | null>(null)
 
 const favorites = ['files', 'terminal', 'system-info']
-const favoriteApps = computed(() => favorites.map((id) => apps.find((a) => a.id === id)).filter((a): a is AppManifest => !!a))
+const favoriteApps = computed(() =>
+  favorites.map((id) => apps.find((a) => a.id === id)).filter((a): a is AppManifest => !!a),
+)
 
 const visibleApps = computed(() => apps.filter((a) => !a.hidden))
 const categories = computed(() => ['All Applications', ...new Set(visibleApps.value.map((a) => a.category).sort())])

@@ -13,7 +13,15 @@ export interface AppManifest {
   /** freedesktop icon name from the bundled theme. */
   icon: string
   /** Menu category, as in the Cinnamon menu. */
-  category: 'Accessories' | 'Graphics' | 'Internet' | 'Office' | 'Sound & Video' | 'Administration' | 'Preferences' | 'System Tools'
+  category:
+    | 'Accessories'
+    | 'Graphics'
+    | 'Internet'
+    | 'Office'
+    | 'Sound & Video'
+    | 'Administration'
+    | 'Preferences'
+    | 'System Tools'
   /** MIME types the app opens; "image/*" style wildcards are allowed. */
   mimeTypes?: string[]
   /** Only one window; launching again focuses it. */

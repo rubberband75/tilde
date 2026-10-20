@@ -84,7 +84,16 @@ export const useWindows = defineStore('windows', () => {
       y: Math.round((area.h - size.h) / 2) - 60 + cascade,
       ...size,
     })
-    windows.value.push({ id, appId, title: app.name, icon: app.icon, rect, state: 'normal', z: ++zTop, args: { ...args } })
+    windows.value.push({
+      id,
+      appId,
+      title: app.name,
+      icon: app.icon,
+      rect,
+      state: 'normal',
+      z: ++zTop,
+      args: { ...args },
+    })
     focusedId.value = id
     return id
   }
