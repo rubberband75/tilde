@@ -43,7 +43,7 @@ type Config struct {
 	// TrustProxy uses X-Forwarded-For for rate limiting. Only enable it
 	// behind a reverse proxy you control.
 	TrustProxy bool
-	// SessionMaxAge is the absolute token lifetime (decision 4e: 12h).
+	// SessionMaxAge is the absolute token lifetime (D16: 12h).
 	SessionMaxAge time.Duration
 	// Web is the built frontend.
 	Web fs.FS
@@ -192,7 +192,7 @@ func (s *Server) currentUser(r *http.Request) (string, bool) {
 	return s.tokens.Lookup(c.Value)
 }
 
-// handleLogout ends the whole session, matching Mint's Log Out (decision 4d):
+// handleLogout ends the whole session, matching Mint's Log Out (D15):
 // terminals get SIGHUP, the worker exits, the PAM session closes, and every
 // device logged in as this user is signed out.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

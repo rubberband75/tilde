@@ -17,7 +17,7 @@ import (
 	"tilde/internal/ringbuf"
 )
 
-// DefaultRingSize is the replay buffer per terminal (decision 4c).
+// DefaultRingSize is the replay buffer per terminal (D14).
 const DefaultRingSize = 1 << 20
 
 // subscriberBuffer is how many output chunks a slow client may fall behind

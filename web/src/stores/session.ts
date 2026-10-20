@@ -26,7 +26,7 @@ export const useSession = defineStore('session', () => {
     status.value = 'loggedIn'
   }
 
-  /** Log out ends the whole session, like Mint's Log Out (decision 4d). */
+  /** Log out ends the whole session, like Mint's Log Out (D15). */
   async function logout() {
     try {
       await api.post('/api/auth/logout')

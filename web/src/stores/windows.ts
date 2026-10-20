@@ -12,7 +12,7 @@ export interface Rect {
 }
 
 export interface AppWindow {
-  /** Stable id; apps map it to worker resources (decision 4b). */
+  /** Stable id; apps map it to worker resources (D13). */
   id: string
   appId: string
   title: string

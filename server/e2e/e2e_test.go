@@ -2,7 +2,7 @@
 
 // Package e2e drives a running Tilde server with a real account. It is the
 // "real-privilege test harness": run it inside a disposable VM (see
-// docs/testing.md), never against a machine you care about.
+// docs/development.md), never against a machine you care about.
 //
 //	sudo ./bin/tilde serve --dev --listen 127.0.0.1:8443 &
 //	TILDE_URL=http://127.0.0.1:8443 TILDE_USER=tester TILDE_PASS=secret \

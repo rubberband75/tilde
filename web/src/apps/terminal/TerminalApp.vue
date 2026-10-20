@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Terminal: xterm.js attached to a PTY that lives in the worker. The window
 // remembers its terminal id, so a page reload reattaches to the same shell
-// and the worker replays recent output (decision 4c). Closing the window
+// and the worker replays recent output (D14). Closing the window
 // hangs up the shell; reloading the page does not.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'

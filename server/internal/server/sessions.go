@@ -34,7 +34,7 @@ func (e *AuthError) Error() string { return e.Message }
 
 // UserSession is one user's running desktop session: a root session helper
 // holding the PAM session open, and the worker it started as the user.
-// All browser tabs and devices of that user share it (decision 4a).
+// All browser tabs and devices of that user share it (D12).
 type UserSession struct {
 	User    string
 	UID     int

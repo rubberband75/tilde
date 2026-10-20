@@ -19,7 +19,7 @@ import (
 
 // terminalManager owns the user's running terminals. Terminals live in the
 // worker, not the browser, so they survive refreshes and disconnects
-// (decision 4c). Ids are stable ("t1", "t2", ...) so a window can find its
+// (D14). Ids are stable ("t1", "t2", ...) so a window can find its
 // terminal again after a reload.
 type terminalManager struct {
 	shell string

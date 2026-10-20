@@ -14,7 +14,7 @@ import (
 // travel in an HttpOnly cookie). Tokens are stored by SHA-256 hash, so the
 // map holds nothing directly usable.
 //
-// A server restart forgets every token. That matches decision 4f: in v1 a
+// A server restart forgets every token. That matches D17: in v1 a
 // restart also ends every worker, so the browser is sent back to login.
 type TokenStore struct {
 	mu     sync.Mutex
@@ -30,7 +30,7 @@ type tokenInfo struct {
 }
 
 // NewTokenStore returns a store whose tokens expire maxAge after creation
-// (the absolute timeout, decision 4e).
+// (the absolute timeout, D16).
 func NewTokenStore(maxAge time.Duration) *TokenStore {
 	return &TokenStore{m: map[string]*tokenInfo{}, maxAge: maxAge, now: time.Now}
 }

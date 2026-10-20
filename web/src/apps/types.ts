@@ -2,7 +2,7 @@ import type { Component } from 'vue'
 import type { Entry } from '@/api/types'
 
 /**
- * Everything the shell needs to know about an app (decision 5a). Built-in
+ * Everything the shell needs to know about an app (D18). Built-in
  * apps register in ./registry.ts; runtime plugins later use the same shape.
  */
 export interface AppManifest {
@@ -26,7 +26,7 @@ export interface AppManifest {
 }
 
 /**
- * The shell API every app receives as its `ctx` prop (decision 5c). Apps
+ * The shell API every app receives as its `ctx` prop (D18). Apps
  * must not reach into the window store directly.
  */
 export interface AppContext {
@@ -37,7 +37,7 @@ export interface AppContext {
   setIcon(icon: string): void
   /** Request closing the window (runs the close guard). */
   close(): void
-  /** Merge state into args so a reload restores it (decision 5e). */
+  /** Merge state into args so a reload restores it (D18). */
   saveState(patch: Record<string, unknown>): void
   /** Ask before closing, e.g. for unsaved changes. Return false to cancel. */
   setCloseGuard(guard: (() => boolean | Promise<boolean>) | null): void
