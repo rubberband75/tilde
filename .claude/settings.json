@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make build)",
+      "Bash(make web)",
+      "Bash(make server)",
+      "Bash(make server-nopam)",
+      "Bash(make test)",
+      "Bash(make test-go)",
+      "Bash(make test-web)",
+      "Bash(make deps)",
+      "Bash(make icons)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go mod tidy)",
+      "Bash(gofmt:*)",
+      "Bash(npm ci)",
+      "Bash(npm run build)",
+      "Bash(npm run typecheck)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Read(/etc/shadow)",
+      "Read(/etc/gshadow)",
+      "Read(/var/lib/tilde/tls/key.pem)"
+    ]
+  }
+}

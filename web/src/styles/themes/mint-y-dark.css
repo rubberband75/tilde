@@ -1,0 +1,115 @@
+/*
+ * Mint-Y Dark design tokens.
+ *
+ * Values come from linuxmint/mint-themes (src/Mint-Y): cinnamon/sass/_colors.scss
+ * and the compiled cinnamon-dark.css for the panel and menu, and
+ * gtk-3.0/sass/_colors.scss / gtk-dark.css for application windows (Nemo,
+ * dialogs, buttons). Components use these variables only, never raw colors,
+ * so another theme is just another file with the same variables
+ * (docs/theming.md).
+ */
+:root[data-theme='mint-y-dark'] {
+  color-scheme: dark;
+
+  /* Accent: Mint-Y green. */
+  --accent: #35a854;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(53, 168, 84, 0.35);
+
+  /* Type: Mint uses the Ubuntu font at 10pt. Not bundled; falls back. */
+  --font-ui: 'Ubuntu', 'Noto Sans', 'DejaVu Sans', system-ui, sans-serif;
+  --font-size-ui: 13.333px;
+  --font-size-small: 12px;
+  --font-mono: 'Ubuntu Mono', 'DejaVu Sans Mono', 'Noto Sans Mono', monospace;
+
+  /* Desktop */
+  --desktop-bg:
+    radial-gradient(120% 90% at 70% 15%, #2c4a3a 0%, transparent 60%),
+    radial-gradient(90% 80% at 10% 90%, #1d3a3a 0%, transparent 55%),
+    linear-gradient(160deg, #1b2a26 0%, #15191c 55%, #101214 100%);
+  --desktop-icon-fg: #ffffff;
+  --desktop-icon-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5);
+  --desktop-icon-hover-bg: rgba(255, 255, 255, 0.1);
+  --desktop-icon-selected-bg: rgba(53, 168, 84, 0.55);
+  --desktop-icon-size: 48px;
+  --desktop-cell-w: 96px;
+  --desktop-cell-h: 92px;
+
+  /* Panel (cinnamon-dark.css: .panel-bottom, .window-list-item-box, .applet-box) */
+  --panel-height: 40px;
+  --panel-bg: rgba(29, 29, 33, 0.99);
+  --panel-fg: #e1e1e1;
+  --panel-item-fg: rgba(225, 225, 225, 0.8);
+  --panel-item-hover-bg: #41584d;
+  --panel-item-active-bg: #41584d;
+  --panel-item-active-border: #35a854;
+  --panel-icon-size: 24px;
+
+  /* Cinnamon menu and popups (.menu, .menu-favorites-box, StEntry) */
+  --menu-bg: #222226;
+  --menu-fg: #e1e1e1;
+  --menu-dim-fg: #a8a8a8;
+  --menu-radius: 6px;
+  --menu-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  --menu-item-hover-bg: #303036;
+  --menu-box-bg: #303036;
+  --menu-entry-bg: #303036;
+
+  /* GTK popup menus (context menus inside apps) */
+  --popup-bg: #2e2e33;
+  --popup-border: #202023;
+  --popup-item-hover-bg: #35a854;
+  --popup-item-hover-fg: #ffffff;
+
+  /* Window decorations */
+  --wm-titlebar-height: 32px;
+  --wm-titlebar-bg: #222226;
+  --wm-titlebar-bg-unfocused: #26262a;
+  --wm-title-fg: #dadada;
+  --wm-title-fg-unfocused: #8a8a8e;
+  --wm-border: #1a1a1d;
+  --wm-radius: 6px;
+  --wm-shadow: 0 3px 14px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  --wm-shadow-unfocused: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  --wm-button-size: 24px;
+  --wm-button-fg: #c8c8cc;
+  --wm-button-hover-bg: rgba(255, 255, 255, 0.12);
+  --wm-close-hover-bg: #35a854;
+  --wm-close-hover-fg: #ffffff;
+  --wm-resize-handle: 6px;
+
+  /* Application chrome (gtk-dark.css) */
+  --window-bg: #2e2e33;
+  --window-fg: #dadada;
+  --headerbar-bg: #222226;
+  --view-bg: #333339;
+  --view-fg: #dadada;
+  --view-dim-fg: #9a9aa0;
+  --sidebar-bg: #2c2c31;
+  --sidebar-fg: rgba(255, 255, 255, 0.87);
+  --border: #202023;
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --button-bg: #38383e;
+  --button-hover-bg: #414148;
+  --button-active-bg: #2a2a2f;
+  --button-fg: rgba(255, 255, 255, 0.87);
+  --button-border: #202023;
+  --entry-bg: #333339;
+  --entry-border: #202023;
+  --entry-fg: #dadada;
+  --radius: 3px;
+  --selection-bg: #35a854;
+  --selection-fg: #ffffff;
+  --selection-unfocused-bg: rgba(53, 168, 84, 0.45);
+  --scrollbar-thumb: rgba(117, 117, 120, 0.95);
+  --scrollbar-thumb-hover: rgba(150, 150, 154, 0.95);
+  --tooltip-bg: rgba(50, 160, 80, 0.95);
+  --tooltip-fg: #ffffff;
+  --danger: #f04a50;
+  --warning: #f27835;
+  --progress-bg: #202023;
+
+  /* Terminal (gtk-dark.css: vte-terminal) */
+  --terminal-bg: #222226;
+  --terminal-fg: #ffffff;
+}

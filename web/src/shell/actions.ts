@@ -1,0 +1,45 @@
+import { appForMime } from '@/apps/registry'
+import type { AppContext } from '@/apps/types'
+import { fsApi } from '@/api/fs'
+import type { Entry } from '@/api/types'
+import { useNotices } from '@/stores/notices'
+import { useWindows } from '@/stores/windows'
+
+/** Opens a folder in Files, or a file with the app registered for its type. */
+export function openEntry(entry: Entry): void {
+  const wm = useWindows()
+  if (entry.type === 'dir') {
+    wm.open('files', { path: entry.path })
+    return
+  }
+  const app = appForMime(entry.mime)
+  if (app) {
+    wm.open(app.id, { path: entry.path })
+    return
+  }
+  // No viewer app yet: let the browser display it in a new tab. The worker
+  // serves files with a sandbox CSP, so nothing in them can run as Tilde.
+  window.open(fsApi.contentUrl(entry.path), '_blank', 'noopener')
+}
+
+/** Builds the shell API handed to an app window (see apps/types.ts). */
+export function createContext(windowId: string): AppContext {
+  const wm = useWindows()
+  const notices = useNotices()
+  return {
+    windowId,
+    get args() {
+      return wm.get(windowId)?.args ?? {}
+    },
+    setTitle: (title) => wm.setTitle(windowId, title),
+    setIcon: (icon) => wm.setIcon(windowId, icon),
+    close: () => void wm.requestClose(windowId),
+    saveState: (patch) => wm.saveState(windowId, patch),
+    setCloseGuard: (guard) => wm.setCloseGuard(windowId, guard),
+    onClose: (fn) => wm.onClose(windowId, fn),
+    isFocused: () => wm.focusedId === windowId,
+    launch: (appId, args) => void wm.open(appId, args),
+    openEntry,
+    notify: (message, kind) => notices.push(message, kind),
+  }
+}

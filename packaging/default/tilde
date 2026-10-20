@@ -1,0 +1,10 @@
+# Options for "tilde serve" (installed as /etc/default/tilde).
+#
+# Tilde listens on localhost only by default. To reach it from other
+# machines, prefer a VPN address (Tailscale, WireGuard) or a LAN address
+# over exposing it to the internet:
+#   TILDE_OPTS="--listen 100.101.102.103:8443"
+#
+# Use your own certificate instead of the self-signed one:
+#   TILDE_OPTS="--listen 0.0.0.0:8443 --tls-cert /etc/tilde/cert.pem --tls-key /etc/tilde/key.pem"
+TILDE_OPTS="--listen 127.0.0.1:8443"

@@ -1,0 +1,25 @@
+#%PAM-1.0
+# PAM service for Tilde (installed as /etc/pam.d/tilde).
+# Modeled on Debian's /etc/pam.d/login and Cockpit's PAM file.
+
+# Refuse non-root logins while /etc/nologin exists.
+auth       requisite  pam_nologin.so
+# Standard Debian/Ubuntu/Mint stacks: pam_unix, plus whatever the admin has
+# added there (pam_faillock lockouts, 2FA modules, ...).
+@include common-auth
+@include common-account
+
+# Record the login uid for auditing, and give the session its own keyring.
+session    required   pam_loginuid.so
+session    optional   pam_keyinit.so force revoke
+# Includes pam_systemd, which registers a logind session of type "web" and
+# provides XDG_RUNTIME_DIR and the session D-Bus bus.
+@include common-session
+# Read /etc/environment and ~/.pam_environment like a desktop login.
+session    required   pam_env.so readenv=1
+session    required   pam_env.so readenv=1 envfile=/etc/default/locale
+
+# Unlock the GNOME keyring with the login password (optional; harmless if
+# gnome-keyring is not installed).
+auth       optional   pam_gnome_keyring.so
+session    optional   pam_gnome_keyring.so auto_start

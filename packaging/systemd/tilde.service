@@ -1,0 +1,24 @@
+[Unit]
+Description=Tilde web desktop
+After=network-online.target systemd-logind.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/tilde
+ExecStart=/usr/local/bin/tilde serve $TILDE_OPTS
+StateDirectory=tilde
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+
+# Do NOT add sandboxing options such as ProtectSystem, ProtectHome,
+# PrivateTmp, PrivateDevices, ReadOnlyPaths or NoNewPrivileges here.
+# Tilde starts real login sessions, and every process it spawns (each
+# user's shell, sudo, apt) inherits those restrictions, which breaks normal
+# use. webdesktopd hit exactly this. Isolation comes from running each
+# user's worker as that user in its own logind session (docs/security.md).
+
+[Install]
+WantedBy=multi-user.target

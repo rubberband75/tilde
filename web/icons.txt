@@ -1,0 +1,59 @@
+# Mint-Y icon names Tilde uses, copied by scripts/fetch-icons.sh.
+# Every mimetypes icon is copied too; list only the others here.
+
+# places
+folder
+folder-open
+folder-documents
+folder-download
+folder-music
+folder-pictures
+folder-videos
+folder-templates
+folder-publicshare
+folder-remote
+user-home
+user-desktop
+user-trash
+user-trash-full
+network-workgroup
+
+# devices
+computer
+drive-harddisk
+drive-harddisk-usb
+drive-removable-media
+drive-optical
+media-optical
+media-removable
+
+# apps
+utilities-terminal
+org.gnome.Terminal
+system-file-manager
+nemo
+system-users
+preferences-desktop
+preferences-desktop-theme
+preferences-desktop-wallpaper
+utilities-system-monitor
+gnome-system-monitor
+accessories-text-editor
+text-editor
+multimedia-video-player
+help-about
+system-software-install
+
+# categories
+applications-accessories
+applications-system
+applications-utilities
+applications-multimedia
+preferences-system
+
+# actions
+system-log-out
+system-lock-screen
+system-shutdown
+system-run
+system-search

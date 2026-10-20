@@ -1,0 +1,163 @@
+# Architecture
+
+Tilde is one Go binary with three roles, plus a Vue frontend embedded in it.
+
+```
+ Browser (Vue)                     Host
+ ┌──────────────┐   HTTPS + WS   ┌──────────────────────┐
+ │ desktop, wm, │ ─────────────▶ │ tilde serve   (root) │  TLS, login, tokens,
+ │ apps         │                │                      │  Origin checks, proxy
+ └──────────────┘                └──────────┬───────────┘
+                                            │ on login: spawn, pipe on stdin/stdout
+                                 ┌──────────▼───────────┐
+                                 │ tilde session-helper │  PAM authenticate,
+                                 │ (root, one per login)│  open logind session
+                                 └──────────┬───────────┘
+                                            │ exec with user's UID/GID/groups,
+                                            │ same pipe
+                                 ┌──────────▼───────────┐
+                                 │ tilde worker  (user) │  HTTP over yamux:
+                                 │                      │  files, trash, PTYs
+                                 └──────────┬───────────┘
+                                            ▼
+                                 Linux: kernel permissions, logind, D-Bus
+```
+
+The rule that shapes everything: **the server never touches user data**. It
+authenticates and forwards. Everything that reads a file or runs a command
+happens in the worker, which runs as the user, so the kernel makes every
+permission decision. A bug in the file manager can only do what that user
+could already do.
+
+## Processes
+
+### `tilde serve` (root)
+
+- Listens on HTTPS (self-signed certificate by default) or, with `--dev`,
+  plain HTTP on loopback for the Vite dev server.
+- Serves the embedded frontend (`internal/webui`).
+- `/api/auth/*`: login, logout, session. Login spawns a session helper.
+- `/api/v1/*`: checks the session cookie, then reverse-proxies the request to
+  that user's worker over a new yamux stream (`internal/server/sessions.go`).
+  WebSocket upgrades pass through, which is how terminals work.
+- Keeps browser tokens in memory (`tokens.go`) and rate-limits failed logins
+  per address (`ratelimit.go`). Per-account lockout is pam_faillock's job.
+- Must run as root (to start helpers), except in `--dev` single-user mode.
+
+### `tilde session-helper` (root, one per login)
+
+- Reads one JSON request (user, password, mode) from stdin, byte by byte so it
+  never consumes bytes meant for the worker.
+- Runs the PAM `auth` and `account` stacks for service `tilde`.
+- In `verify` mode (logging in to an existing session), replies and exits.
+- In `session` mode: sets `XDG_SESSION_TYPE=web`, `XDG_SESSION_CLASS=user`,
+  calls `pam_setcred` and `pam_open_session`. `pam_systemd` registers a logind
+  session for the helper process and moves it into a session scope, which
+  provides `XDG_RUNTIME_DIR` and the session D-Bus bus.
+- Starts `tilde worker` with the user's UID, GID and supplementary groups,
+  handing it the same stdin/stdout, then waits. When the worker exits it closes
+  the PAM session. `Pdeathsig` stops the worker if the helper dies.
+
+### `tilde worker` (the user)
+
+- Writes a `WorkerHello` line, then serves plain HTTP on a yamux session over
+  stdin/stdout (`internal/worker`). It never opens a network port.
+- Owns the user's terminals (`internal/pty`): PTYs with a 1 MiB ring buffer.
+  Terminals survive browser disconnects; reattaching replays the buffer, then
+  a forced resize makes full-screen programs redraw.
+- Exits when its pipe closes (logout, server shutdown, session end), hanging up
+  all terminals first.
+
+## Startup sequence on the pipe
+
+```
+server → helper   {"mode":"session","user":"chandler","password":"…","remoteAddr":"…"}\n
+helper → server   {"ok":true,"uid":1000}\n
+                  (helper execs the worker as the user, same pipe)
+worker → server   {"protocol":1,"version":"…","user":"chandler","uid":1000,"home":"…"}\n
+                  … yamux from here on: server = client, worker = server
+```
+
+`internal/protocol` defines these messages. The server refuses a worker with a
+different protocol version, which matters once workers run on other hosts.
+
+Both helper and worker call `stdio.ProtectStdout()` at startup: fd 1 is
+duplicated for the protocol and then pointed at stderr, so stray prints from
+Go, C libraries or PAM modules land in the log instead of corrupting the
+stream. Helper and worker stderr is collected by the server and logged with
+the user name.
+
+## Why stdin/stdout + yamux + HTTP
+
+- One pipe per session, many independent streams, each with its own flow
+  control: a large download never stalls terminal keystrokes.
+- HTTP inside each stream means the worker's API is the browser's API. The
+  server is just an authenticating reverse proxy, and Go's standard library
+  provides Range requests (`http.ServeContent`), streaming and WebSockets.
+- SSH gives the same stdin/stdout byte stream, so later the server can run
+  `tilde worker` on another machine over SSH with no protocol changes.
+- The worker can be tested without root: `worker_test.go` runs it over an
+  in-memory pipe.
+
+## Sessions (decision 4)
+
+- One worker per **user**, shared by every browser tab and device of that
+  user. Starting a long job on a laptop and checking it on a phone works.
+- Every login goes through PAM, even when a session is already running.
+- **Log out** ends the session for all devices: the worker exits, shells get
+  SIGHUP, the helper closes the PAM session. Background processes started with
+  `nohup` keep running, as on Mint.
+- **Closing the tab** leaves the session running, like walking away from the
+  machine.
+- Tokens: 256-bit random, `HttpOnly; Secure; SameSite=Strict` cookie named
+  `__Host-tilde`, stored server-side by hash, revoked on logout, 12-hour
+  absolute lifetime.
+- A server restart ends all sessions (the pipes close). The frontend gets
+  `401 session_ended` and returns to the login screen.
+
+## Frontend
+
+```
+App.vue ── LoginScreen (logged out)
+       └── Desktop
+            ├── DesktopIcons      Computer, Home, Trash, ~/Desktop
+            ├── WindowLayer
+            │    └── WindowFrame × n ── <app component :ctx>
+            ├── Notices
+            └── Panel ── StartMenu, launchers, WindowList, tray (user, clock)
+```
+
+- **Window manager** (`src/stores/windows.ts`, `src/wm/`): a Pinia store of
+  windows (id, app, title, icon, rect, state, z, args). Drags move the frame
+  with a CSS transform and commit on release; resizes use eight handles with
+  per-app minimum sizes. While dragging, a transparent shield covers
+  everything so iframes cannot swallow pointer events. Double-clicking the
+  title bar maximizes; dragging a maximized window restores it under the
+  pointer, like Cinnamon.
+- **Layout persistence**: the store saves windows to `localStorage` per user.
+  Each window keeps launch args plus state the app saves (`ctx.saveState`), so
+  a terminal window remembers its terminal id and Files remembers its folder.
+  Running things live in the worker; the layout lives in the browser (4b).
+- **Apps** (`src/apps`): each has a manifest in `registry.ts` (id, name, icon,
+  category, MIME types, sizes, lazy component) and receives the shell API as a
+  `ctx` prop (`types.ts`): set title, close, save state, close guard, launch
+  another app, open a file with its registered app, notify.
+- **Session expiry**: any `401` with `session_ended` / `not_logged_in` from
+  `/api/v1/*` makes the session store return to the login screen with a
+  message (`src/api/client.ts`).
+- **Theme**: design tokens in `src/styles/themes/mint-y-dark.css`, layout in
+  `src/theme/desktopStyle.ts`. See `docs/theming.md`.
+- **Icons**: bundled Mint-Y PNGs resolved by freedesktop name through
+  `/icons/index.json`, with generic built-in glyphs as a fallback.
+
+## Where to add things
+
+| You want to… | Go to |
+| --- | --- |
+| Add a filesystem or process operation | `server/internal/worker` (+ test, `docs/api.md`, `web/src/api`) |
+| Change login, cookies, origin checks | `server/internal/server` (read `docs/security.md` first) |
+| Change what the session looks like to PAM/logind | `server/internal/helper`, `packaging/pam.d/tilde` |
+| Add an app | `web/src/apps/<name>/` + `web/src/apps/registry.ts` |
+| Change the panel, menu or desktop | `web/src/shell` |
+| Change window behavior | `web/src/stores/windows.ts`, `web/src/wm` |
+| Change colors or sizes | `web/src/styles/themes/*.css` |

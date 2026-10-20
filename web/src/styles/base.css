@@ -1,0 +1,154 @@
+/* Base styles and shared controls. Everything reads theme tokens. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  color: var(--window-fg);
+  background: #101214;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+/* Scrollbars, close to GTK's overlay-ish Mint-Y sliders. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* GTK-style button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius);
+  background: var(--button-bg);
+  color: var(--button-fg);
+  cursor: default;
+  transition: background-color 150ms ease;
+}
+.btn:hover:not(:disabled) {
+  background: var(--button-hover-bg);
+}
+.btn:active:not(:disabled) {
+  background: var(--button-active-bg);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+}
+.btn.suggested {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.btn.suggested:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn.flat {
+  background: transparent;
+  border-color: transparent;
+}
+.btn.flat:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+.btn.icon-only {
+  min-width: 30px;
+  padding: 4px;
+}
+
+/* GTK-style entry */
+.entry {
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--entry-border);
+  border-radius: var(--radius);
+  background: var(--entry-bg);
+  color: var(--entry-fg);
+  outline: none;
+}
+.entry:focus {
+  border-color: var(--accent);
+}
+
+/* Popup/context menus (GTK menus inside apps and on the desktop) */
+.popup-menu {
+  min-width: 200px;
+  padding: 4px 0;
+  border: 1px solid var(--popup-border);
+  background: var(--popup-bg);
+  color: var(--window-fg);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  z-index: 100000;
+  outline: none;
+}
+.popup-menu .item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 18px;
+  cursor: default;
+  outline: none;
+}
+.popup-menu .item[data-highlighted] {
+  background: var(--popup-item-hover-bg);
+  color: var(--popup-item-hover-fg);
+}
+.popup-menu .item[data-disabled] {
+  opacity: 0.45;
+}
+.popup-menu .separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.dim {
+  color: var(--view-dim-fg);
+}

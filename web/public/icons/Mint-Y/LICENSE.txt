@@ -1,0 +1,3 @@
+Mint-Y icon theme, from https://github.com/linuxmint/mint-y-icons
+License: Creative Commons Attribution-ShareAlike 4.0; some icons GPLv3.
+See the upstream README and debian/copyright for full credits.

@@ -1,0 +1,10 @@
+/bin/
+/web/node_modules/
+/web/dist/
+/server/internal/webui/dist/*
+!/server/internal/webui/dist/.gitkeep
+*.test
+*.out
+.DS_Store
+# Personal Claude Code settings
+/.claude/settings.local.json

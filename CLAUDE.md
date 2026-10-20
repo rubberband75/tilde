@@ -1,0 +1,130 @@
+# CLAUDE.md
+
+Guidance for Claude Code in this repository.
+
+## What Tilde is
+
+Tilde is a browser-based Linux desktop that looks like Cinnamon on Linux Mint
+(Mint-Y Dark). You log in with a real account on the host; everything you do
+(files, terminals, later processes and apps) runs as that Linux user, so the
+kernel enforces permissions. It is not VNC: the browser renders the desktop
+and talks to the host through an HTTP/WebSocket API.
+
+License: AGPL-3.0-or-later. Bundled Mint-Y icons: CC BY-SA 4.0 (some GPLv3).
+
+## Read first
+
+- `docs/architecture.md` — processes, startup sequence, request flow.
+- `docs/decisions.md` — every decision so far, with reasons. Check it before
+  proposing a change of direction; record new decisions there.
+- `docs/roadmap.md` — phases and what is done. Pick work from here.
+- `docs/security.md` — threat model and the rules below in more detail.
+- `docs/api.md` — the HTTP API the browser and worker share.
+
+## Layout
+
+```
+server/                 Go module "tilde" (one binary, three roles)
+  cmd/tilde/            main: serve | session-helper | worker
+  internal/server/      root server: TLS, login, tokens, origin checks, proxy
+  internal/helper/      per-login root helper: PAM auth + session, starts worker
+  internal/worker/      per-user API: fs, trash, places, terminals
+  internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
+  internal/pty/         PTYs with ring-buffer replay
+  internal/protocol/    pipe handshake messages
+  internal/webui/dist/  built frontend, embedded (generated; only .gitkeep committed)
+  e2e/                  end-to-end tests (build tag "e2e"), run in a VM
+web/                    Vue 3 + Vite + Pinia + TypeScript frontend
+  src/shell/            desktop, panel, start menu, window list, login
+  src/wm/               window manager (frame, layer)
+  src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/, system-info/
+  src/styles/           base.css + themes/mint-y-dark.css (design tokens)
+  public/icons/         bundled Mint-Y icons (scripts/fetch-icons.sh)
+packaging/              PAM service file, systemd unit, /etc/default/tilde
+docs/                   design docs
+```
+
+## Commands
+
+```bash
+make deps          # npm ci in web/
+make build         # frontend + bin/tilde with the UI embedded (needs libpam0g-dev, cgo)
+make test          # go vet + go test -race, frontend type check
+make server-nopam  # build without libpam (logins always fail; for CI/tests)
+make dev-server    # Go server, plain HTTP on 127.0.0.1:8443, single-user (your account)
+make dev-web       # Vite on http://localhost:5173, proxies /api to the Go server
+make icons         # refresh bundled icons from /usr/share/icons/Mint-Y or GitHub
+make e2e TILDE_URL=... TILDE_USER=... TILDE_PASS=...   # only in a throwaway VM
+```
+
+Single Go test: `cd server && go test ./internal/worker -run TestFileLifecycle -v`.
+Frontend only: `cd web && npm run typecheck` / `npm run build`.
+
+## Rules that must not be broken
+
+These are the security model. If a change seems to need breaking one, stop
+and ask.
+
+1. **The main server never touches user files or runs user commands.** All of
+   that happens in the worker, which runs with the user's UID/GID/groups. Do
+   not add file or process endpoints to `internal/server`.
+2. **Never call setuid/setgid in a Go process.** Drop privileges only by
+   starting a child with `SysProcAttr.Credential` (see `internal/helper`).
+3. **PAM sessions are opened in the helper, never the server.** pam_systemd
+   registers the calling process; the helper must live until the session ends.
+4. **Stdout is the protocol.** In the helper and worker, fd 1 carries the
+   handshake and the yamux stream. Never print to stdout; log with `slog`
+   (stderr). `stdio.ProtectStdout` redirects stray writes, but do not rely on it.
+5. **The worker never listens on a network port.** It is reachable only over
+   its stdin/stdout pipe from the authenticated server.
+6. **Every state-changing request and every WebSocket upgrade passes the Origin
+   check** (`internal/server/middleware.go`). Keep cookies `HttpOnly`,
+   `Secure`, `SameSite=Strict`. Tokens stay server-side; never put them in URLs
+   or browser storage.
+7. **Never store passwords in the browser.** Not in localStorage, IndexedDB or
+   anywhere else. "Remember me" will be a revocable server-side device token.
+8. **Files are served with a sandbox CSP** (`worker/fs.go`, `handleDownload`).
+   Anything from a user's disk must never run script on Tilde's origin. Future
+   "local web apps" must be served from a separate origin.
+9. **Do not add systemd sandboxing** (`ProtectSystem`, `ProtectHome`,
+   `PrivateTmp`, `NoNewPrivileges`, ...) to `packaging/systemd/tilde.service`;
+   user shells inherit it.
+10. **Root login stays disabled.** Users log in as themselves and use sudo.
+11. **Keep script-src strict in the CSP.** An XSS bug in Tilde is a shell.
+
+## Conventions
+
+- Go: `gofmt`, standard library first, errors wrapped with `%w`, `log/slog`
+  for logs. Table-driven tests next to the code. Exported identifiers get doc
+  comments that say *why*, not just *what*.
+- Worker endpoints map filesystem errors through `writeErr`; the kernel makes
+  permission decisions and the API just reports them (403, 404, 409...).
+- Frontend: Vue 3 `<script setup lang="ts">`, Pinia setup stores, strict
+  TypeScript (no `any`). Components use theme tokens only (`var(--...)`), never
+  raw colors; add a token to `styles/themes/mint-y-dark.css` instead.
+- Apps receive the shell API as the `ctx` prop (`src/apps/types.ts`) and must
+  not reach into the window store directly. New apps register in
+  `src/apps/registry.ts`.
+- Icons: freedesktop names via `<ThemeIcon :name="[specific, generic]">`.
+  Add new names to `web/icons.txt` and run `make icons`.
+- Keep `docs/api.md` in sync with worker routes and `web/src/api/types.ts`.
+- Commits: short imperative subject ("Add trash restore endpoint"), body says
+  why. One logical change per commit.
+
+## Testing
+
+- `make test` must pass before you finish a change.
+- Worker tests run the real HTTP API over yamux on an in-memory pipe, including
+  a real shell on a PTY (`internal/worker/worker_test.go`). Extend them for new
+  endpoints.
+- Anything involving PAM, root, setuid or logind needs the e2e suite in a
+  disposable VM (see `docs/development.md`). Never run e2e against a machine
+  with real data.
+- For UI changes, build and look at it: `make dev-server` + `make dev-web`,
+  then open http://localhost:5173.
+
+## When you finish a piece of work
+
+- Tick it off in `docs/roadmap.md`.
+- If you made or changed a decision, add an entry to `docs/decisions.md`.
+- If you changed the API, update `docs/api.md` and `web/src/api/types.ts`.
