@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 // In development, run the Go server in --dev mode on 127.0.0.1:8443 and open
@@ -19,6 +19,10 @@ export default defineConfig({
     proxy: {
       '/api': { target: backend, ws: true, changeOrigin: false },
     },
+  },
+  test: {
+    // Unit tests for stores and helpers; they need window and localStorage.
+    environment: 'jsdom',
   },
   build: {
     outDir: 'dist',

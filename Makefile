@@ -3,7 +3,8 @@
 #   make deps         install frontend dependencies
 #   make build        frontend + server binary with the UI embedded (bin/tilde)
 #   make dev          print how to run the two dev servers
-#   make test         Go vet + tests, frontend type check
+#   make test         gofmt/Prettier checks, Go vet + tests, frontend type check + tests
+#   make fmt          format Go and frontend code
 #   make e2e          end-to-end tests against a running server (use a VM)
 #   make install      install binary, PAM file and systemd unit (sudo)
 
@@ -14,7 +15,7 @@ LDFLAGS := -s -w -X tilde/internal/buildinfo.Version=$(VERSION)
 DEV_LISTEN ?= 127.0.0.1:8443
 
 .PHONY: all build deps web server server-nopam test test-go test-web check \
-        dev dev-server dev-server-root dev-web icons e2e install uninstall clean
+        fmt dev dev-server dev-server-root dev-web icons e2e install uninstall clean
 
 all: build
 
@@ -43,10 +44,16 @@ test: test-go test-web
 check: test
 
 test-go:
+	@unformatted=$$(gofmt -l server); if [ -n "$$unformatted" ]; then \
+		echo "gofmt needed (run make fmt):"; echo "$$unformatted"; exit 1; fi
 	cd server && go vet ./... && go test -race ./...
 
 test-web:
-	cd web && npm run typecheck
+	cd web && npm run format:check && npm run typecheck && npm test
+
+fmt:
+	gofmt -w server
+	cd web && npm run format
 
 dev:
 	@echo "Terminal 1:  make dev-server        (single-user: only your account can log in)"
