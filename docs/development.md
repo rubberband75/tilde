@@ -54,29 +54,44 @@ make test        # go vet, go test -race ./..., vue-tsc
 and its shells run as the user, that the kernel refuses `/root`, that
 cross-origin requests are rejected and that logout ends the session.
 
-Run them **only in a disposable VM** (they create sessions and run commands
-as a real account):
+They create sessions and run commands as a real account, so they run **only
+in a disposable VM** (D29):
 
 ```bash
-# in a Mint 22 VM
-sudo apt install build-essential libpam0g-dev
-sudo useradd -m -s /bin/bash tester && echo 'tester:tester-pass' | sudo chpasswd
-make build
-sudo install -m 0644 packaging/pam.d/tilde /etc/pam.d/tilde
-sudo install -m 0755 bin/tilde /usr/local/bin/tilde
-sudo /usr/local/bin/tilde serve --dev --listen 127.0.0.1:8443 &
-make e2e TILDE_URL=http://127.0.0.1:8443 TILDE_USER=tester TILDE_PASS=tester-pass
+sudo apt install qemu-system-x86 qemu-utils genisoimage   # once
+make e2e-vm
 ```
 
-Run the binary from a path the test user can read (e.g. `/usr/local/bin`);
-the helper re-executes it as the user to start the worker.
+`scripts/e2e-vm.sh` boots the Ubuntu 24.04 cloud image (Mint 22's base) under
+QEMU/KVM with cloud-init, creates a `tester` account (password
+`tester-pass`, not in sudo), builds Tilde on the host, installs it in the VM
+the way `make install` does (real PAM file, real systemd unit, HTTPS with a
+self-signed certificate) and runs the suite there. The VM keeps running
+between runs, so the next `make e2e-vm` takes seconds.
 
-Things to check by hand in the VM, since they depend on a real systemd host:
+```bash
+scripts/e2e-vm.sh ssh        # shell in the VM (user ubuntu, passwordless sudo)
+scripts/e2e-vm.sh logs       # journalctl -u tilde
+scripts/e2e-vm.sh down       # power off
+scripts/e2e-vm.sh reset      # delete the disk; the next run starts from scratch
+```
+
+State lives in `~/.cache/tilde-e2e-vm` (`TILDE_VM_DIR`); SSH is forwarded to
+`127.0.0.1:2522` (`TILDE_VM_SSH_PORT`). To use the UI against the VM:
+`ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443
+ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`.
+
+Things to check by hand in the VM (`scripts/e2e-vm.sh ssh`, or a Tilde
+terminal as `tester`), since they depend on a real systemd host:
 
 - `loginctl list-sessions` shows a session of type `web` for the user.
 - `echo $XDG_RUNTIME_DIR` and `busctl --user` work in a Tilde terminal.
 - Logging out removes the session; `nohup sleep 1000 &` survives it.
-- `sudo` works in the terminal and asks for the password.
+- `sudo` works in the terminal and asks for the password (give `tester`
+  sudo first: `sudo usermod -aG sudo tester`).
+
+The VM has no desktop, so Cinnamon-specific behavior (gsettings, the GNOME
+keyring) still needs a real Mint install to check by hand.
 
 ## Debugging
 

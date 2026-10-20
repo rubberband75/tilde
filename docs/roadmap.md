@@ -19,7 +19,8 @@ to; tick items off as they land.
 - [x] Self-signed TLS with fingerprint in the log; `--dev` plain HTTP on loopback
 - [x] Single-user dev mode without root
 - [x] e2e tests (real PAM, real setuid) — run in a VM
-- [ ] Run the e2e suite in a Mint 22 VM and fix whatever differs from the sandbox it was written in
+- [x] Scripted disposable e2e VM: `make e2e-vm` (Ubuntu 24.04, Mint 22's base; D29)
+- [ ] Run the e2e suite in the VM and fix whatever differs from the sandbox it was written in
 
 ## Phase 2 — Shell UI
 

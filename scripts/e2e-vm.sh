@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# Runs Tilde's end-to-end tests in a disposable VM: real PAM, real root,
+# real logind, real privilege drop. Never run them on a machine you care
+# about (docs/development.md, D29).
+#
+# The VM is the Ubuntu 24.04 cloud image (Linux Mint 22's base: same PAM,
+# systemd and glibc) under QEMU/KVM, set up by cloud-init. Tilde is built
+# on the host and installed in the VM the way "make install" does, with the
+# real PAM file and systemd unit, so the packaging is tested too.
+#
+# Usage: scripts/e2e-vm.sh [command]
+#   test     start the VM if needed, install the current build, run e2e (default)
+#   up       start the VM (downloads the image the first time)
+#   fetch    only download and verify the cloud image
+#   ssh      open a shell in the VM (or run: scripts/e2e-vm.sh ssh -- cmd)
+#   logs     show the tilde service log in the VM
+#   down     shut the VM down
+#   reset    shut down and delete the VM disk; the next "up" starts fresh
+#
+# Needs: qemu-system-x86 qemu-utils genisoimage (apt), access to /dev/kvm.
+# Environment: TILDE_VM_DIR (default ~/.cache/tilde-e2e-vm),
+# TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DIR="${TILDE_VM_DIR:-$HOME/.cache/tilde-e2e-vm}"
+PORT="${TILDE_VM_SSH_PORT:-2522}"
+MEM="${TILDE_VM_MEM:-2048}"
+
+IMAGE_URL="https://cloud-images.ubuntu.com/noble/current"
+IMAGE_NAME="noble-server-cloudimg-amd64.img"
+BASE="$DIR/$IMAGE_NAME"
+DISK="$DIR/disk.qcow2"
+SEED="$DIR/seed.iso"
+KEY="$DIR/id_ed25519"
+PIDFILE="$DIR/qemu.pid"
+
+# The throwaway account the tests log in as. Not in sudo.
+TEST_USER=tester
+TEST_PASS=tester-pass
+
+log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
+die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
+
+need() {
+  local missing=()
+  for cmd in "$@"; do command -v "$cmd" >/dev/null || missing+=("$cmd"); done
+  [ ${#missing[@]} -eq 0 ] && return
+  die "missing ${missing[*]}; install with: sudo apt install qemu-system-x86 qemu-utils genisoimage"
+}
+
+vm_ssh() {
+  ssh -q -i "$KEY" -p "$PORT" \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+    -o ConnectTimeout=5 -o BatchMode=yes \
+    ubuntu@127.0.0.1 "$@"
+}
+
+vm_scp() {
+  scp -q -i "$KEY" -P "$PORT" \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o BatchMode=yes \
+    "$@"
+}
+
+running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+
+fetch() {
+  mkdir -p "$DIR"
+  if [ -f "$BASE" ]; then return; fi
+  log "Downloading $IMAGE_NAME"
+  curl -fL --progress-bar -o "$BASE.part" "$IMAGE_URL/$IMAGE_NAME"
+  curl -fsSL -o "$DIR/SHA256SUMS" "$IMAGE_URL/SHA256SUMS"
+  local want got
+  want="$(awk -v n="*$IMAGE_NAME" '$2 == n { print $1 }' "$DIR/SHA256SUMS")"
+  got="$(sha256sum "$BASE.part" | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$want" = "$got" ] || { rm -f "$BASE.part"; die "checksum mismatch for $IMAGE_NAME"; }
+  mv "$BASE.part" "$BASE"
+}
+
+make_seed() {
+  [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C tilde-e2e-vm -f "$KEY"
+  local tmp
+  tmp="$(mktemp -d)"
+  cat >"$tmp/user-data" <<EOF
+#cloud-config
+hostname: tilde-e2e
+users:
+  - default
+  - name: $TEST_USER
+    shell: /bin/bash
+    lock_passwd: false
+ssh_authorized_keys:
+  - $(cat "$KEY.pub")
+chpasswd:
+  expire: false
+  users:
+    - {name: $TEST_USER, password: $TEST_PASS, type: text}
+ssh_pwauth: false
+package_update: false
+EOF
+  printf 'instance-id: tilde-e2e\nlocal-hostname: tilde-e2e\n' >"$tmp/meta-data"
+  genisoimage -quiet -output "$SEED" -volid cidata -joliet -rock "$tmp/user-data" "$tmp/meta-data"
+  rm -rf "$tmp"
+}
+
+up() {
+  need qemu-system-x86_64 qemu-img genisoimage
+  [ -w /dev/kvm ] || die "no write access to /dev/kvm"
+  if running; then return; fi
+  fetch
+  if [ ! -f "$DISK" ]; then
+    log "Creating the VM disk"
+    qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "$DISK" 10G
+    make_seed
+  fi
+  log "Booting the VM (ssh on 127.0.0.1:$PORT)"
+  qemu-system-x86_64 \
+    -name tilde-e2e -machine q35,accel=kvm -cpu host -smp 2 -m "$MEM" \
+    -drive "file=$DISK,if=virtio" \
+    -drive "file=$SEED,if=virtio,format=raw,readonly=on" \
+    -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$PORT-:22" \
+    -display none -serial "file:$DIR/serial.log" \
+    -daemonize -pidfile "$PIDFILE"
+  local i
+  for i in $(seq 1 90); do
+    vm_ssh true 2>/dev/null && break
+    running || die "the VM exited during boot; see $DIR/serial.log"
+    sleep 2
+  done
+  vm_ssh true 2>/dev/null || die "no ssh after 3 minutes; see $DIR/serial.log"
+  log "Waiting for cloud-init"
+  vm_ssh cloud-init status --wait >/dev/null || die "cloud-init failed: run '$0 ssh -- cloud-init status --long'"
+}
+
+down() {
+  running || return 0
+  log "Shutting the VM down"
+  vm_ssh sudo systemctl poweroff 2>/dev/null || true
+  local i
+  for i in $(seq 1 30); do running || return 0; sleep 1; done
+  kill "$(cat "$PIDFILE")" 2>/dev/null || true
+}
+
+install_build() {
+  need go
+  log "Building tilde and the e2e tests"
+  local out="$DIR/build"
+  mkdir -p "$out"
+  # Built here, not into bin/, so a running "make dev-server" is untouched.
+  (cd "$ROOT/server" && CGO_ENABLED=1 go build -trimpath -o "$out/tilde" ./cmd/tilde)
+  (cd "$ROOT/server" && go test -c -tags e2e -o "$out/e2e.test" ./e2e)
+  cp "$ROOT/packaging/pam.d/tilde" "$out/pam-tilde"
+  cp "$ROOT/packaging/systemd/tilde.service" "$out/tilde.service"
+
+  log "Installing into the VM"
+  vm_scp "$out/tilde" "$out/e2e.test" "$out/pam-tilde" "$out/tilde.service" ubuntu@127.0.0.1:
+  # Same steps as "make install", but serving HTTPS on loopback in the VM.
+  vm_ssh 'set -e
+    sudo install -D -m 0755 tilde /usr/local/bin/tilde
+    sudo install -D -m 0644 pam-tilde /etc/pam.d/tilde
+    sudo install -D -m 0644 tilde.service /etc/systemd/system/tilde.service
+    echo "TILDE_OPTS=\"--listen 127.0.0.1:8443\"" | sudo tee /etc/default/tilde >/dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl restart tilde
+    for i in $(seq 1 20); do
+      curl -ksf -o /dev/null https://127.0.0.1:8443/ && exit 0
+      sleep 0.5
+    done
+    echo "tilde did not start" >&2
+    sudo journalctl -u tilde --no-pager -n 50 >&2
+    exit 1'
+}
+
+run_tests() {
+  log "Running the e2e tests"
+  local status=0
+  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS ./e2e.test -test.v -test.count=1" || status=$?
+  if [ "$status" -ne 0 ]; then
+    log "Tests failed; tilde service log:"
+    vm_ssh sudo journalctl -u tilde --no-pager -n 100 || true
+  fi
+  return "$status"
+}
+
+cmd="${1:-test}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  test) up; install_build; run_tests ;;
+  up) up ;;
+  fetch) fetch ;;
+  ssh)
+    [ "${1:-}" = "--" ] && shift
+    running || die "the VM is not running; start it with: $0 up"
+    if [ $# -gt 0 ]; then vm_ssh "$@"; else vm_ssh -t; fi
+    ;;
+  logs) vm_ssh sudo journalctl -u tilde --no-pager -n 200 ;;
+  down) down ;;
+  reset) down; rm -f "$DISK" "$SEED" "$PIDFILE"; log "VM disk deleted; the next run starts fresh" ;;
+  *) die "unknown command '$cmd' (test, up, fetch, ssh, logs, down, reset)" ;;
+esac

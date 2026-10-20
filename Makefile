@@ -5,6 +5,7 @@
 #   make dev          print how to run the two dev servers
 #   make test         gofmt/Prettier checks, Go vet + tests, frontend type check + tests
 #   make fmt          format Go and frontend code
+#   make e2e-vm       end-to-end tests in a disposable QEMU VM (scripts/e2e-vm.sh)
 #   make e2e          end-to-end tests against a running server (use a VM)
 #   make install      install binary, PAM file and systemd unit (sudo)
 
@@ -15,7 +16,7 @@ LDFLAGS := -s -w -X tilde/internal/buildinfo.Version=$(VERSION)
 DEV_LISTEN ?= 127.0.0.1:8443
 
 .PHONY: all build deps web server server-nopam test test-go test-web check \
-        fmt dev dev-server dev-server-root dev-web icons e2e install uninstall clean
+        fmt e2e-vm dev dev-server dev-server-root dev-web icons e2e install uninstall clean
 
 all: build
 
@@ -74,6 +75,11 @@ dev-web:
 
 icons:
 	./scripts/fetch-icons.sh
+
+# Boots (or reuses) a throwaway VM, installs the current build like
+# "make install" and runs the e2e suite there. See docs/development.md.
+e2e-vm:
+	./scripts/e2e-vm.sh test
 
 # Needs a running server and a throwaway account, e.g. in a VM:
 #   make e2e TILDE_URL=http://127.0.0.1:8443 TILDE_USER=tester TILDE_PASS=secret

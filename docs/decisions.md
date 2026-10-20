@@ -166,6 +166,17 @@ own password), no PAM session is opened, and the worker runs as you. This
 makes UI work possible without sudo; anything about sessions and privilege
 needs root, in a VM.
 
+**D29 — E2E VM: Ubuntu 24.04 cloud image under QEMU, scripted** (2026-10-20, accepted)
+`scripts/e2e-vm.sh` (`make e2e-vm`) boots the Ubuntu 24.04 cloud image with
+cloud-init under plain QEMU/KVM, installs the host's build with the real PAM
+file and systemd unit, and runs the e2e suite over SSH. Why: Mint 22 is built
+on 24.04 (same PAM, systemd, logind, glibc), and a cloud image needs no
+interactive install, so the run is repeatable and an agent can run it too.
+Plain QEMU needs only `/dev/kvm` access, no libvirt group. Rejected: a Mint
+VM in virt-manager as the e2e target (manual install, not scriptable; still
+the place to check Cinnamon-specific behavior by hand); containers (no real
+logind session or PAM stack).
+
 ---
 
 ## Open decisions
