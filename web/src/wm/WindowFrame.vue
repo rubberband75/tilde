@@ -22,6 +22,26 @@ const focused = computed(() => wm.focusedId === props.win.id)
 const maximized = computed(() => props.win.state === 'maximized')
 const minimized = computed(() => props.win.state === 'minimized')
 
+const content = ref<HTMLElement | null>(null)
+let lastFocus: HTMLElement | null = null
+
+function onFocusIn(e: FocusEvent) {
+  if (e.target instanceof HTMLElement) lastFocus = e.target
+}
+
+/**
+ * Pressing on the frame (title bar, buttons, resize edges) keeps keyboard
+ * focus in the window, as in Cinnamon: the widget inside that last had focus
+ * gets it back. Without preventDefault the browser would move focus to the
+ * body, because the title bar is not focusable, undoing the focus an app
+ * (the terminal) takes when its window is raised.
+ */
+function keepFocus(e: MouseEvent) {
+  e.preventDefault()
+  if (content.value?.contains(document.activeElement)) return
+  if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
+}
+
 const drag = ref<{ dx: number; dy: number } | null>(null)
 const live = ref<Rect | null>(null)
 
@@ -154,7 +174,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
     :aria-label="win.title"
     @pointerdown.capture="wm.focus(win.id)"
   >
-    <header class="titlebar" @pointerdown="startDrag" @dblclick="wm.toggleMaximize(win.id)">
+    <header class="titlebar" @pointerdown="startDrag" @mousedown="keepFocus" @dblclick="wm.toggleMaximize(win.id)">
       <div class="buttons left">
         <button
           v-for="b in currentStyle.buttons.left"
@@ -186,7 +206,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
         </button>
       </div>
     </header>
-    <div class="content">
+    <div ref="content" class="content" @focusin="onFocusIn">
       <component :is="comp" v-if="comp" :ctx="ctx" />
     </div>
     <template v-if="!maximized">
@@ -196,6 +216,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
         class="handle"
         :class="edge"
         @pointerdown.stop="startResize($event, edge)"
+        @mousedown="keepFocus"
       />
     </template>
   </section>
