@@ -14,11 +14,14 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -112,10 +115,21 @@ func TestWorkerRunsAsTheUser(t *testing.T) {
 	decode(t, resp, http.StatusForbidden, nil)
 
 	// The terminal's shell runs as the user too.
+	out := e.shell(t, "echo uid=$(id -u) user=$(whoami)")
+	if !strings.Contains(out, "user="+e.user) || strings.Contains(out, "uid=0 ") {
+		t.Fatalf("shell output %q", out)
+	}
+}
+
+// shell runs script in a new terminal and returns what it printed. The
+// output is fenced by markers that the terminal's echo of the typed
+// command cannot match ("BEGIN""MARK" types differently than it prints).
+func (e *env) shell(t *testing.T, script string) string {
+	t.Helper()
 	var term struct {
 		ID string `json:"id"`
 	}
-	decode(t, e.do(t, http.MethodPost, "/api/v1/terminals", map[string]int{"cols": 80, "rows": 24}), http.StatusCreated, &term)
+	decode(t, e.do(t, http.MethodPost, "/api/v1/terminals", map[string]int{"cols": 200, "rows": 24}), http.StatusCreated, &term)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -129,17 +143,53 @@ func TestWorkerRunsAsTheUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
-	conn.Write(ctx, websocket.MessageBinary, []byte("echo uid=$(id -u) user=$(whoami)\n"))
+	line := "echo \"BEGIN\"\"MARK\"; " + script + "; echo \"END\"\"MARK\"\n"
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte(line)); err != nil {
+		t.Fatal(err)
+	}
 	var out strings.Builder
-	for !strings.Contains(out.String(), "user="+e.user) {
+	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
 			t.Fatalf("terminal output so far %q: %v", out.String(), err)
 		}
 		out.Write(data)
+		all := out.String()
+		if i := strings.LastIndex(all, "BEGINMARK"); i >= 0 {
+			if j := strings.Index(all[i:], "ENDMARK"); j >= 0 {
+				return strings.ReplaceAll(all[i+len("BEGINMARK"):i+j], "\r", "")
+			}
+		}
 	}
-	if strings.Contains(out.String(), "uid=0 ") {
-		t.Fatal("shell is running as root")
+}
+
+// fields parses "key=value" words from shell output.
+func fields(out string) map[string]string {
+	m := map[string]string{}
+	for _, w := range strings.Fields(out) {
+		if k, v, ok := strings.Cut(w, "="); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+// TestLogindSession checks what the session helper exists for (D9): the
+// shell runs inside a logind session of type "web" opened through PAM, with
+// a runtime directory and a session D-Bus.
+func TestLogindSession(t *testing.T) {
+	e := setup(t)
+	out := e.shell(t, `echo type=$(loginctl show-session "$XDG_SESSION_ID" -p Type --value) `+
+		`class=$(loginctl show-session "$XDG_SESSION_ID" -p Class --value) `+
+		`user=$(loginctl show-session "$XDG_SESSION_ID" -p Name --value) `+
+		`runtime=$(test -d "$XDG_RUNTIME_DIR" && test -O "$XDG_RUNTIME_DIR" && echo ok) `+
+		`bus=$(busctl --user status >/dev/null 2>&1 && echo ok)`)
+	got := fields(out)
+	want := map[string]string{"type": "web", "class": "user", "user": e.user, "runtime": "ok", "bus": "ok"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q (shell output %q)", k, got[k], v, out)
+		}
 	}
 }
 
@@ -158,4 +208,52 @@ func TestLogoutEndsSession(t *testing.T) {
 	e := setup(t)
 	decode(t, e.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
 	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusUnauthorized, nil)
+}
+
+// TestLogoutClosesLogindSession checks that logging out closes the logind
+// session while nohup jobs survive, as on Mint (D15). It reads logind on
+// this machine, so it only runs against a server on loopback.
+func TestLogoutClosesLogindSession(t *testing.T) {
+	e := setup(t)
+	if ip := net.ParseIP(e.base.Hostname()); e.base.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		t.Skip("needs the server on this machine")
+	}
+	// A unique duration, so pgrep finds this job; it ends on its own.
+	marker := fmt.Sprintf("300.%06d", time.Now().UnixNano()%1000000)
+	out := e.shell(t, "nohup sleep "+marker+" >/dev/null 2>&1 & echo session=$XDG_SESSION_ID")
+	id := fields(out)["session"]
+	if id == "" {
+		t.Fatalf("no XDG_SESSION_ID in %q", out)
+	}
+	if state := sessionState(id); state != "active" && state != "online" {
+		t.Fatalf("session %s state %q before logout", id, state)
+	}
+
+	decode(t, e.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
+
+	// With a nohup job still running, logind keeps the session as
+	// "closing" (KillUserProcesses=no, the Ubuntu and Mint default).
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		state := sessionState(id)
+		if state == "" || state == "closing" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session %s still %q after logout", id, state)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err := exec.Command("pgrep", "-u", e.user, "-f", "sleep "+marker).Run(); err != nil {
+		t.Errorf("the nohup job did not survive logout: %v", err)
+	}
+}
+
+// sessionState returns logind's State for a session, or "" if it is gone.
+func sessionState(id string) string {
+	out, err := exec.Command("loginctl", "show-session", id, "-p", "State", "--value").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

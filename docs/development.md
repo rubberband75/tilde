@@ -58,8 +58,10 @@ and pull request.
 ## End-to-end tests (real PAM, real privilege drop)
 
 `server/e2e` logs in through the running server and checks that the worker
-and its shells run as the user, that the kernel refuses `/root`, that
-cross-origin requests are rejected and that logout ends the session.
+and its shells run as the user, that the kernel refuses `/root`, that the
+shell is in a logind session of type `web` with `XDG_RUNTIME_DIR` and a
+session D-Bus, that cross-origin requests are rejected, and that logout
+closes the logind session while `nohup` jobs survive.
 
 They create sessions and run commands as a real account, so they run **only
 in a disposable VM** (D29):
@@ -88,14 +90,9 @@ State lives in `~/.cache/tilde-e2e-vm` (`TILDE_VM_DIR`); SSH is forwarded to
 `ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443
 ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`.
 
-Things to check by hand in the VM (`scripts/e2e-vm.sh ssh`, or a Tilde
-terminal as `tester`), since they depend on a real systemd host:
-
-- `loginctl list-sessions` shows a session of type `web` for the user.
-- `echo $XDG_RUNTIME_DIR` and `busctl --user` work in a Tilde terminal.
-- Logging out removes the session; `nohup sleep 1000 &` survives it.
-- `sudo` works in the terminal and asks for the password (give `tester`
-  sudo first: `sudo usermod -aG sudo tester`).
+Still checked by hand: `sudo` works in a Tilde terminal and asks for the
+password (give `tester` sudo first: `scripts/e2e-vm.sh ssh -- sudo usermod
+-aG sudo tester`, then log in through the UI as described above).
 
 The VM has no desktop, so Cinnamon-specific behavior (gsettings, the GNOME
 keyring) still needs a real Mint install to check by hand.
