@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"syscall"
 )
@@ -95,4 +96,28 @@ func decodeJSON(r *http.Request, v any) error {
 		return badRequest{"invalid JSON body: " + err.Error()}
 	}
 	return nil
+}
+
+// writeFileAtomic replaces file with data through a temporary file in the
+// same folder, so readers (Nemo, other clients) never see half a file.
+func writeFileAtomic(file string, data []byte, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(file), "."+filepath.Base(file)+"-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), file)
 }

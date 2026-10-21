@@ -74,26 +74,7 @@ func (w *Worker) writeBookmarks(lines []bookmarkLine) error {
 		}
 		b.WriteByte('\n')
 	}
-	file := w.bookmarksFile()
-	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(file), ".bookmarks-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(b.String()); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), file)
+	return writeFileAtomic(w.bookmarksFile(), []byte(b.String()), 0o644)
 }
 
 func toBookmarks(lines []bookmarkLine) []Bookmark {

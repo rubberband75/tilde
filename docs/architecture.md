@@ -135,7 +135,7 @@ the user name.
 ```
 App.vue ── LoginScreen (logged out)
        └── Desktop
-            ├── DesktopIcons      Computer, Home, Trash, ~/Desktop
+            ├── DesktopIcons      Computer, Home, Trash, ~/Desktop (grid layout: shell/desktopLayout.ts)
             ├── WindowLayer
             │    └── WindowFrame × n ── <app component :ctx>
             ├── Notices

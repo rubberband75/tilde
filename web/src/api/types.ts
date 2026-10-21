@@ -170,3 +170,18 @@ export interface Bookmark {
   name: string
   exists: boolean
 }
+
+/** A desktop grid position, from the top left. */
+export interface Cell {
+  col: number
+  row: number
+}
+
+/** GET /api/v1/desktop/layout. Keys are file names in the Desktop folder, or computer:///, home:///, trash:///. */
+export interface DesktopLayout {
+  /** False until icons are arranged in Tilde; then nemo is absent. */
+  saved: boolean
+  positions: Record<string, Cell>
+  /** Nemo's arrangement in screen pixels, to start from; grid is its cell size. */
+  nemo?: { grid?: [number, number]; icons: Record<string, { x: number; y: number }> }
+}

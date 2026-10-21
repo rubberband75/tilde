@@ -43,6 +43,8 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/bookmarks` | `{bookmarks: [{path, name, exists}]}` from `~/.config/gtk-3.0/bookmarks` (shared with Nemo); only local folders are listed |
 | POST | `/api/v1/bookmarks` | `{path, name?}` → `{bookmarks}`. Adds, or renames an existing bookmark. Other lines (`sftp://`…) are kept; URIs are escaped as GLib does |
 | DELETE | `/api/v1/bookmarks?path=` | → `{bookmarks}` |
+| GET | `/api/v1/desktop/layout` | `{saved, positions: {key: {col, row}}, nemo?}`. Desktop icon cells, from the top left. Keys are file names in the Desktop folder, or `computer:///`, `home:///`, `trash:///`. Until a layout is saved, `saved` is false and `nemo` is Nemo's arrangement to start from: `{grid?: [w, h], icons: {key: {x, y}}}` in screen pixels (GVfs `metadata::nemo-icon-position` read with `gio`, and `~/.config/nemo/desktop-metadata`; icons on the monitor most are on) |
+| POST | `/api/v1/desktop/layout` | `{positions: {key: {col, row} \| null}, replace?}` → layout. Merges (`null` removes a key) or, with `replace`, starts from nothing. Stored in `~/.config/tilde/desktop-layout.json`; cells up to 1000, at most 5000 icons |
 
 ### Files
 

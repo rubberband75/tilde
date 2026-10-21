@@ -55,6 +55,15 @@ export class Api {
     for (const p of paths) await expect.poll(() => this.exists(p)).toBe(false)
   }
 
+  /** Clears Tilde's saved desktop layout (an empty saved layout: no Nemo seed). */
+  async resetDesktopLayout() {
+    const res = await this.request.post('/api/v1/desktop/layout', {
+      data: { positions: {}, replace: true },
+      headers: this.headers,
+    })
+    expect(res.status(), await res.text()).toBe(200)
+  }
+
   async places() {
     const res = await this.request.get('/api/v1/places')
     return ((await res.json()) as { places: { id: string; path: string }[] }).places

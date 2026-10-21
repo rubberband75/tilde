@@ -1,6 +1,8 @@
 import { api, ApiError, buildUrl, handleResponse, request } from './client'
 import type {
   Bookmark,
+  Cell,
+  DesktopLayout,
   Entry,
   Hello,
   ListResponse,
@@ -22,6 +24,10 @@ export const fsApi = {
     api.post<{ bookmarks: Bookmark[] }>('/api/v1/bookmarks', { path, name }).then((r) => r.bookmarks),
   removeBookmark: (path: string) =>
     request<{ bookmarks: Bookmark[] }>('DELETE', buildUrl('/api/v1/bookmarks', { path })).then((r) => r.bookmarks),
+  desktopLayout: () => api.get<DesktopLayout>('/api/v1/desktop/layout'),
+  /** Merges positions into the desktop layout (null removes one); replace starts from nothing. */
+  saveDesktopLayout: (positions: Record<string, Cell | null>, replace = false) =>
+    api.post<DesktopLayout>('/api/v1/desktop/layout', { positions, replace }),
 
   list: (path: string) => api.get<ListResponse>('/api/v1/fs/list', { path }),
   properties: (path: string) => api.get<Properties>('/api/v1/fs/properties', { path }),

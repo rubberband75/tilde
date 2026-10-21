@@ -260,6 +260,29 @@ single-user mode skips the session code the UI depends on); Vitest browser
 mode or Cypress (Playwright handles WebSockets, multiple pages and traces
 well and needs no running dev server).
 
+**D36 — Desktop icon layout: Tilde's own grid, seeded from Nemo** (2026-10-21, accepted)
+Icons sit on a grid of theme-sized cells. The worker stores cells per icon
+(file name, or a URI for Computer/Home/Trash) in
+`~/.config/tilde/desktop-layout.json`; saves merge, so clients moving
+different icons keep each other's moves. Until the user arranges icons in
+Tilde, the layout starts from Nemo's: per-file GVfs metadata
+(`metadata::nemo-icon-position`, read with `gio info`, which reads the
+metadata database without the daemon) and `~/.config/nemo/desktop-metadata`
+for the built-in icons, converted to cells with Nemo's grid size or the
+smallest gap between icons. Tilde never writes Nemo's positions. Icons
+without a cell, or whose cell is outside a smaller window or taken, fill
+free cells top to bottom, then left to right; a saved cell outside the
+window is kept for when it grows. Dragging icons moves them as a group to
+the cell under the dragged icon (the nearest free cell on a collision);
+"Organize Desktop by Name" clears the layout. Renaming a desktop file
+loses its position, as the layout is keyed by name. Why: a browser window
+is rarely the screen Nemo arranged for, so shared pixel positions would
+fight; seeding keeps a Mint user's arrangement on first use (chosen by the
+user over a Tilde-only layout and a fully shared one). Rejected: writing
+Nemo's metadata (moves in a small browser window would rearrange the real
+desktop, and it needs gvfsd-metadata over D-Bus); pixel positions (break
+when the window size changes).
+
 ---
 
 ## Open decisions
