@@ -16,7 +16,8 @@ import type { Entry } from '@/api/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
-import { deletePermanently, moveToTrash, paste, type FileOpsHost } from '@/lib/fileops'
+import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
+import { deletePermanently, moveToTrash, paste, startJob, type FileOpsHost } from '@/lib/fileops'
 import { openEntry } from '@/shell/actions'
 import { useClipboard } from '@/stores/clipboard'
 import { useDialogs } from '@/stores/dialogs'
@@ -147,8 +148,57 @@ function onKey(e: KeyboardEvent) {
   if (e.key === 'Enter') items.value.filter((i) => selected.value.has(i.key)).forEach((i) => i.open())
 }
 
+const dropTarget = ref<string | null>(null)
+
+/** Where a drop on this icon goes: a folder, Home, or the trash. */
+function dropDest(item: Item): string | null {
+  if (item.key === 'trash') return 'trash'
+  if (item.key === 'home') return home.value
+  return item.entry?.type === 'dir' ? item.entry.path : null
+}
+
+function onDragStart(item: Item, e: DragEvent) {
+  if (!item.entry) return e.preventDefault()
+  if (!selected.value.has(item.key)) selected.value = new Set([item.key])
+  setDragPaths(
+    e,
+    selectedEntries.value.map((x) => x.path),
+  )
+}
+
+function onIconDragOver(item: Item, e: DragEvent) {
+  if (!isPathDrag(e) || !dropDest(item)) return
+  e.preventDefault()
+  e.stopPropagation()
+  setDropEffect(e)
+  dropTarget.value = item.key
+}
+
+async function dropPathsOn(dest: string, e: DragEvent) {
+  const paths = dragPaths(e)
+  if (dest === 'trash') return moveToTrash(host, paths, trashFilesDir.value)
+  if (!paths.length || isNoopDrop(paths, dest)) return
+  await startJob(host, dropOp(e), paths, dest)
+}
+
+function onIconDrop(item: Item, e: DragEvent) {
+  dropTarget.value = null
+  const dest = dropDest(item)
+  if (!isPathDrag(e) || !dest) return
+  e.preventDefault()
+  e.stopPropagation()
+  void dropPathsOn(dest, e)
+}
+
+function onBackgroundDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (isPathDrag(e)) setDropEffect(e)
+  dropActive.value = true
+}
+
 async function onDrop(e: DragEvent) {
   dropActive.value = false
+  if (isPathDrag(e)) return dropPathsOn(desktopDir.value, e)
   const files = [...(e.dataTransfer?.files ?? [])]
   for (const f of files) {
     try {
@@ -186,7 +236,7 @@ onBeforeUnmount(() => {
         @pointerdown.self="selected = new Set()"
         @contextmenu="onBackgroundContext"
         @keydown="onKey"
-        @dragover.prevent="dropActive = true"
+        @dragover="onBackgroundDragOver"
         @dragleave.self="dropActive = false"
         @drop.prevent="onDrop"
       >
@@ -194,11 +244,16 @@ onBeforeUnmount(() => {
           v-for="item in items"
           :key="item.key"
           class="desktop-icon"
-          :class="{ selected: selected.has(item.key), cut: cutPaths.has(item.key) }"
+          :class="{ selected: selected.has(item.key), cut: cutPaths.has(item.key), target: dropTarget === item.key }"
+          :draggable="!!item.entry"
           :title="item.name"
           @click="select(item, $event)"
           @dblclick="item.open()"
           @contextmenu="onItemContext(item)"
+          @dragstart="onDragStart(item, $event)"
+          @dragover="onIconDragOver(item, $event)"
+          @dragleave="dropTarget === item.key && (dropTarget = null)"
+          @drop="onIconDrop(item, $event)"
         >
           <ThemeIcon :name="item.icon" :size="48" />
           <span class="label">{{ item.name }}</span>
@@ -270,6 +325,9 @@ onBeforeUnmount(() => {
 }
 .desktop-icon.selected {
   background: var(--desktop-icon-selected-bg);
+}
+.desktop-icon.target {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .desktop-icon.cut {
   opacity: 0.6;

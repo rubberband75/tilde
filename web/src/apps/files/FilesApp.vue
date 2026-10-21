@@ -24,7 +24,8 @@ import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
-import { deletePermanently, moveToTrash, paste } from '@/lib/fileops'
+import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
+import { deletePermanently, moveToTrash, paste, startJob } from '@/lib/fileops'
 import { formatDate, formatSize, mimeLabel } from '@/lib/format'
 
 const props = defineProps<{ ctx: AppContext }>()
@@ -396,6 +397,52 @@ async function uploadFiles(files: File[]) {
   emitFsChanged(dir)
 }
 
+/** Key of the folder item or place a drag hovers over, for highlighting. */
+const dropTarget = ref<string | null>(null)
+
+function onDragStart(item: Item, e: DragEvent) {
+  if (!item.entry || item.trash) return e.preventDefault()
+  if (!selected.value.has(item.key)) {
+    selected.value = new Set([item.key])
+    anchorKey = item.key
+  }
+  setDragPaths(e, selectedPaths.value)
+}
+
+/** Drops Tilde paths onto a folder (or the trash) and starts the job. */
+async function dropPathsOn(dest: string, e: DragEvent) {
+  const paths = dragPaths(e)
+  if (dest === TRASH) return moveToTrash(props.ctx, paths, trashFilesDir.value)
+  if (!paths.length || isNoopDrop(paths, dest)) return
+  await startJob(props.ctx, dropOp(e), paths, dest)
+}
+
+/** dragover on a folder item or place: accept Tilde paths only. */
+function onTargetDragOver(key: string, e: DragEvent) {
+  if (!isPathDrag(e)) return
+  e.preventDefault()
+  e.stopPropagation()
+  setDropEffect(e)
+  dropTarget.value = key
+}
+
+function onTargetDrop(dest: string, e: DragEvent) {
+  dropTarget.value = null
+  dropActive.value = false
+  if (!isPathDrag(e)) return
+  e.preventDefault()
+  e.stopPropagation()
+  void dropPathsOn(dest, e)
+}
+
+function onViewDragOver(e: DragEvent) {
+  const paths = isPathDrag(e)
+  if (!(isPath.value || (paths && isTrash.value))) return
+  e.preventDefault()
+  if (paths) setDropEffect(e)
+  dropActive.value = true
+}
+
 function onPickFiles(e: Event) {
   const input = e.target as HTMLInputElement
   void uploadFiles([...(input.files ?? [])])
@@ -404,7 +451,8 @@ function onPickFiles(e: Event) {
 
 function onDrop(e: DragEvent) {
   dropActive.value = false
-  void uploadFiles([...(e.dataTransfer?.files ?? [])])
+  if (isPathDrag(e)) void dropPathsOn(location.value, e)
+  else void uploadFiles([...(e.dataTransfer?.files ?? [])])
 }
 
 function openTerminal(path?: string) {
@@ -514,8 +562,11 @@ onBeforeUnmount(() => offFs?.())
           v-for="p in places"
           :key="p.id"
           class="place"
-          :class="{ active: location === placeTarget(p) }"
+          :class="{ active: location === placeTarget(p), target: dropTarget === `place:${p.id}` }"
           @click="navigate(placeTarget(p))"
+          @dragover="onTargetDragOver(`place:${p.id}`, $event)"
+          @dragleave="dropTarget = null"
+          @drop="onTargetDrop(placeTarget(p), $event)"
         >
           <ThemeIcon :name="p.icon" :size="16" />
           <span>{{ p.name }}</span>
@@ -532,7 +583,7 @@ onBeforeUnmount(() => offFs?.())
             @keydown="onKey"
             @pointerdown="onBackgroundPointer"
             @contextmenu="onBackgroundContext"
-            @dragover.prevent="isPath && (dropActive = true)"
+            @dragover="onViewDragOver"
             @dragleave.self="dropActive = false"
             @drop.prevent="onDrop"
           >
@@ -547,11 +598,21 @@ onBeforeUnmount(() => offFs?.())
                 :key="item.key"
                 data-item
                 class="cell"
-                :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden, cut: cutPaths.has(item.key) }"
+                :class="{
+                  selected: selected.has(item.key),
+                  hidden: item.entry?.hidden,
+                  cut: cutPaths.has(item.key),
+                  target: dropTarget === item.key,
+                }"
                 :title="item.name"
+                :draggable="!!item.entry && !item.trash && renaming !== item.key"
                 @click="click(item, $event)"
                 @dblclick="open(item)"
                 @contextmenu="onItemContext(item)"
+                @dragstart="onDragStart(item, $event)"
+                @dragover="item.entry?.type === 'dir' && !item.trash && onTargetDragOver(item.key, $event)"
+                @dragleave="dropTarget === item.key && (dropTarget = null)"
+                @drop="item.entry?.type === 'dir' && !item.trash && onTargetDrop(item.entry.path, $event)"
               >
                 <ThemeIcon :name="item.icon" :size="48" />
                 <input
@@ -582,10 +643,20 @@ onBeforeUnmount(() => offFs?.())
                   v-for="item in items"
                   :key="item.key"
                   data-item
-                  :class="{ selected: selected.has(item.key), hidden: item.entry?.hidden, cut: cutPaths.has(item.key) }"
+                  :class="{
+                    selected: selected.has(item.key),
+                    hidden: item.entry?.hidden,
+                    cut: cutPaths.has(item.key),
+                    target: dropTarget === item.key,
+                  }"
+                  :draggable="!!item.entry && !item.trash && renaming !== item.key"
                   @click="click(item, $event)"
                   @dblclick="open(item)"
                   @contextmenu="onItemContext(item)"
+                  @dragstart="onDragStart(item, $event)"
+                  @dragover="item.entry?.type === 'dir' && !item.trash && onTargetDragOver(item.key, $event)"
+                  @dragleave="dropTarget === item.key && (dropTarget = null)"
+                  @drop="item.entry?.type === 'dir' && !item.trash && onTargetDrop(item.entry.path, $event)"
                 >
                   <td class="name">
                     <ThemeIcon :name="item.icon" :size="16" />
@@ -785,6 +856,11 @@ onBeforeUnmount(() => offFs?.())
 }
 .place:hover {
   background: var(--hover-bg);
+}
+.place.target,
+.cell.target,
+.list tr.target {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .place.active {
   background: var(--selection-bg);

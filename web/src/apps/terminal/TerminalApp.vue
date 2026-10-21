@@ -9,6 +9,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { api, ApiError, wsUrl } from '@/api/client'
 import type { TerminalInfo } from '@/api/types'
 import type { AppContext } from '@/apps/types'
+import { dragPaths, isPathDrag, shellQuote } from '@/lib/dnd'
 
 const props = defineProps<{ ctx: AppContext }>()
 
@@ -191,6 +192,15 @@ watch(
   },
 )
 
+/** Dropping files types their quoted paths, as GNOME Terminal does. */
+function onDrop(e: DragEvent) {
+  if (!isPathDrag(e)) return
+  e.preventDefault()
+  const paths = dragPaths(e)
+  if (paths.length && ws?.readyState === WebSocket.OPEN) ws.send(encoder.encode(shellQuote(paths) + ' '))
+  term?.focus()
+}
+
 onBeforeUnmount(() => {
   disposed = true
   clearTimeout(fitTimer)
@@ -202,7 +212,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="terminal-app">
-    <div ref="host" class="xterm-host" @pointerdown="term?.focus()" />
+    <div
+      ref="host"
+      class="xterm-host"
+      @pointerdown="term?.focus()"
+      @dragover="isPathDrag($event) && $event.preventDefault()"
+      @drop="onDrop"
+    />
     <div v-if="status === 'reconnecting'" class="banner">Reconnecting…</div>
   </div>
 </template>

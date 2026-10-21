@@ -50,9 +50,9 @@ to; tick items off as they land.
 - [x] Move to trash (Delete), restore, empty trash
 - [x] Upload (picker and drag-and-drop, with progress), download
 - [x] Open in Terminal
-- [ ] **File-operation jobs**: copy/move/delete trees in the worker with progress, cancel, and Replace/Skip/Rename prompts; cut/copy/paste
-- [ ] Permanent delete (Shift+Delete) with confirmation
-- [ ] Drag and drop between windows and to the desktop
+- [x] **File-operation jobs**: copy/move/delete trees in the worker with progress, cancel, and Replace/Skip/Rename/Merge prompts; cut/copy/paste (D31)
+- [x] Permanent delete (Shift+Delete, Delete in the trash) with confirmation; delete offered for items that cannot be trashed
+- [x] Drag and drop between windows, the sidebar, the desktop (folders, Home, Trash) and terminals (types the quoted paths)
 - [ ] Thumbnails (freedesktop thumbnail cache, host thumbnailers)
 - [ ] Properties dialog (permissions, owner, size of folders)
 - [ ] Huge directories: stream or paginate the listing
