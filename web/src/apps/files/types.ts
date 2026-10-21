@@ -1,4 +1,4 @@
-import type { Entry, Mount, TrashItem } from '@/api/types'
+import type { Entry, TrashItem, Volume } from '@/api/types'
 
 /** One thing shown in a Files view: a file or folder, a trash item or a drive. */
 export interface Item {
@@ -16,7 +16,9 @@ export interface Item {
   location?: string
   entry?: Entry
   trash?: TrashItem
-  mount?: Mount
+  volume?: Volume
+  /** Shown dimmed: hidden files, volumes that are not mounted. */
+  dim?: boolean
 }
 
 export type SortKey = 'name' | 'size' | 'type' | 'mtime'

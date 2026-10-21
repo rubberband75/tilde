@@ -72,7 +72,7 @@ to; tick items off as they land.
 - [x] Remember icon positions: drag to any grid cell, saved per user, first layout taken from Nemo's; Organize Desktop by Name (D36)
 - [x] Wallpaper: the user's Cinnamon background by default; a Backgrounds picker (Cinnamon's collections, Pictures, added folders; aspect, gradient, colors) saves Tilde's own (D37)
 - [x] Per-drive trash (`$topdir/.Trash/$uid` or `.Trash-$uid`, as GIO), listed, restored and emptied with the home trash (D38)
-- [ ] Mounts and removable drives via udisks2 (needs D-Bus in the worker; mounting from a web session needs polkit, see phase 5)
+- [x] Drives via udisks2 (D39): Computer lists mounted and unmounted volumes, a Devices section in Files, Unmount and Eject, live updates from udisks signals. Mounting waits for the polkit agent (phase 5)
 
 ## Phase 5 — Hardening
 
@@ -80,7 +80,7 @@ to; tick items off as they land.
 - [ ] Idle detection across all clients
 - [ ] Revocable device tokens ("remember this device"), device list
 - [ ] Multi-step PAM conversations (TOTP 2FA)
-- [ ] Polkit authentication agent in the browser
+- [ ] Polkit authentication agent in the browser; then mounting drives from Files (D39)
 - [ ] Audit log (logins, commands started, deletions)
 - [ ] Tray indicator for connected clients
 - [ ] Review: CSP, headers, cookie flags, error messages that leak information

@@ -311,3 +311,96 @@ func TestJobsRunAsTheUser(t *testing.T) {
 		}
 	}
 }
+
+// TestDrivesFollowUdisks checks the worker's udisks client on a real system
+// bus: the stick the VM script mounted for the test user is listed, mounts
+// and unmounts made outside Tilde arrive as "drives" events, and Eject
+// unmounts it although polkit refuses a web session the power-off.
+func TestDrivesFollowUdisks(t *testing.T) {
+	label := os.Getenv("TILDE_USB")
+	if label == "" {
+		t.Skip("set TILDE_USB to the label of a volume the test user mounted through udisks")
+	}
+	e := setup(t)
+	type volume struct {
+		ID, Name, Device, MountPoint string
+		CanEject                     bool
+	}
+	find := func() volume {
+		var res struct {
+			Udisks  bool
+			Volumes []volume
+		}
+		decode(t, e.do(t, http.MethodGet, "/api/v1/drives", nil), http.StatusOK, &res)
+		if !res.Udisks {
+			t.Fatal("the worker cannot reach udisks")
+		}
+		for _, v := range res.Volumes {
+			if v.Name == label {
+				return v
+			}
+		}
+		t.Fatalf("%s not listed: %+v", label, res.Volumes)
+		return volume{}
+	}
+	stick := find()
+	if stick.MountPoint != "/media/"+e.user+"/"+label || !stick.CanEject {
+		t.Fatalf("stick = %+v", stick)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	wsURL := *e.base
+	wsURL.Scheme = strings.Replace(wsURL.Scheme, "http", "ws", 1)
+	wsURL.Path = "/api/v1/events"
+	h := http.Header{}
+	h.Set("Origin", e.base.Scheme+"://"+e.base.Host)
+	conn, _, err := websocket.Dial(ctx, wsURL.String(), &websocket.DialOptions{HTTPClient: e.client, HTTPHeader: h})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	waitDrives := func() {
+		t.Helper()
+		for {
+			_, data, err := conn.Read(ctx)
+			if err != nil {
+				t.Fatalf("no drives event: %v", err)
+			}
+			if strings.Contains(string(data), `"type":"drives"`) {
+				return
+			}
+		}
+	}
+	udisksctl := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("sudo", append([]string{"-u", e.user, "udisksctl"}, append(args, "--no-user-interaction", "-b", stick.Device)...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("udisksctl %v: %v: %s", args, err, out)
+		}
+	}
+
+	// The events socket subscribes the worker to udisks; give it a moment.
+	time.Sleep(500 * time.Millisecond)
+	udisksctl("unmount")
+	waitDrives()
+	if v := find(); v.MountPoint != "" || v.CanEject {
+		t.Fatalf("after unmount: %+v", v)
+	}
+	udisksctl("mount")
+	waitDrives()
+	if v := find(); v.MountPoint == "" {
+		t.Fatalf("after mount: %+v", v)
+	}
+
+	var res struct{ Unmounted, Ejected bool }
+	decode(t, e.do(t, http.MethodPost, "/api/v1/drives/eject", map[string]string{"id": stick.ID}), http.StatusOK, &res)
+	if !res.Unmounted {
+		t.Fatalf("eject = %+v", res)
+	}
+	if v := find(); v.MountPoint != "" {
+		t.Fatalf("after eject: %+v", v)
+	}
+	// Leave it mounted for the UI tests.
+	udisksctl("mount")
+}

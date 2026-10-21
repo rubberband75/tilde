@@ -76,7 +76,10 @@ could already do.
 - Pushes events on a WebSocket (`events.go`): a snapshot of all jobs on
   connect, then every change as a whole job object, and changes to the
   folders clients show (`watch.go`: one inotify watch per folder for all
-  clients, changes coalesced for 200 ms; D34).
+  clients, changes coalesced for 200 ms; D34), and drive changes from udisks
+  signals (`drives.go`, D39).
+- Lists, unmounts and ejects drives through udisks2 on the system bus, as
+  the user (`drives.go`).
 - Streams big listings and searches as NDJSON, sniffs MIME types of
   extensionless files (budgeted per listing), and makes thumbnails into the
   shared freedesktop cache with the host's thumbnailers (D33).

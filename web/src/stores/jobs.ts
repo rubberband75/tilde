@@ -4,7 +4,7 @@ import { connectEvents, type EventStream } from '@/api/events'
 import { jobsApi } from '@/api/jobs'
 import type { Job, WorkerEvent } from '@/api/types'
 import { dirName } from '@/api/fs'
-import { emitFsChanged } from '@/lib/bus'
+import { emitDrivesChanged, emitFsChanged } from '@/lib/bus'
 import { setWatchSender, watchedDirs } from '@/lib/fswatch'
 
 /** Folders whose listing a job changes. */
@@ -53,6 +53,9 @@ export const useJobs = defineStore('jobs', () => {
       }
       case 'fs':
         emitFsChanged(...ev.dirs)
+        break
+      case 'drives':
+        emitDrivesChanged()
         break
     }
   }

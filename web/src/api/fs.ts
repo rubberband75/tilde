@@ -14,11 +14,16 @@ import type {
   TrashItem,
   TrashResult,
   Usage,
+  Volume,
 } from './types'
 
 export const fsApi = {
   hello: () => api.get<Hello>('/api/v1/hello'),
   system: () => api.get<SystemInfo>('/api/v1/system'),
+  drives: () => api.get<{ udisks: boolean; volumes: Volume[] }>('/api/v1/drives'),
+  unmount: (id: string) => api.post<void>('/api/v1/drives/unmount', { id }),
+  /** Unmounts every volume of the drive, then powers it off if polkit allows; either way it is safe to unplug. */
+  eject: (id: string) => api.post<{ unmounted: boolean; ejected: boolean }>('/api/v1/drives/eject', { id }),
   places: () => api.get<{ places: Place[] }>('/api/v1/places').then((r) => r.places),
   bookmarks: () => api.get<{ bookmarks: Bookmark[] }>('/api/v1/bookmarks').then((r) => r.bookmarks),
   /** Adds a bookmark, or renames it if the folder is already bookmarked. */

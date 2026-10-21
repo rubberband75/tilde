@@ -17,7 +17,7 @@ import (
 
 // event is one JSON text frame on the events socket.
 type event struct {
-	Type string `json:"type"` // "snapshot", "job", "job-removed", "fs"
+	Type string `json:"type"` // "snapshot", "job", "job-removed", "fs", "drives"
 	// snapshot: every job, sent first on each connection.
 	Jobs []JobInfo `json:"jobs,omitempty"`
 	// job: the whole changed job.

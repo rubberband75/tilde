@@ -24,6 +24,8 @@ drive-harddisk
 drive-harddisk-usb
 drive-removable-media
 drive-optical
+drive-removable-media-usb
+media-flash
 media-optical
 media-removable
 

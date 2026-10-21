@@ -25,3 +25,15 @@ export function emitBookmarksChanged(): void {
 export function emitFsChanged(...dirs: string[]): void {
   for (const d of new Set(dirs)) fsHandlers.forEach((fn) => fn(d))
 }
+
+const driveHandlers = new Set<() => void>()
+
+/** Drives or volumes changed (the worker's "drives" event, or an eject here). */
+export function onDrivesChanged(fn: () => void): () => void {
+  driveHandlers.add(fn)
+  return () => driveHandlers.delete(fn)
+}
+
+export function emitDrivesChanged(): void {
+  driveHandlers.forEach((fn) => fn())
+}

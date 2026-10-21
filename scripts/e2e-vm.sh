@@ -51,6 +51,9 @@ TEST_PASS=tester-pass
 # A second filesystem the test user can write to, for per-drive trash: an
 # ext4 image loop-mounted in the VM.
 TEST_DRIVE=/mnt/tilde-drive
+# A "USB stick" for the drives test: a FAT image the test user sets up and
+# mounts through udisks before each UI run (the test ejects it).
+TEST_USB=TILDE-USB
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
 die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
@@ -184,6 +187,18 @@ install_build() {
     sudo journalctl -u tilde --no-pager -n 50 >&2
     exit 1'
 
+  # Lets the test user set up and mount loop images through udisks without
+  # an active session, so the drives test has a stick mounted by the user.
+  # Test VM only: Tilde itself never mounts (D39).
+  vm_ssh "sudo tee /etc/polkit-1/rules.d/49-tilde-e2e.rules >/dev/null" <<EOF
+polkit.addRule(function (action, subject) {
+  if (subject.user == "$TEST_USER" && (action.id == "org.freedesktop.udisks2.loop-setup" ||
+      action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") == 0)) {
+    return polkit.Result.YES;
+  }
+});
+EOF
+
   # Mounted until the VM reboots; recreated by the next run after that.
   vm_ssh "set -e
     if ! mountpoint -q $TEST_DRIVE; then
@@ -198,13 +213,32 @@ run_tests() {
   log "Running the e2e tests"
   local status=0
   # The full output is kept in $DIR/last-test.log for flaky failures.
-  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS ./e2e.test -test.v -test.count=1" 2>&1 |
+  mount_test_usb
+  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS TILDE_USB=$TEST_USB ./e2e.test -test.v -test.count=1" 2>&1 |
     tee "$DIR/last-test.log" || status=$?
   if [ "$status" -ne 0 ]; then
     log "Tests failed; tilde service log:"
     vm_ssh sudo journalctl -u tilde --no-pager -n 100 || true
   fi
   return "$status"
+}
+
+# Sets up the test "USB stick" as the test user and mounts it through
+# udisks (at /media/$TEST_USER/$TEST_USB), as plugging one in would.
+mount_test_usb() {
+  vm_ssh "set -e
+    img=/var/tmp/tilde-usb.img
+    if [ ! -f \$img ]; then
+      sudo truncate -s 32M \$img
+      sudo mkfs.vfat -n $TEST_USB \$img >/dev/null
+      sudo chown $TEST_USER: \$img
+    fi
+    dev=\$(sudo losetup -j \$img | cut -d: -f1 | head -n1)
+    if [ -z \"\$dev\" ]; then
+      dev=\$(sudo -u $TEST_USER udisksctl loop-setup --no-user-interaction -f \$img | grep -o '/dev/loop[0-9]*')
+      udevadm settle
+    fi
+    findmnt -n \$dev >/dev/null || sudo -u $TEST_USER udisksctl mount --no-user-interaction -b \$dev >/dev/null"
 }
 
 # The Playwright suite (web/e2e) in Chromium on the host, against the VM
@@ -215,6 +249,8 @@ run_ui_tests() {
   log "Getting Playwright's Chromium (cached after the first run)"
   (cd "$ROOT/web" && npx playwright install chromium) >/dev/null ||
     die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
+
+  mount_test_usb
 
   vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
   local tunnel=$!
@@ -230,7 +266,7 @@ run_ui_tests() {
   log "Running the UI tests"
   local status=0
   (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
-    TILDE_DRIVE=$TEST_DRIVE npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
+    TILDE_DRIVE=$TEST_DRIVE TILDE_USB=$TEST_USB npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
   kill "$tunnel" 2>/dev/null || true
   trap - EXIT
   if [ "$status" -ne 0 ]; then

@@ -47,6 +47,24 @@ export interface Mount {
   free: number
 }
 
+/** GET /api/v1/drives: a volume, mounted or not (D39). */
+export interface Volume {
+  /** udisks block object path, or "mount:" + mount point for mounts udisks does not know. */
+  id: string
+  device: string
+  name: string
+  fsType: string
+  size: number
+  free?: number
+  /** Empty while not mounted. */
+  mountPoint?: string
+  removable: boolean
+  canEject: boolean
+  system: boolean
+  /** freedesktop icon names, most specific first. */
+  icons: string[]
+}
+
 export interface SystemInfo {
   hostname: string
   os: string
@@ -140,6 +158,8 @@ export type WorkerEvent =
   | { type: 'job-removed'; id: string }
   /** Watched folders whose contents changed. */
   | { type: 'fs'; dirs: string[] }
+  /** Drives or volumes changed (plugged in, mounted, unmounted): fetch /api/v1/drives again. */
+  | { type: 'drives' }
 
 /** Client → worker on the events WebSocket: the folders to watch (replaces the previous set). */
 export type ClientMessage = { type: 'watch'; dirs: string[] }

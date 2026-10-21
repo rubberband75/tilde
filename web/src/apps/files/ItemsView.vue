@@ -162,7 +162,7 @@ function droppable(item: Item) {
             grid ? 'cell' : 'row',
             {
               selected: selected.has(item.key),
-              hidden: item.entry?.hidden,
+              hidden: item.entry?.hidden || item.dim,
               cut: cut.has(item.key),
               target: dropTarget === item.key,
             },

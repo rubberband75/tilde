@@ -46,6 +46,7 @@ type Worker struct {
 	terms      *terminalManager
 	events     *eventHub
 	watcher    *dirWatcher
+	drives     *driveService
 	jobs       *jobManager
 }
 
@@ -86,6 +87,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		terms:      newTerminalManager(info.Shell, info.Home),
 		events:     events,
 		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
+		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
 		jobs:       newJobManager(events, trash),
 	}
 }
@@ -122,6 +124,9 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("GET /api/v1/hello", w.handleHello)
 	m.HandleFunc("GET /api/v1/system", w.handleSystem)
 	m.HandleFunc("GET /api/v1/places", w.handlePlaces)
+	m.HandleFunc("GET /api/v1/drives", w.handleDrives)
+	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
+	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
 	m.HandleFunc("GET /api/v1/bookmarks", w.handleBookmarks)
 	m.HandleFunc("POST /api/v1/bookmarks", w.handleBookmarkAdd)
 	m.HandleFunc("DELETE /api/v1/bookmarks", w.handleBookmarkRemove)
@@ -183,6 +188,7 @@ func (w *Worker) handleHello(rw http.ResponseWriter, r *http.Request) {
 // Shutdown stops file jobs and hangs up all terminals, as logging out does.
 func (w *Worker) Shutdown() {
 	w.watcher.close()
+	w.drives.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 }

@@ -319,6 +319,27 @@ other GIO programs already look in these folders. Mounting and removable
 drives (udisks2) stay a separate item. Rejected: copying to the home trash;
 waiting for udisks (per-drive trash only needs the mount table).
 
+**D39 — Drives through udisks2 with godbus; no mounting until the polkit agent** (2026-10-21, accepted)
+The worker talks to udisks2 on the system bus with `github.com/godbus/dbus/v5`
+(pure Go, also what the D-Bus tray applets will need), as the user, so
+udisks and polkit make every decision. It lists volumes (mounted or not,
+skipping what udisks marks to ignore, swap and snaps), unmounts, and
+ejects: unmount every volume of the drive, then power it off. udisks lets
+users unmount their own mounts without polkit; mounting, ejecting and
+powering off need an active local session or an administrator's password,
+and a web session is not local. So Tilde does not offer Mount yet (opening
+an unmounted volume explains how to mount it in a terminal, where
+`udisksctl` asks for the password), and Eject reports the drive safe to
+unplug once it is unmounted even when polkit refuses the power-off.
+Requests carry `auth.no_user_interaction`, so udisks never waits for an
+agent that is not there. udisks signals become `drives` events. Chosen by
+the user over the alternatives below. Rejected: shelling out to
+`udisksctl`/`gio` (no change signals, parsing text output); a polkit rule
+letting web sessions mount (widens what a remote session can do; the e2e
+VM has a test-only rule for its `tester` account to set up the test
+stick); building the browser polkit agent first (phase 5; mounting comes
+with it).
+
 ---
 
 ## Open decisions
@@ -326,7 +347,6 @@ waiting for udisks (per-drive trash only needs the mount table).
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
 | Absolute session lifetime | 12 h re-login vs lock-only like Mint | 12 h, confirm | Phase 5 |
-| Drives | mounts and removable drives via udisks2 over D-Bus (thumbnails done, D33) | follow the specs | Phase 4 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |
 | Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |

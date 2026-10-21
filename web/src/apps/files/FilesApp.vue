@@ -21,12 +21,19 @@ import {
   ContextMenuTrigger,
 } from 'reka-ui'
 import { baseName, dirName, fsApi, joinPath, searchStream, uniqueName } from '@/api/fs'
-import type { Bookmark, Entry, Mount, Place, TrashItem } from '@/api/types'
+import type { Bookmark, Entry, Place, TrashItem, Volume } from '@/api/types'
 import type { AppContext } from '@/apps/types'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
-import { emitBookmarksChanged, emitFsChanged, onBookmarksChanged, onFsChanged } from '@/lib/bus'
+import {
+  emitBookmarksChanged,
+  emitDrivesChanged,
+  emitFsChanged,
+  onBookmarksChanged,
+  onDrivesChanged,
+  onFsChanged,
+} from '@/lib/bus'
 import { useWatchedDirs } from '@/lib/fswatch'
 import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob } from '@/lib/fileops'
@@ -47,7 +54,7 @@ const forwardStack = ref<string[]>([])
 // would cost far more than the listing itself.
 const entries = shallowRef<Entry[]>([])
 const trashItems = shallowRef<TrashItem[]>([])
-const mounts = shallowRef<Mount[]>([])
+const volumes = shallowRef<Volume[]>([])
 const places = ref<Place[]>([])
 const bookmarks = ref<Bookmark[]>([])
 /** The bookmark whose sidebar menu is open. */
@@ -135,14 +142,15 @@ const items = computed<Item[]>(() => {
     }))
   }
   if (isComputer.value) {
-    return mounts.value.map((m) => ({
-      key: m.mountPoint,
-      name: m.mountPoint === '/' ? 'File System' : baseName(m.mountPoint),
-      icon: ['drive-harddisk'],
-      type: `${m.fsType} drive`,
-      size: m.size,
+    return volumes.value.map((v) => ({
+      key: v.id,
+      name: v.mountPoint === '/' ? 'File System' : v.name,
+      icon: v.icons,
+      type: v.mountPoint ? `${v.fsType} volume` : `${v.fsType} volume (not mounted)`,
+      size: v.size,
       mtimeMs: 0,
-      mount: m,
+      volume: v,
+      dim: !v.mountPoint,
     }))
   }
   if (isTrash.value) {
@@ -252,7 +260,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    if (isComputer.value) mounts.value = (await fsApi.system()).mounts
+    if (isComputer.value) await loadVolumes()
     else if (isTrash.value) {
       const list = await fsApi.trashList()
       trashItems.value = list.items
@@ -410,8 +418,44 @@ function placeTarget(p: Place) {
   return p.id === 'trash' ? TRASH : p.path
 }
 
+/** Removable volumes for the sidebar's Devices section. */
+const devices = computed(() => volumes.value.filter((v) => v.canEject || (v.removable && !v.mountPoint)))
+
+async function loadVolumes() {
+  try {
+    volumes.value = (await fsApi.drives()).volumes
+  } catch {
+    // Drives are extra; the rest of the window works without them.
+  }
+}
+
+function openVolume(v: Volume) {
+  if (v.mountPoint) return navigate(v.mountPoint)
+  // Mounting needs polkit's approval, which a web session only gets with an
+  // administrator's password; Tilde cannot ask for one yet (D39).
+  props.ctx.notify(
+    `“${v.name}” is not mounted. Tilde cannot mount drives yet; mount it on the computer, or in a terminal with: udisksctl mount -b ${v.device}`,
+  )
+}
+
+/** Unmounts (or ejects the drive of) a volume, leaving it if this window shows it. */
+async function unmountVolume(v: Volume, eject: boolean) {
+  try {
+    if (eject) await fsApi.eject(v.id)
+    else await fsApi.unmount(v.id)
+  } catch (e) {
+    props.ctx.notify(`Could not ${eject ? 'eject' : 'unmount'} “${v.name}”: ${(e as Error).message}`, 'error')
+    return
+  }
+  if (v.mountPoint && (location.value === v.mountPoint || location.value.startsWith(v.mountPoint + '/'))) {
+    navigate(COMPUTER)
+  }
+  if (eject) props.ctx.notify(`“${v.name}” can be safely removed.`)
+  emitDrivesChanged()
+}
+
 function open(item: Item) {
-  if (item.mount) navigate(item.mount.mountPoint)
+  if (item.volume) openVolume(item.volume)
   else if (item.trash) props.ctx.notify('Restore the item to open it.')
   else if (item.entry?.type === 'dir') navigate(item.entry.path)
   else if (item.entry) props.ctx.openEntry(item.entry)
@@ -784,7 +828,10 @@ useWatchedDirs(() => (isPath.value ? [location.value] : isTrash.value ? [trashFi
 
 let offFs: (() => void) | undefined
 let offBookmarks: (() => void) | undefined
+let offDrives: (() => void) | undefined
 onMounted(async () => {
+  offDrives = onDrivesChanged(() => (isComputer.value ? load() : loadVolumes()))
+  void loadVolumes()
   offFs = onFsChanged((dir) => {
     if (dir === location.value || (isTrash.value && (dir === trashFilesDir.value || trashDirs.value.includes(dir))))
       refresh()
@@ -803,6 +850,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   offFs?.()
   offBookmarks?.()
+  offDrives?.()
   loadAbort?.abort()
 })
 </script>
@@ -893,6 +941,29 @@ onBeforeUnmount(() => {
           <ThemeIcon :name="p.icon" :size="16" />
           <span>{{ p.name }}</span>
         </button>
+        <template v-if="devices.length">
+          <h4>Devices</h4>
+          <div v-for="v in devices" :key="v.id" class="device" :class="{ unmounted: !v.mountPoint }">
+            <button
+              class="place"
+              :class="{ active: !!v.mountPoint && location === v.mountPoint }"
+              :title="v.mountPoint || `${v.name} (not mounted)`"
+              @click="openVolume(v)"
+            >
+              <ThemeIcon :name="v.icons" :size="16" />
+              <span>{{ v.name }}</span>
+            </button>
+            <button
+              v-if="v.canEject"
+              class="eject"
+              :title="`Eject ${v.name}`"
+              :aria-label="`Eject ${v.name}`"
+              @click="unmountVolume(v, true)"
+            >
+              <SymbolicIcon name="eject" :size="14" />
+            </button>
+          </div>
+        </template>
         <template v-if="bookmarks.length">
           <h4>Bookmarks</h4>
           <ContextMenuRoot>
@@ -1001,6 +1072,14 @@ onBeforeUnmount(() => {
               <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">
                 Open
               </ContextMenuItem>
+              <template v-if="selectedItems.length === 1 && selectedItems[0]!.volume?.canEject">
+                <ContextMenuItem class="item" @select="unmountVolume(selectedItems[0]!.volume!, false)">
+                  Unmount
+                </ContextMenuItem>
+                <ContextMenuItem class="item" @select="unmountVolume(selectedItems[0]!.volume!, true)">
+                  Eject
+                </ContextMenuItem>
+              </template>
               <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
             </template>
             <template v-else-if="selectedItems.length">
@@ -1217,6 +1296,32 @@ onBeforeUnmount(() => {
 .place.active {
   background: var(--selection-bg);
   color: var(--selection-fg);
+}
+.device {
+  position: relative;
+}
+.device.unmounted .place {
+  color: var(--view-dim-fg);
+}
+.device .eject {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+}
+.device .eject:hover {
+  background: var(--hover-bg);
+  opacity: 1;
+}
+.device .place {
+  padding-right: 30px;
 }
 
 .view {

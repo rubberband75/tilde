@@ -87,6 +87,22 @@ content. A listing sniffs at most 1000 files; the rest fall back to
 | POST | `/api/v1/fs/rename` | `{from, to, overwrite?}` → `Entry`. Same filesystem only (`409 other_drive` otherwise); without `overwrite` an existing `to` gives `409 exists`, atomically |
 | POST | `/api/v1/fs/trash` | `{paths: []}` → `{results: [{path, name?, error?, code?}]}` |
 
+### Drives (udisks2, D39)
+
+The worker asks udisks on the system bus, as the user; udisks and polkit
+decide what is allowed. Without a system bus or udisks, the list comes from
+the mount table and `udisks` is false.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/drives` | `{udisks, volumes: Volume[]}`: the root first, then mounted volumes, then unmounted ones. `Volume`: `{id, device, name, fsType, size, free?, mountPoint?, removable, canEject, system, icons}`. `id` is a udisks block object path, or `mount:` and the mount point for mounts udisks does not know. `name` is the label, else the mount folder's name, else "4.0 GB Volume". `canEject`: mounted under the user's `/media` (what udisks mounted for them), or on a removable non-system drive. `icons` are freedesktop names, most specific first |
+| POST | `/api/v1/drives/unmount` | `{id}` → `204`. udisks lets users unmount their own mounts; others need an administrator: `403 not_authorized`. `409 busy` while files are open on it |
+| POST | `/api/v1/drives/eject` | `{id}` → `{unmounted, ejected}`. Unmounts every mounted volume of the drive, then powers the drive off (or ejects the medium). polkit refuses that last step outside an active local session, so `ejected` is usually false from a browser; the drive is unmounted and safe to unplug either way |
+
+There is no mount endpoint yet: polkit lets only an active local session
+mount without an administrator's password, and Tilde cannot ask for one
+until it has an authentication agent (phase 5).
+
 ### Trash (freedesktop Trash spec, D38)
 
 Files on the home filesystem go to `~/.local/share/Trash`. Files on another
@@ -153,6 +169,10 @@ its `.trashinfo`. Logging out cancels running jobs.
 a job changes (progress at most every 150 ms) and `{"type":"job-removed","id"}`.
 Events carry whole objects, so a client never has to merge partial updates.
 A client that falls too far behind is closed with 1013 and should reconnect.
+
+`{"type":"drives"}` says drives or volumes changed (plugged in, mounted,
+unmounted, from udisks signals, at most every 300 ms once a client has
+asked for `/api/v1/drives`): fetch the list again.
 
 Folder changes (D34): the client sends `{"type":"watch","dirs":[...]}` with
 every folder it shows (absolute, clean paths; at most 256). Each message

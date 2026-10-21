@@ -29,7 +29,7 @@ server/                 Go module "tilde" (one binary, three roles)
   internal/server/      root server: TLS, login, tokens, origin checks, proxy
   internal/helper/      per-login root helper: PAM auth + session, starts worker
   internal/worker/      per-user API: fs, jobs, events + inotify, search, thumbnails,
-                        bookmarks, trash, places, terminals
+                        bookmarks, trash, places, drives (udisks), terminals
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages
