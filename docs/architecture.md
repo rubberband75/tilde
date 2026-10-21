@@ -17,7 +17,8 @@ Tilde is one Go binary with three roles, plus a Vue frontend embedded in it.
                                             │ same pipe
                                  ┌──────────▼───────────┐
                                  │ tilde worker  (user) │  HTTP over yamux:
-                                 │                      │  files, trash, PTYs
+                                 │                      │  files, jobs, events,
+                                 │                      │  trash, thumbnails, PTYs
                                  └──────────┬───────────┘
                                             ▼
                                  Linux: kernel permissions, logind, D-Bus
@@ -46,6 +47,9 @@ could already do.
 
 ### `tilde session-helper` (root, one per login)
 
+- Calls PAM from the process's main thread (`cmd/tilde` locks it in `init`):
+  pam_loginuid writes `/proc/self/loginuid`, which fails from other threads
+  (D32).
 - Reads one JSON request (user, password, mode) from stdin, byte by byte so it
   never consumes bytes meant for the worker.
 - Runs the PAM `auth` and `account` stacks for service `tilde`.
@@ -65,8 +69,17 @@ could already do.
 - Owns the user's terminals (`internal/pty`): PTYs with a 1 MiB ring buffer.
   Terminals survive browser disconnects; reattaching replays the buffer, then
   a forced resize makes full-screen programs redraw.
-- Exits when its pipe closes (logout, server shutdown, session end), hanging up
-  all terminals first.
+- Runs file-operation jobs (`jobs.go`, D31): copy, move and delete trees in
+  the background with progress, cancel and conflict prompts. Moves use
+  `renameat2(RENAME_NOREPLACE)`; copies go through a temporary file; deletes
+  walk directory descriptors so a swapped-in symlink is never followed.
+- Pushes events on a WebSocket (`events.go`): a snapshot of all jobs on
+  connect, then every change as a whole job object. Phase 4 adds inotify.
+- Streams big listings and searches as NDJSON, sniffs MIME types of
+  extensionless files (budgeted per listing), and makes thumbnails into the
+  shared freedesktop cache with the host's thumbnailers (D33).
+- Exits when its pipe closes (logout, server shutdown, session end),
+  cancelling jobs and hanging up all terminals first.
 
 ## Startup sequence on the pipe
 
@@ -124,7 +137,9 @@ App.vue ── LoginScreen (logged out)
             ├── WindowLayer
             │    └── WindowFrame × n ── <app component :ctx>
             ├── Notices
-            └── Panel ── StartMenu, launchers, WindowList, tray (user, clock)
+            ├── JobsPanel ── ConflictDialog   file job progress and questions
+            ├── Panel ── StartMenu, launchers, WindowList, tray (user, clock)
+            └── Dialogs                       ctx.confirm / ctx.prompt
 ```
 
 - **Window manager** (`src/stores/windows.ts`, `src/wm/`): a Pinia store of
@@ -141,7 +156,16 @@ App.vue ── LoginScreen (logged out)
 - **Apps** (`src/apps`): each has a manifest in `registry.ts` (id, name, icon,
   category, MIME types, sizes, lazy component) and receives the shell API as a
   `ctx` prop (`types.ts`): set title, close, save state, close guard, launch
-  another app, open a file with its registered app, notify.
+  another app, open a file with its registered app, notify, confirm and
+  prompt dialogs, the shared file clipboard, home folder, focus and drag state.
+- **File jobs** (`src/stores/jobs.ts`, `src/shell/JobsPanel.vue`): the store
+  mirrors the worker's jobs over the events WebSocket (`src/api/events.ts`);
+  the panel shows progress and the conflict dialog, and folders a job touched
+  reload when it ends. Files and the desktop share `src/lib/fileops.ts`
+  (paste, trash, permanent delete) and `src/lib/dnd.ts` (drag and drop).
+- **Files views** (`src/apps/files/ItemsView.vue`): a virtualized grid and
+  list with fixed cell sizes per zoom level, so huge folders render only what
+  is visible; sorting in `files/types.ts`; thumbnails via `FileIcon.vue`.
 - **Session expiry**: any `401` with `session_ended` / `not_logged_in` from
   `/api/v1/*` makes the session store return to the login screen with a
   message (`src/api/client.ts`).
@@ -155,6 +179,7 @@ App.vue ── LoginScreen (logged out)
 | You want to… | Go to |
 | --- | --- |
 | Add a filesystem or process operation | `server/internal/worker` (+ test, `docs/api.md`, `web/src/api`) |
+| Add a long-running file operation | a job op in `worker/jobs.go`; progress reaches the shell by itself |
 | Change login, cookies, origin checks | `server/internal/server` (read `docs/security.md` first) |
 | Change what the session looks like to PAM/logind | `server/internal/helper`, `packaging/pam.d/tilde` |
 | Add an app | `web/src/apps/<name>/` + `web/src/apps/registry.ts` |

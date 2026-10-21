@@ -60,8 +60,10 @@ and pull request.
 `server/e2e` logs in through the running server and checks that the worker
 and its shells run as the user, that the kernel refuses `/root`, that the
 shell is in a logind session of type `web` with `XDG_RUNTIME_DIR` and a
-session D-Bus, that cross-origin requests are rejected, and that logout
-closes the logind session while `nohup` jobs survive.
+session D-Bus, that cross-origin requests are rejected, that logout
+closes the logind session while `nohup` jobs survive, that file jobs get the
+kernel's answer for the user (no reading `/etc/shadow`), and that 25 logins
+in a row all open a PAM session (D32).
 
 They create sessions and run commands as a real account, so they run **only
 in a disposable VM** (D29):
@@ -88,7 +90,8 @@ scripts/e2e-vm.sh reset      # delete the disk; the next run starts from scratch
 State lives in `~/.cache/tilde-e2e-vm` (`TILDE_VM_DIR`); SSH is forwarded to
 `127.0.0.1:2522` (`TILDE_VM_SSH_PORT`). To use the UI against the VM:
 `ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443
-ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`.
+ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`
+(or run `scripts/e2e-vm.sh tunnel`). The VM build embeds the UI.
 
 Still checked by hand: `sudo` works in a Tilde terminal and asks for the
 password (give `tester` sudo first: `scripts/e2e-vm.sh ssh -- sudo usermod

@@ -28,7 +28,8 @@ server/                 Go module "tilde" (one binary, three roles)
   cmd/tilde/            main: serve | session-helper | worker
   internal/server/      root server: TLS, login, tokens, origin checks, proxy
   internal/helper/      per-login root helper: PAM auth + session, starts worker
-  internal/worker/      per-user API: fs, trash, places, terminals
+  internal/worker/      per-user API: fs, jobs, events, search, thumbnails,
+                        bookmarks, trash, places, terminals
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages
@@ -41,7 +42,9 @@ server/                 Go module "tilde" (one binary, three roles)
 web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/shell/            desktop, panel, start menu, window list, login
   src/wm/               window manager (frame, layer)
-  src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/, system-info/
+  src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
+                        properties/, system-info/
+  src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus
   src/styles/           base.css + themes/mint-y-dark.css (design tokens)
   public/icons/         bundled Mint-Y icons (scripts/fetch-icons.sh)
 packaging/              PAM service file, systemd unit, /etc/default/tilde

@@ -9,8 +9,8 @@ runs a small Go server that authenticates you through PAM and starts a
 per-user worker process, so the kernel enforces your normal file and process
 permissions.
 
-> Status: early skeleton (v0.1). Login, the desktop, window manager, panel,
-> start menu, a Nemo-style file manager and persistent terminals work. See
+> Status: early (v0.1, phase 3 done). Login, the desktop, window manager,
+> panel, start menu, a Nemo-style file manager and persistent terminals work. See
 > [docs/roadmap.md](docs/roadmap.md) for what is next.
 
 ## What works today
@@ -22,10 +22,13 @@ permissions.
   restored after a page reload.
 - Desktop icons for Computer, Home, Trash and the files in your Desktop
   folder.
-- Files: browse the whole filesystem, icon and list views, places sidebar,
-  new folder, rename, move to trash, restore, empty trash, upload (drag and
-  drop), download. The trash follows the freedesktop spec, so it is shared
-  with the real Nemo.
+- Files: browse the whole filesystem, icon and list views with sorting and
+  zoom, places and bookmarks sidebar, search, properties and permissions,
+  thumbnails. Copy, move and delete run in the background with progress and
+  Replace/Merge/Skip/Rename questions; cut, copy and paste, drag and drop
+  between windows, the desktop and terminals. Folders with tens of thousands
+  of files open in under a second. Trash, bookmarks and thumbnails follow the
+  freedesktop specs, so they are shared with the real Nemo.
 - Terminal: a real shell on a PTY in your session. It keeps running when you
   close the browser, and reattaches with recent output after a reload.
 

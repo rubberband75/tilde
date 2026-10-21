@@ -267,3 +267,47 @@ func TestRepeatedLogins(t *testing.T) {
 		decode(t, e.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
 	}
 }
+
+// TestJobsRunAsTheUser checks that file jobs get the kernel's answer for the
+// user: they can neither read /etc/shadow nor delete files in /etc.
+func TestJobsRunAsTheUser(t *testing.T) {
+	e := setup(t)
+	// Logging out ends the session and its finished jobs with it.
+	t.Cleanup(func() { e.do(t, http.MethodPost, "/api/auth/logout", nil).Body.Close() })
+	var hello struct {
+		Home string `json:"home"`
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, &hello)
+
+	type job struct {
+		ID         string `json:"id"`
+		State      string `json:"state"`
+		ErrorCount int    `json:"errorCount"`
+		Errors     []struct {
+			Code string `json:"code"`
+		} `json:"errors"`
+		Finished *time.Time `json:"finished"`
+	}
+	run := func(body map[string]any) job {
+		var j job
+		decode(t, e.do(t, http.MethodPost, "/api/v1/jobs", body), http.StatusAccepted, &j)
+		deadline := time.Now().Add(15 * time.Second)
+		for j.Finished == nil {
+			if time.Now().After(deadline) {
+				t.Fatalf("job %s did not finish", j.ID)
+			}
+			time.Sleep(50 * time.Millisecond)
+			decode(t, e.do(t, http.MethodGet, "/api/v1/jobs/"+j.ID, nil), http.StatusOK, &j)
+		}
+		return j
+	}
+	for name, body := range map[string]map[string]any{
+		"copy /etc/shadow":     {"op": "copy", "sources": []string{"/etc/shadow"}, "dest": hello.Home},
+		"delete /etc/hostname": {"op": "delete", "sources": []string{"/etc/hostname"}},
+	} {
+		j := run(body)
+		if j.State != "done" || j.ErrorCount != 1 || j.Errors[0].Code != "permission_denied" {
+			t.Errorf("%s: %+v", name, j)
+		}
+	}
+}
