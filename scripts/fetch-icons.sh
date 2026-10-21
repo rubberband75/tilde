@@ -18,7 +18,8 @@ SIZES="16 24 32 48 64 48@2x"
 
 src="${MINT_Y_DIR:-}"
 tmp=""
-cleanup() { [ -n "$tmp" ] && rm -rf "$tmp"; }
+# An "if", not "&&": as the last command, a false test would fail the script.
+cleanup() { if [ -n "$tmp" ]; then rm -rf "$tmp"; fi; }
 trap cleanup EXIT
 
 if [ -z "$src" ] && [ -d /usr/share/icons/Mint-Y ]; then
@@ -35,8 +36,14 @@ if [ -z "$src" ]; then
 fi
 echo "Using icons from $src"
 
+# Keep upstream credits from an earlier run: an installed theme has no
+# README, only a clone does.
+keep="$(mktemp -d)"
+cp "$DEST"/*.upstream "$keep"/ 2>/dev/null || true
 rm -rf "$DEST"
 mkdir -p "$DEST"
+cp "$keep"/* "$DEST"/ 2>/dev/null || true
+rm -rf "$keep"
 
 # Names to copy: everything listed in web/icons.txt, plus every mimetype icon.
 mapfile -t wanted < <(grep -v '^\s*#' "$LIST" | sed '/^\s*$/d')
