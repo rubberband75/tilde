@@ -154,3 +154,10 @@ export interface Usage {
   unreadable: number
   done: boolean
 }
+
+/** A sidebar bookmark (~/.config/gtk-3.0/bookmarks, shared with Nemo). */
+export interface Bookmark {
+  path: string
+  name: string
+  exists: boolean
+}

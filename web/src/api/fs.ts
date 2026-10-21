@@ -1,10 +1,27 @@
-import { api, ApiError, buildUrl, handleResponse } from './client'
-import type { Entry, Hello, ListResponse, Place, Properties, SystemInfo, TrashItem, TrashResult, Usage } from './types'
+import { api, ApiError, buildUrl, handleResponse, request } from './client'
+import type {
+  Bookmark,
+  Entry,
+  Hello,
+  ListResponse,
+  Place,
+  Properties,
+  SystemInfo,
+  TrashItem,
+  TrashResult,
+  Usage,
+} from './types'
 
 export const fsApi = {
   hello: () => api.get<Hello>('/api/v1/hello'),
   system: () => api.get<SystemInfo>('/api/v1/system'),
   places: () => api.get<{ places: Place[] }>('/api/v1/places').then((r) => r.places),
+  bookmarks: () => api.get<{ bookmarks: Bookmark[] }>('/api/v1/bookmarks').then((r) => r.bookmarks),
+  /** Adds a bookmark, or renames it if the folder is already bookmarked. */
+  addBookmark: (path: string, name?: string) =>
+    api.post<{ bookmarks: Bookmark[] }>('/api/v1/bookmarks', { path, name }).then((r) => r.bookmarks),
+  removeBookmark: (path: string) =>
+    request<{ bookmarks: Bookmark[] }>('DELETE', buildUrl('/api/v1/bookmarks', { path })).then((r) => r.bookmarks),
 
   list: (path: string) => api.get<ListResponse>('/api/v1/fs/list', { path }),
   properties: (path: string) => api.get<Properties>('/api/v1/fs/properties', { path }),

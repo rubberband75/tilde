@@ -1,9 +1,9 @@
 import type { Component } from 'vue'
 import type { Entry } from '@/api/types'
 import type { ClipboardOp } from '@/stores/clipboard'
-import type { ConfirmOptions } from '@/stores/dialogs'
+import type { ConfirmOptions, PromptOptions } from '@/stores/dialogs'
 
-export type { ClipboardOp, ConfirmOptions }
+export type { ClipboardOp, ConfirmOptions, PromptOptions }
 
 /** The file clipboard shared by Files windows and the desktop. */
 export interface FileClipboard {
@@ -79,6 +79,8 @@ export interface AppContext {
   notify(message: string, kind?: 'info' | 'error'): void
   /** Ask a question in a modal dialog; resolves true if confirmed. */
   confirm(opts: ConfirmOptions): Promise<boolean>
+  /** Ask for a line of text in a modal dialog; resolves null if cancelled. */
+  prompt(opts: PromptOptions): Promise<string | null>
   /** The shared file clipboard (cut, copy, paste). Reactive. */
   readonly clipboard: FileClipboard
 }

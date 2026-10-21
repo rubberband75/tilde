@@ -52,6 +52,7 @@ export function createContext(windowId: string): AppContext {
     openEntry,
     notify: (message, kind) => notices.push(message, kind),
     confirm: (opts) => dialogs.confirm(opts),
+    prompt: (opts) => dialogs.prompt(opts),
     clipboard: {
       get op() {
         return clipboard.op

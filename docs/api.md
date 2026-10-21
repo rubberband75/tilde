@@ -40,6 +40,9 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/hello` | `{user, uid, home, shell, hostname, version, protocol}` |
 | GET | `/api/v1/system` | `{hostname, os, kernel, mounts: Mount[]}` |
 | GET | `/api/v1/places` | `{places: [{id, name, path, icon}]}` — Home, XDG user dirs, File System, Trash |
+| GET | `/api/v1/bookmarks` | `{bookmarks: [{path, name, exists}]}` from `~/.config/gtk-3.0/bookmarks` (shared with Nemo); only local folders are listed |
+| POST | `/api/v1/bookmarks` | `{path, name?}` → `{bookmarks}`. Adds, or renames an existing bookmark. Other lines (`sftp://`…) are kept; URIs are escaped as GLib does |
+| DELETE | `/api/v1/bookmarks?path=` | → `{bookmarks}` |
 
 ### Files
 

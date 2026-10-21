@@ -9,6 +9,18 @@ export function onFsChanged(fn: Handler): () => void {
   return () => fsHandlers.delete(fn)
 }
 
+const bookmarkHandlers = new Set<() => void>()
+
+/** Bookmarks changed in one window; the others reload their sidebar. */
+export function onBookmarksChanged(fn: () => void): () => void {
+  bookmarkHandlers.add(fn)
+  return () => bookmarkHandlers.delete(fn)
+}
+
+export function emitBookmarksChanged(): void {
+  bookmarkHandlers.forEach((fn) => fn())
+}
+
 export function emitFsChanged(...dirs: string[]): void {
   for (const d of new Set(dirs)) fsHandlers.forEach((fn) => fn(d))
 }

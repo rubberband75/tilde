@@ -21,12 +21,12 @@ import {
   ContextMenuTrigger,
 } from 'reka-ui'
 import { baseName, dirName, fsApi, joinPath, searchStream, uniqueName } from '@/api/fs'
-import type { Entry, Mount, Place, TrashItem } from '@/api/types'
+import type { Bookmark, Entry, Mount, Place, TrashItem } from '@/api/types'
 import type { AppContext } from '@/apps/types'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
-import { emitFsChanged, onFsChanged } from '@/lib/bus'
+import { emitBookmarksChanged, emitFsChanged, onBookmarksChanged, onFsChanged } from '@/lib/bus'
 import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob } from '@/lib/fileops'
 import { formatSize, mimeLabel } from '@/lib/format'
@@ -48,6 +48,9 @@ const entries = shallowRef<Entry[]>([])
 const trashItems = shallowRef<TrashItem[]>([])
 const mounts = shallowRef<Mount[]>([])
 const places = ref<Place[]>([])
+const bookmarks = ref<Bookmark[]>([])
+/** The bookmark whose sidebar menu is open. */
+const bookmarkTarget = ref<Bookmark | null>(null)
 const loading = ref(false)
 const error = ref('')
 const showHidden = ref(props.ctx.args.showHidden === true)
@@ -666,6 +669,43 @@ function showProperties(paths = selectedPaths.value.length ? selectedPaths.value
   if (isPath.value || selectedPaths.value.length) props.ctx.launch('file-properties', { paths })
 }
 
+async function loadBookmarks() {
+  try {
+    bookmarks.value = await fsApi.bookmarks()
+  } catch {
+    // The section just stays empty.
+  }
+}
+
+async function changeBookmarks(change: () => Promise<Bookmark[]>, what: string) {
+  try {
+    bookmarks.value = await change()
+    emitBookmarksChanged()
+  } catch (e) {
+    props.ctx.notify(`Could not ${what}: ${(e as Error).message}`, 'error')
+  }
+}
+
+/** Ctrl+D: bookmarks the selected folder, or the folder on show. */
+function addBookmark() {
+  const sel = selectedItems.value
+  const path = sel.length === 1 && sel[0]!.entry?.type === 'dir' && !sel[0]!.trash ? sel[0]!.entry.path : location.value
+  if (!path.startsWith('/')) return
+  if (bookmarks.value.some((b) => b.path === path))
+    return props.ctx.notify(`“${baseName(path)}” is already bookmarked.`)
+  void changeBookmarks(() => fsApi.addBookmark(path), 'add the bookmark')
+}
+
+async function renameBookmark(b: Bookmark) {
+  const name = await props.ctx.prompt({ title: 'Rename bookmark', value: b.name, confirm: 'Rename', label: 'Name' })
+  if (name === null || !name.trim() || name === b.name) return
+  void changeBookmarks(() => fsApi.addBookmark(b.path, name.trim()), 'rename the bookmark')
+}
+
+function removeBookmark(b: Bookmark) {
+  void changeBookmarks(() => fsApi.removeBookmark(b.path), 'remove the bookmark')
+}
+
 function openTerminal(path?: string) {
   props.ctx.launch('terminal', { cwd: path ?? location.value })
 }
@@ -705,6 +745,7 @@ function onKey(e: KeyboardEvent) {
   else if (alt && e.key === 'ArrowRight') goForward()
   else if (ctrl && e.key.toLowerCase() === 'h') toggleHidden()
   else if (ctrl && e.key.toLowerCase() === 'f') openSearch()
+  else if (ctrl && e.key.toLowerCase() === 'd') addBookmark()
   else if (ctrl && e.key.toLowerCase() === 'a') selected.value = new Set(items.value.map((i) => i.key))
   else if (ctrl && (e.key === '+' || e.key === '=')) setZoom(1)
   else if (ctrl && e.key === '-') setZoom(-1)
@@ -715,12 +756,15 @@ function onKey(e: KeyboardEvent) {
 }
 
 let offFs: (() => void) | undefined
+let offBookmarks: (() => void) | undefined
 onMounted(async () => {
   offFs = onFsChanged((dir) => {
     if (dir === location.value || (isTrash.value && dir === trashFilesDir.value)) void load()
     if (searchActive.value && (dir === location.value || dir.startsWith(location.value + '/'))) void runSearch()
   })
+  offBookmarks = onBookmarksChanged(loadBookmarks)
   void load()
+  void loadBookmarks()
   try {
     places.value = await fsApi.places()
   } catch {
@@ -730,6 +774,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   offFs?.()
+  offBookmarks?.()
   loadAbort?.abort()
 })
 </script>
@@ -820,6 +865,47 @@ onBeforeUnmount(() => {
           <ThemeIcon :name="p.icon" :size="16" />
           <span>{{ p.name }}</span>
         </button>
+        <template v-if="bookmarks.length">
+          <h4>Bookmarks</h4>
+          <ContextMenuRoot>
+            <ContextMenuTrigger as-child>
+              <div>
+                <button
+                  v-for="b in bookmarks"
+                  :key="b.path"
+                  class="place"
+                  :class="{
+                    active: location === b.path,
+                    missing: !b.exists,
+                    target: dropTarget === `bookmark:${b.path}`,
+                  }"
+                  :title="b.exists ? b.path : `${b.path} (not found)`"
+                  @click="b.exists ? navigate(b.path) : ctx.notify(`“${b.path}” cannot be found.`, 'error')"
+                  @contextmenu="bookmarkTarget = b"
+                  @dragover="b.exists && onTargetDragOver(`bookmark:${b.path}`, $event)"
+                  @dragleave="dropTarget = null"
+                  @drop="onTargetDrop(b.path, $event)"
+                >
+                  <ThemeIcon :name="['folder']" :size="16" />
+                  <span>{{ b.name }}</span>
+                </button>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuPortal>
+              <ContextMenuContent v-if="bookmarkTarget" class="popup-menu">
+                <ContextMenuItem
+                  class="item"
+                  :disabled="!bookmarkTarget.exists"
+                  @select="navigate(bookmarkTarget.path)"
+                >
+                  Open
+                </ContextMenuItem>
+                <ContextMenuItem class="item" @select="renameBookmark(bookmarkTarget)">Rename…</ContextMenuItem>
+                <ContextMenuItem class="item" @select="removeBookmark(bookmarkTarget)">Remove</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenuPortal>
+          </ContextMenuRoot>
+        </template>
       </aside>
 
       <ContextMenuRoot>
@@ -922,6 +1008,13 @@ onBeforeUnmount(() => {
                 <ContextMenuItem class="item" @select="downloadSelected">Download</ContextMenuItem>
               </template>
               <ContextMenuSeparator class="separator" />
+              <ContextMenuItem
+                v-if="selectedItems.length === 1 && selectedItems[0]!.entry?.type === 'dir'"
+                class="item"
+                @select="addBookmark"
+              >
+                Add to Bookmarks
+              </ContextMenuItem>
               <ContextMenuItem class="item" @select="showProperties()">Properties</ContextMenuItem>
             </template>
             <template v-else>
@@ -953,6 +1046,7 @@ onBeforeUnmount(() => {
               </ContextMenuItem>
               <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
               <ContextMenuSeparator class="separator" />
+              <ContextMenuItem class="item" @select="addBookmark">Bookmark This Folder</ContextMenuItem>
               <ContextMenuItem class="item" @select="showProperties([location])">Properties</ContextMenuItem>
             </template>
           </ContextMenuContent>
@@ -1119,6 +1213,9 @@ onBeforeUnmount(() => {
 }
 .message.error {
   color: var(--danger);
+}
+.place.missing {
+  opacity: 0.55;
 }
 .place.target {
   box-shadow: inset 0 0 0 2px var(--accent);

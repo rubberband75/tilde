@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// Confirmation dialogs requested through ctx.confirm, shown one at a time.
-// Escape and Cancel answer "no"; the destructive button is never the
-// default focus.
-import { computed } from 'vue'
+// Confirmation and text-entry dialogs requested through ctx.confirm and
+// ctx.prompt, shown one at a time. Escape and Cancel answer "no"; a
+// destructive button is never the default focus.
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   AlertDialogContent,
   AlertDialogDescription,
@@ -15,9 +15,19 @@ import { useDialogs } from '@/stores/dialogs'
 
 const dialogs = useDialogs()
 const current = computed(() => dialogs.queue[0])
+const value = ref('')
+const entry = ref<HTMLInputElement | null>(null)
+
+watch(
+  () => current.value?.id,
+  () => {
+    value.value = current.value?.input ?? ''
+    if (current.value?.input !== undefined) void nextTick(() => entry.value?.select())
+  },
+)
 
 function answer(ok: boolean) {
-  if (current.value) dialogs.answer(current.value.id, ok)
+  if (current.value) dialogs.answer(current.value.id, ok, value.value)
 }
 </script>
 
@@ -28,6 +38,14 @@ function answer(ok: boolean) {
       <AlertDialogContent v-if="current" :key="current.id" class="dialog" @escape-key-down="answer(false)">
         <AlertDialogTitle class="title">{{ current.title }}</AlertDialogTitle>
         <AlertDialogDescription v-if="current.message" class="message">{{ current.message }}</AlertDialogDescription>
+        <input
+          v-if="current.input !== undefined"
+          ref="entry"
+          v-model="value"
+          class="entry prompt"
+          :aria-label="current.label ?? current.title"
+          @keydown.enter.prevent="answer(true)"
+        />
         <div class="actions">
           <button class="btn" @click="answer(false)">Cancel</button>
           <button class="btn" :class="current.danger ? 'destructive' : 'suggested'" @click="answer(true)">
@@ -38,3 +56,9 @@ function answer(ok: boolean) {
     </AlertDialogPortal>
   </AlertDialogRoot>
 </template>
+
+<style scoped>
+.prompt {
+  width: 100%;
+}
+</style>

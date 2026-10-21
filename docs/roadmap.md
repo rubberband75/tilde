@@ -59,7 +59,7 @@ to; tick items off as they land.
 - [x] Sorting (name, size, type, date; reversed; natural order; folders first), zoom levels (Ctrl+±, Ctrl+wheel), arrow-key navigation
 - [x] Search (Ctrl+F): recursive name search streamed from the worker, Location column
 - [x] MIME sniffing for files without a known extension (budgeted in listings)
-- [ ] Bookmarks (`~/.config/gtk-3.0/bookmarks`)
+- [x] Bookmarks (`~/.config/gtk-3.0/bookmarks`, shared with Nemo): sidebar section, Ctrl+D, rename, remove, drop onto
 
 ## Phase 4 — Desktop
 
