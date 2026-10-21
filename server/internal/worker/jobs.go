@@ -489,6 +489,9 @@ func (j *job) copyFile(src string, st fs.FileInfo, dst string, replace bool) err
 // testHookCopyChunk runs after every chunk of a file copy (tests only).
 var testHookCopyChunk func(*job)
 
+// testHookRemove runs before each item a delete visits (tests only).
+var testHookRemove func(path string)
+
 // merge moves or copies the contents of folder src into existing folder dst.
 func (j *job) merge(src, dst string, m mode) {
 	names, err := readNames(src)
@@ -599,41 +602,74 @@ func (j *job) runDelete() error {
 	return j.ctx.Err()
 }
 
-// remove deletes p and everything under it, reporting whether all of it went.
+// remove deletes p and everything under it, reporting whether all of it
+// went. It works through directory file descriptors (openat with
+// O_NOFOLLOW, unlinkat), as os.RemoveAll does, so if someone swaps a folder
+// inside the tree for a symlink while it is being deleted, the delete does
+// not follow the link into another tree (the classic rm -rf race).
 func (j *job) remove(p string) bool {
+	parent, err := unix.Open(filepath.Dir(p), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		j.fail(p, &fs.PathError{Op: "open", Path: filepath.Dir(p), Err: err})
+		return false
+	}
+	defer unix.Close(parent)
+	return j.removeAt(parent, filepath.Base(p), p)
+}
+
+// removeAt deletes name in the folder open as dirfd; p is its full path,
+// for progress and errors only.
+func (j *job) removeAt(dirfd int, name, p string) bool {
 	if j.ctx.Err() != nil {
 		return false
 	}
 	j.setCurrent(p)
-	lst, err := os.Lstat(p)
-	if err != nil {
-		j.fail(p, err)
+	if testHookRemove != nil {
+		testHookRemove(p)
+	}
+	var st unix.Stat_t
+	if err := unix.Fstatat(dirfd, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		j.fail(p, &fs.PathError{Op: "lstat", Path: p, Err: err})
 		return false
 	}
-	if lst.IsDir() {
-		names, err := readNames(p)
+	isDir := st.Mode&unix.S_IFMT == unix.S_IFDIR
+	if isDir {
+		fd, err := unix.Openat(dirfd, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		if err != nil {
+			j.fail(p, &fs.PathError{Op: "open", Path: p, Err: err})
+			return false
+		}
+		dir := os.NewFile(uintptr(fd), p)
+		names, err := dir.Readdirnames(-1)
+		if err != nil {
+			dir.Close()
 			j.fail(p, err)
 			return false
 		}
+		sort.Strings(names)
 		ok := true
 		for _, n := range names {
-			if !j.remove(filepath.Join(p, n)) {
+			if !j.removeAt(fd, n, filepath.Join(p, n)) {
 				ok = false
 			}
 		}
+		dir.Close()
 		if !ok {
 			return false
 		}
 	}
-	if err := os.Remove(p); err != nil {
-		j.fail(p, err)
+	flags := 0
+	if isDir {
+		flags = unix.AT_REMOVEDIR
+	}
+	if err := unix.Unlinkat(dirfd, name, flags); err != nil {
+		j.fail(p, &fs.PathError{Op: "remove", Path: p, Err: err})
 		return false
 	}
 	j.update(false, func(in *JobInfo) {
 		in.DoneItems++
-		if lst.Mode().IsRegular() {
-			in.DoneBytes += lst.Size()
+		if st.Mode&unix.S_IFMT == unix.S_IFREG {
+			in.DoneBytes += st.Size
 		}
 	})
 	return true

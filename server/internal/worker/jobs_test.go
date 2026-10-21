@@ -442,3 +442,33 @@ func TestFreeName(t *testing.T) {
 		}
 	}
 }
+
+// TestJobDeleteDoesNotFollowSwappedLinks swaps a folder for a symlink after
+// the delete has listed it but before it deletes the contents. A path-based
+// walk would then resolve tree/b/y.txt through the link and delete
+// precious/y.txt; the fd-based walk keeps working in the original folder.
+func TestJobDeleteDoesNotFollowSwappedLinks(t *testing.T) {
+	c, home := startWorker(t)
+	outside := filepath.Join(home, "precious")
+	write(t, filepath.Join(outside, "y.txt"), "keep")
+	tree := filepath.Join(home, "tree")
+	write(t, filepath.Join(tree, "b", "y.txt"), "y")
+
+	swapped := false
+	testHookRemove = func(p string) {
+		if !swapped && p == filepath.Join(tree, "b", "y.txt") {
+			swapped = true
+			os.Rename(filepath.Join(tree, "b"), filepath.Join(home, "moved-b"))
+			os.Symlink(outside, filepath.Join(tree, "b"))
+		}
+	}
+	defer func() { testHookRemove = nil }()
+
+	runJob(t, c, OpDelete, []string{tree}, "")
+	if !swapped {
+		t.Fatal("the hook never ran")
+	}
+	if !exists(filepath.Join(outside, "y.txt")) {
+		t.Fatal("the delete followed the swapped-in link and deleted a file outside the tree")
+	}
+}
