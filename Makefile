@@ -7,6 +7,7 @@
 #   make fmt          format Go and frontend code
 #   make e2e-vm       end-to-end tests in a disposable QEMU VM (scripts/e2e-vm.sh)
 #   make e2e          end-to-end tests against a running server (use a VM)
+#   make e2e-ui       Playwright UI tests against a running server (use a VM)
 #   make install      install binary, PAM file and systemd unit (sudo)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -16,7 +17,7 @@ LDFLAGS := -s -w -X tilde/internal/buildinfo.Version=$(VERSION)
 DEV_LISTEN ?= 127.0.0.1:8443
 
 .PHONY: all build deps web server server-nopam test test-go test-web check \
-        fmt e2e-vm dev dev-server dev-server-root dev-web icons e2e install uninstall clean
+        fmt e2e-vm dev dev-server dev-server-root dev-web icons e2e e2e-ui install uninstall clean
 
 all: build
 
@@ -77,7 +78,8 @@ icons:
 	./scripts/fetch-icons.sh
 
 # Boots (or reuses) a throwaway VM, installs the current build like
-# "make install" and runs the e2e suite there. See docs/development.md.
+# "make install" and runs the Go e2e suite there, then the Playwright UI
+# suite (web/e2e) in a browser on this machine. See docs/development.md.
 e2e-vm:
 	./scripts/e2e-vm.sh test
 
@@ -86,6 +88,11 @@ e2e-vm:
 e2e:
 	cd server && TILDE_URL=$(TILDE_URL) TILDE_USER=$(TILDE_USER) TILDE_PASS=$(TILDE_PASS) \
 		go test -tags e2e ./e2e/ -v -count=1
+
+# The UI suite alone, e.g. against the VM's tunnel:
+#   make e2e-ui TILDE_URL=https://localhost:9443 TILDE_USER=tester TILDE_PASS=tester-pass
+e2e-ui:
+	cd web && TILDE_URL=$(TILDE_URL) TILDE_USER=$(TILDE_USER) TILDE_PASS=$(TILDE_PASS) npx playwright test
 
 install: build
 	sudo install -D -m 0755 $(BIN) /usr/local/bin/tilde

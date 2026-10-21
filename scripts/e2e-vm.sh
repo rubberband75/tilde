@@ -9,7 +9,10 @@
 # real PAM file and systemd unit, so the packaging is tested too.
 #
 # Usage: scripts/e2e-vm.sh [command]
-#   test     start the VM if needed, install the current build, run e2e (default)
+#   test     start the VM if needed, install the current build, run the Go
+#            e2e suite and then the Playwright UI suite (default)
+#   ui       run only the UI suite against what is installed (args go to
+#            "playwright test", e.g.: scripts/e2e-vm.sh ui -- -g Files)
 #   up       start the VM (downloads the image the first time)
 #   fetch    only download and verify the cloud image
 #   ssh      open a shell in the VM (or run: scripts/e2e-vm.sh ssh -- cmd)
@@ -19,9 +22,12 @@
 #   reset    shut down and delete the VM disk; the next "up" starts fresh
 #
 # Needs: qemu-system-x86 qemu-utils genisoimage (apt), access to /dev/kvm.
+# The UI suite runs Playwright's Chromium on the host through an SSH tunnel;
+# "make deps" installs Playwright and the first run downloads Chromium.
 # Environment: TILDE_VM_DIR (default ~/.cache/tilde-e2e-vm),
 # TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048),
-# TILDE_VM_UI_PORT (default 9443, for "tunnel").
+# TILDE_VM_UI_PORT (default 9443, for "tunnel"), TILDE_VM_UI_TEST_PORT
+# (default 9444, the UI suite's own tunnel).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,6 +35,7 @@ DIR="${TILDE_VM_DIR:-$HOME/.cache/tilde-e2e-vm}"
 PORT="${TILDE_VM_SSH_PORT:-2522}"
 MEM="${TILDE_VM_MEM:-2048}"
 UI_PORT="${TILDE_VM_UI_PORT:-9443}"
+UI_TEST_PORT="${TILDE_VM_UI_TEST_PORT:-9444}"
 
 IMAGE_URL="https://cloud-images.ubuntu.com/noble/current"
 IMAGE_NAME="noble-server-cloudimg-amd64.img"
@@ -188,10 +195,55 @@ run_tests() {
   return "$status"
 }
 
+# The Playwright suite (web/e2e) in Chromium on the host, against the VM
+# through its own SSH tunnel. Reports land in web/playwright-report.
+run_ui_tests() {
+  need npx
+  [ -x "$ROOT/web/node_modules/.bin/playwright" ] || die "Playwright is not installed; run: make deps"
+  log "Getting Playwright's Chromium (cached after the first run)"
+  (cd "$ROOT/web" && npx playwright install chromium) >/dev/null ||
+    die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
+
+  vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
+  local tunnel=$!
+  # shellcheck disable=SC2064 # expand now: the pid is local
+  trap "kill $tunnel 2>/dev/null" EXIT
+  local i
+  for i in $(seq 1 20); do
+    curl -ksf -o /dev/null "https://127.0.0.1:$UI_TEST_PORT/" && break
+    kill -0 "$tunnel" 2>/dev/null || die "the tunnel to the VM failed (is port $UI_TEST_PORT free?)"
+    sleep 0.5
+  done
+
+  log "Running the UI tests"
+  local status=0
+  (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
+    npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
+  kill "$tunnel" 2>/dev/null || true
+  trap - EXIT
+  if [ "$status" -ne 0 ]; then
+    log "UI tests failed; traces and screenshots: cd web && npx playwright show-report"
+  fi
+  return "$status"
+}
+
 cmd="${1:-test}"
 [ $# -gt 0 ] && shift
 case "$cmd" in
-  test) up; install_build; run_tests ;;
+  test)
+    up
+    install_build
+    # Both suites run even if the first fails; either failing fails the run.
+    status=0
+    run_tests || status=$?
+    run_ui_tests || status=$?
+    exit "$status"
+    ;;
+  ui)
+    running || die "the VM is not running; start it with: $0 up"
+    [ "${1:-}" = "--" ] && shift
+    run_ui_tests "$@"
+    ;;
   up) up ;;
   fetch) fetch ;;
   ssh)
@@ -207,5 +259,5 @@ case "$cmd" in
     ;;
   down) down ;;
   reset) down; rm -f "$DISK" "$SEED" "$PIDFILE"; log "VM disk deleted; the next run starts fresh" ;;
-  *) die "unknown command '$cmd' (test, up, fetch, ssh, logs, tunnel, down, reset)" ;;
+  *) die "unknown command '$cmd' (test, ui, up, fetch, ssh, logs, tunnel, down, reset)" ;;
 esac

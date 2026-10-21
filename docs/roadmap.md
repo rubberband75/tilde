@@ -21,6 +21,7 @@ to; tick items off as they land.
 - [x] e2e tests (real PAM, real setuid) — run in a VM
 - [x] Scripted disposable e2e VM: `make e2e-vm` (Ubuntu 24.04, Mint 22's base; D29)
 - [x] Run the e2e suite in the VM (passed unchanged), plus logind checks: session type `web`, runtime dir, session D-Bus, logout closes the session, nohup jobs survive
+- [x] Playwright UI suite (`web/e2e`) run by `make e2e-vm` after the Go suite: login, desktop, Files, terminal (D35)
 
 ## Phase 2 — Shell UI
 

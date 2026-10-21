@@ -22,7 +22,9 @@ export default defineConfig({
   },
   test: {
     // Unit tests for stores and helpers; they need window and localStorage.
+    // The Playwright UI tests in e2e/ are not Vitest's.
     environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
   },
   build: {
     outDir: 'dist',

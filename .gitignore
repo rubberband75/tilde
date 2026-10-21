@@ -8,3 +8,5 @@
 .DS_Store
 # Personal Claude Code settings
 /.claude/settings.local.json
+/web/test-results/
+/web/playwright-report/

@@ -46,6 +46,7 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
                         properties/, system-info/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus
   src/styles/           base.css + themes/mint-y-dark.css (design tokens)
+  e2e/                  Playwright UI tests (run by make e2e-vm)
   public/icons/         bundled Mint-Y icons (scripts/fetch-icons.sh)
 packaging/              PAM service file, systemd unit, /etc/default/tilde
 docs/                   design docs
@@ -61,7 +62,7 @@ make server-nopam  # build without libpam (logins always fail; for CI/tests)
 make dev-server    # Go server, plain HTTP on 127.0.0.1:8443, single-user (your account)
 make dev-web       # Vite on http://localhost:5173, proxies /api to the Go server
 make icons         # refresh bundled icons from /usr/share/icons/Mint-Y or GitHub
-make e2e-vm        # e2e tests in a disposable QEMU VM (scripts/e2e-vm.sh)
+make e2e-vm        # Go e2e + Playwright UI tests in a disposable QEMU VM (scripts/e2e-vm.sh)
 make fmt           # gofmt + Prettier
 ```
 
@@ -134,6 +135,8 @@ and ask.
   for store and helper logic. `make test` also fails on unformatted code.
 - For UI changes, build and look at it: `make dev-server` + `make dev-web`,
   then open http://localhost:5173.
+- UI flows get a Playwright test in `web/e2e` (fixtures in `fixtures.ts`).
+  `make e2e-vm` runs them in the VM; `scripts/e2e-vm.sh ui` reruns only them.
 
 ## When you finish a piece of work
 

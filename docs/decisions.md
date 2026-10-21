@@ -244,6 +244,22 @@ watches (a watch per subfolder of a home folder can exhaust
 `max_user_watches`, and a window shows one folder); fanotify (needs
 `CAP_SYS_ADMIN`); per-event messages (a big copy would flood the socket).
 
+**D35 — UI tests: Playwright on the host against the e2e VM** (2026-10-21, accepted)
+`web/e2e` holds Playwright tests (`@playwright/test`, Chromium) for the real
+UI against a real install: login and logout, desktop icons, Files, live
+folder updates, trash, the terminal. `make e2e-vm` runs them after the Go
+suite, from the host through an SSH tunnel to the VM, logged in as the VM's
+throwaway `tester`; `scripts/e2e-vm.sh ui` runs only them, and `make
+e2e-ui` runs them against any URL. They share one user, so they run one at
+a time, and each cleans up the files it makes. Why: the VM already has the
+real PAM, logind and privilege drop, and running the browser on the host
+avoids putting Node and Chromium in the VM. Rejected: Playwright inside the
+VM (a large download into a disposable image on every reset); UI tests in
+CI against `make dev-server` (no PAM login without a password, and
+single-user mode skips the session code the UI depends on); Vitest browser
+mode or Cypress (Playwright handles WebSockets, multiple pages and traces
+well and needs no running dev server).
+
 ---
 
 ## Open decisions

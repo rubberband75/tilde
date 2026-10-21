@@ -49,6 +49,8 @@ make fmt         # fix formatting (gofmt -w, prettier --write)
 - `web/src/**/*.test.ts` (Vitest, jsdom): the window store (open, focus,
   minimize, close guards, layout persistence), path helpers and session-expiry
   handling in the API client. Put tests next to the code they cover.
+- `web/e2e/*.spec.ts` (Playwright): the UI in a real browser against a real
+  install. They need a throwaway account, so they run in the e2e VM (below).
 
 `make server-nopam` and `go test -tags nopam ./...` work without libpam.
 
@@ -92,6 +94,29 @@ State lives in `~/.cache/tilde-e2e-vm` (`TILDE_VM_DIR`); SSH is forwarded to
 `ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443
 ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`
 (or run `scripts/e2e-vm.sh tunnel`). The VM build embeds the UI.
+
+After the Go suite, `make e2e-vm` runs the Playwright UI tests in
+`web/e2e` with Chromium on the host, through an SSH tunnel to the VM
+(`127.0.0.1:9444`, `TILDE_VM_UI_TEST_PORT`), logged in as `tester`: login
+and logout, the desktop icons, Files (new folder, rename, trash and
+restore), live updates from inotify, and the terminal. `make deps`
+installs Playwright; the first run downloads its Chromium (on a host
+without the browser's libraries: `cd web && npx playwright install
+--with-deps chromium`). Output is kept in
+`~/.cache/tilde-e2e-vm/last-ui-test.log`; on failure, `cd web && npx
+playwright show-report` has screenshots and traces.
+
+```bash
+scripts/e2e-vm.sh ui                 # only the UI suite, against what is installed
+scripts/e2e-vm.sh ui -- -g Files     # arguments after -- go to "playwright test"
+make e2e-ui TILDE_URL=https://localhost:9443 TILDE_USER=tester TILDE_PASS=tester-pass
+```
+
+UI tests share the one test user, so they run one at a time and remove what
+they create (fixtures in `web/e2e/fixtures.ts`). Write files for a test
+through the `api` fixture rather than the UI when the UI is not what is
+being tested; changes made that way reach the page only through the
+worker's inotify events, which is also how the live-update tests work.
 
 Still checked by hand: `sudo` works in a Tilde terminal and asks for the
 password (give `tester` sudo first: `scripts/e2e-vm.sh ssh -- sudo usermod
