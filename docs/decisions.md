@@ -204,6 +204,16 @@ across, like Nemo. Logging out cancels running jobs. Rejected: a synchronous
 copy endpoint (blocks a request for minutes, no progress or conflicts),
 polling for progress (the events socket is needed for inotify anyway).
 
+**D32 — PAM runs on the helper's main thread** (2026-10-20, accepted)
+`cmd/tilde` locks the main goroutine to the main OS thread in `init`, and the
+helper calls PAM from it. Why: pam_loginuid writes `/proc/self/loginuid`,
+which the kernel accepts only from the thread-group leader; from another Go
+thread it fails with EPERM, the `required` module fails
+pam_open_session, and the login is refused at random (one in five to one in
+forty in the e2e VM). Found by the e2e VM; `TestRepeatedLogins` guards it.
+Rejected: making pam_loginuid `optional` (loses the audit login uid and
+session id, which logind and auditing rely on).
+
 ---
 
 ## Open decisions

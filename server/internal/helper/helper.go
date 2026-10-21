@@ -35,7 +35,9 @@ import (
 	"tilde/internal/userinfo"
 )
 
-// Run executes the helper and returns the process exit code.
+// Run executes the helper and returns the process exit code. It must be
+// called from the main goroutine, locked to the main thread (cmd/tilde does
+// this in init): pam_loginuid fails from any other thread.
 func Run() int {
 	proto, err := stdio.ProtectStdout()
 	if err != nil {

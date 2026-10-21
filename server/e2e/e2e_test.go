@@ -257,3 +257,13 @@ func sessionState(id string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// TestRepeatedLogins opens and closes many PAM sessions. pam_loginuid only
+// works from the helper's main thread; when PAM ran on another Go thread,
+// about one login in twenty failed with "could not open a login session".
+func TestRepeatedLogins(t *testing.T) {
+	for i := 0; i < 25; i++ {
+		e := setup(t)
+		decode(t, e.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
+	}
+}

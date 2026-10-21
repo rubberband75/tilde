@@ -57,7 +57,8 @@ bug in Tilde can never give more than the account already has.
 
 1. No user file or process operations in the server.
 2. No setuid/setgid in a Go process; only `SysProcAttr.Credential` on a child.
-3. PAM sessions open in the helper, which outlives the session.
+3. PAM sessions open in the helper, which outlives the session, from its
+   main thread (pam_loginuid fails from any other thread).
 4. Helper/worker stdout is the protocol.
 5. The worker never listens on a network port.
 6. Origin checks on every state-changing request and WebSocket upgrade.

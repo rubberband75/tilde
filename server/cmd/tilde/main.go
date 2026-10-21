@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -26,6 +27,14 @@ import (
 	"tilde/internal/webui"
 	"tilde/internal/worker"
 )
+
+// init pins the main goroutine to the process's main thread. The session
+// helper calls PAM from it, and pam_loginuid writes /proc/self/loginuid,
+// which the kernel only allows from the thread-group leader: from any other
+// thread the write fails with EPERM and pam_open_session fails, at random,
+// depending on which thread the Go scheduler used. Locking in init is the
+// only way to be sure main runs on the main thread.
+func init() { runtime.LockOSThread() }
 
 func main() {
 	if len(os.Args) < 2 {

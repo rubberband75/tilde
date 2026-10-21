@@ -77,6 +77,8 @@ and ask.
    starting a child with `SysProcAttr.Credential` (see `internal/helper`).
 3. **PAM sessions are opened in the helper, never the server.** pam_systemd
    registers the calling process; the helper must live until the session ends.
+   PAM calls must run on the main thread (`cmd/tilde` locks it in `init`):
+   pam_loginuid writes `/proc/self/loginuid`, which fails from other threads.
 4. **Stdout is the protocol.** In the helper and worker, fd 1 carries the
    handshake and the yamux stream. Never print to stdout; log with `slog`
    (stderr). `stdio.ProtectStdout` redirects stray writes, but do not rely on it.
