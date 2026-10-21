@@ -48,6 +48,9 @@ PIDFILE="$DIR/qemu.pid"
 # The throwaway account the tests log in as. Not in sudo.
 TEST_USER=tester
 TEST_PASS=tester-pass
+# A second filesystem the test user can write to, for per-drive trash: an
+# ext4 image loop-mounted in the VM.
+TEST_DRIVE=/mnt/tilde-drive
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
 die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
@@ -180,6 +183,15 @@ install_build() {
     echo "tilde did not start" >&2
     sudo journalctl -u tilde --no-pager -n 50 >&2
     exit 1'
+
+  # Mounted until the VM reboots; recreated by the next run after that.
+  vm_ssh "set -e
+    if ! mountpoint -q $TEST_DRIVE; then
+      [ -f /var/tmp/tilde-drive.img ] || { sudo truncate -s 64M /var/tmp/tilde-drive.img; sudo mkfs.ext4 -q /var/tmp/tilde-drive.img; }
+      sudo mkdir -p $TEST_DRIVE
+      sudo mount -o loop /var/tmp/tilde-drive.img $TEST_DRIVE
+      sudo chown $TEST_USER: $TEST_DRIVE
+    fi"
 }
 
 run_tests() {
@@ -218,7 +230,7 @@ run_ui_tests() {
   log "Running the UI tests"
   local status=0
   (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
-    npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
+    TILDE_DRIVE=$TEST_DRIVE npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
   kill "$tunnel" 2>/dev/null || true
   trap - EXIT
   if [ "$status" -ne 0 ]; then

@@ -114,6 +114,8 @@ const isPath = computed(() => location.value.startsWith('/'))
 const isTrash = computed(() => location.value === TRASH)
 const isComputer = computed(() => location.value === COMPUTER)
 const trashFilesDir = computed(() => places.value.find((p) => p.id === 'trash')?.path ?? '')
+/** files/ folders of all trashes (home and drives), shown together in the Trash view. */
+const trashDirs = ref<string[]>([])
 const placeIcons = computed(() => new Map(places.value.filter((p) => p.id !== 'trash').map((p) => [p.path, p.icon])))
 
 const searchActive = computed(() => searchOpen.value && isPath.value && query.value.trim() !== '')
@@ -251,8 +253,11 @@ async function load() {
   error.value = ''
   try {
     if (isComputer.value) mounts.value = (await fsApi.system()).mounts
-    else if (isTrash.value) trashItems.value = (await fsApi.trashList()).items
-    else await loadFolder(location.value, ac.signal)
+    else if (isTrash.value) {
+      const list = await fsApi.trashList()
+      trashItems.value = list.items
+      trashDirs.value = list.filesDirs
+    } else await loadFolder(location.value, ac.signal)
   } catch (e) {
     if (ac.signal.aborted) return
     error.value = (e as Error).message
@@ -775,13 +780,14 @@ function onKey(e: KeyboardEvent) {
 
 // The worker reports changes to the folder on screen (the trash's files
 // folder for the Trash view) over the events socket.
-useWatchedDirs(() => [isPath.value ? location.value : isTrash.value ? trashFilesDir.value : ''])
+useWatchedDirs(() => (isPath.value ? [location.value] : isTrash.value ? [trashFilesDir.value, ...trashDirs.value] : []))
 
 let offFs: (() => void) | undefined
 let offBookmarks: (() => void) | undefined
 onMounted(async () => {
   offFs = onFsChanged((dir) => {
-    if (dir === location.value || (isTrash.value && dir === trashFilesDir.value)) refresh()
+    if (dir === location.value || (isTrash.value && (dir === trashFilesDir.value || trashDirs.value.includes(dir))))
+      refresh()
     if (searchActive.value && (dir === location.value || dir.startsWith(location.value + '/'))) void runSearch()
   })
   offBookmarks = onBookmarksChanged(loadBookmarks)

@@ -109,10 +109,12 @@ func mounts() []Mount {
 			continue
 		}
 		dev, mp, fstype := fields[0], unescapeMount(fields[1]), fields[2]
-		if !strings.HasPrefix(dev, "/dev/") || strings.HasPrefix(dev, "/dev/loop") || seen[dev] {
+		if !strings.HasPrefix(dev, "/dev/") || seen[dev] {
 			continue
 		}
-		if strings.HasPrefix(mp, "/snap/") || strings.HasPrefix(mp, "/boot/efi") {
+		// Snaps are loop-mounted squashfs images; other loop mounts (a disk
+		// image or ISO the user mounted) are drives, as in Nemo.
+		if fstype == "squashfs" || strings.HasPrefix(mp, "/snap/") || strings.HasPrefix(mp, "/boot/efi") {
 			continue
 		}
 		seen[dev] = true

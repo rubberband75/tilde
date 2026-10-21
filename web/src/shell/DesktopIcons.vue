@@ -48,6 +48,8 @@ const host: FileOpsHost = { confirm: dialogs.confirm, notify: notices.push, clip
 
 const desktopDir = ref('')
 const trashFilesDir = ref('')
+/** files/ folders of all trashes (home and drives), for the full/empty icon. */
+const trashDirs = ref<string[]>([])
 const entries = ref<Entry[]>([])
 const trashFull = ref(false)
 const selected = ref(new Set<string>())
@@ -185,6 +187,7 @@ async function load() {
     const [list, trash] = await Promise.allSettled([fsApi.list(desktopDir.value), fsApi.trashList()])
     entries.value = list.status === 'fulfilled' ? list.value.entries : []
     trashFull.value = trash.status === 'fulfilled' && trash.value.items.length > 0
+    if (trash.status === 'fulfilled') trashDirs.value = trash.value.filesDirs
   } catch {
     // Session problems are handled globally; keep the last known icons.
   } finally {
@@ -366,7 +369,7 @@ async function onDrop(e: DragEvent) {
 
 // The worker reports changes to these folders (and the trash, for the full
 // or empty icon) over the events socket.
-useWatchedDirs(() => [desktopDir.value, trashFilesDir.value])
+useWatchedDirs(() => [desktopDir.value, trashFilesDir.value, ...trashDirs.value])
 
 let offFs: (() => void) | undefined
 let ro: ResizeObserver | undefined
@@ -377,7 +380,7 @@ onMounted(() => {
   void loadLayout()
   void load()
   offFs = onFsChanged((dir) => {
-    if (dir === desktopDir.value || dir === trashFilesDir.value) void load()
+    if (dir === desktopDir.value || dir === trashFilesDir.value || trashDirs.value.includes(dir)) void load()
   })
 })
 onBeforeUnmount(() => {

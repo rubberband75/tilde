@@ -65,6 +65,7 @@ export interface Hello {
 }
 
 export interface TrashItem {
+  /** The name in the home trash, or the absolute path inside a drive's trash. */
   name: string
   originalPath: string
   deletedAt: string

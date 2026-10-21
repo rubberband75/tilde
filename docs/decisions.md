@@ -301,6 +301,24 @@ the session bus, and changes the real desktop); a Tilde-only background
 (ignores what the user already chose); slideshow XML backgrounds (shown as
 colors only for now).
 
+**D38 — Per-drive trash as GIO does it** (2026-10-21, accepted)
+Trashing a file on another drive uses that drive's trash, following the
+Trash spec: `$topdir/.Trash/$uid` when `$topdir/.Trash` is a real folder
+with the sticky bit, else `$topdir/.Trash-$uid`, created 0700. A trash
+folder that is a symlink or owned by someone else is refused, so another
+user of a shared drive cannot plant one to capture files. Info files there
+store paths relative to `$topdir`, so a drive mounted elsewhere still
+restores, and relative paths that leave the drive are ignored. Only
+mounts in the drive list (real block devices, including loop-mounted
+images but not snaps) get a trash; tmpfs and other system mounts answer
+`other_drive`, and Tilde offers to delete instead, as Nemo does. The trash
+API lists, restores and empties all trashes together; drive items are
+named by their absolute path in the trash. Why: moving a file "home" from a
+USB stick copies it across drives and fills the home disk, and Nemo and
+other GIO programs already look in these folders. Mounting and removable
+drives (udisks2) stay a separate item. Rejected: copying to the home trash;
+waiting for udisks (per-drive trash only needs the mount table).
+
 ---
 
 ## Open decisions
@@ -309,7 +327,6 @@ colors only for now).
 | --- | --- | --- | --- |
 | Absolute session lifetime | 12 h re-login vs lock-only like Mint | 12 h, confirm | Phase 5 |
 | Drives | mounts and removable drives via udisks2 over D-Bus (thumbnails done, D33) | follow the specs | Phase 4 |
-| Per-drive trash | `$topdir/.Trash-$uid` for other filesystems | implement with udisks | Phase 4 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |
 | Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |

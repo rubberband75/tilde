@@ -49,7 +49,8 @@ export const fsApi = {
   trash: (paths: string[]) =>
     api.post<{ results: TrashResult[] }>('/api/v1/fs/trash', { paths }).then((r) => r.results),
 
-  trashList: () => api.get<{ dir: string; items: TrashItem[] }>('/api/v1/trash'),
+  /** All trashes: dir is the home trash; filesDirs are the files/ folders of it and the drives' trashes. */
+  trashList: () => api.get<{ dir: string; filesDirs: string[]; items: TrashItem[] }>('/api/v1/trash'),
   restore: (names: string[]) => api.post<{ restored: string[] }>('/api/v1/trash/restore', { names }),
   emptyTrash: () => api.post<void>('/api/v1/trash/empty'),
 

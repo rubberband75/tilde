@@ -86,7 +86,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		terms:      newTerminalManager(info.Shell, info.Home),
 		events:     events,
 		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
-		jobs:       newJobManager(events, filepath.Join(trash.Dir(), "files")),
+		jobs:       newJobManager(events, trash),
 	}
 }
 

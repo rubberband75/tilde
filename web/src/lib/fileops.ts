@@ -44,9 +44,9 @@ export async function deletePermanently(host: FileOpsHost, paths: string[]): Pro
 }
 
 /**
- * Moves paths to the trash. Items on a drive without a trash folder for the
- * user (per-drive trash comes in phase 4) can be deleted instead, as Nemo
- * offers.
+ * Moves paths to the trash (the home trash, or the trash of the drive they
+ * are on). Items on a drive where no trash folder can be made (read-only,
+ * or not the user's) can be deleted instead, as Nemo offers.
  */
 export async function moveToTrash(host: FileOpsHost, paths: string[], trashDir: string): Promise<void> {
   if (!paths.length) return

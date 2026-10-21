@@ -98,11 +98,13 @@ ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`
 After the Go suite, `make e2e-vm` runs the Playwright UI tests in
 `web/e2e` with Chromium on the host, through an SSH tunnel to the VM
 (`127.0.0.1:9444`, `TILDE_VM_UI_TEST_PORT`), logged in as `tester`: login
-and logout, the desktop icons, Files (new folder, rename, trash and
-restore), live updates from inotify, and the terminal. `make deps`
-installs Playwright; the first run downloads its Chromium (on a host
-without the browser's libraries: `cd web && npx playwright install
---with-deps chromium`). Output is kept in
+and logout, the desktop icons, layout and background, Files (new folder,
+rename, trash and restore), live updates from inotify, the terminal, and
+per-drive trash on a small ext4 image the script loop-mounts at
+`/mnt/tilde-drive` for `tester` (`TILDE_DRIVE`; that test skips without
+it). `make deps` installs Playwright; the first run downloads its
+Chromium (on a host without the browser's libraries: `cd web && npx
+playwright install --with-deps chromium`). Output is kept in
 `~/.cache/tilde-e2e-vm/last-ui-test.log`; on failure, `cd web && npx
 playwright show-report` has screenshots and traces.
 

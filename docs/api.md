@@ -87,11 +87,18 @@ content. A listing sniffs at most 1000 files; the rest fall back to
 | POST | `/api/v1/fs/rename` | `{from, to, overwrite?}` → `Entry`. Same filesystem only (`409 other_drive` otherwise); without `overwrite` an existing `to` gives `409 exists`, atomically |
 | POST | `/api/v1/fs/trash` | `{paths: []}` → `{results: [{path, name?, error?, code?}]}` |
 
-### Trash (freedesktop home trash, `~/.local/share/Trash`)
+### Trash (freedesktop Trash spec, D38)
+
+Files on the home filesystem go to `~/.local/share/Trash`. Files on another
+drive (a mount from the Computer list) go to that drive's trash:
+`$topdir/.Trash/$uid` if the administrator made a sticky `$topdir/.Trash`,
+else `$topdir/.Trash-$uid` (created 0700). Trash folders that are symlinks
+or not the user's are never used. Items on other mounts (tmpfs, read-only
+drives) cannot be trashed: `POST /api/v1/fs/trash` reports `other_drive`.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/api/v1/trash` | `{dir, items: [{name, originalPath, deletedAt, entry}]}`, newest first |
+| GET | `/api/v1/trash` | `{dir, filesDirs, items: [{name, originalPath, deletedAt, entry}]}`, newest first, from every trash. `dir` is the home trash; `filesDirs` are the `files/` folders of all trashes (watch them). `name` is the item's name in the home trash, or the absolute path of the item inside a drive's trash |
 | POST | `/api/v1/trash/restore` | `{names: []}` → `{restored: [paths]}`; recreates missing parent folders |
 | POST | `/api/v1/trash/empty` | `204` |
 

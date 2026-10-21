@@ -594,9 +594,11 @@ func (j *job) runDelete() error {
 			j.fail(src, badRequest{"refusing to delete /"})
 			continue
 		}
-		if j.remove(src) && filepath.Dir(src) == j.m.trashFiles {
-			// Deleting from the trash removes its .trashinfo too.
-			os.Remove(filepath.Join(filepath.Dir(j.m.trashFiles), "info", filepath.Base(src)+".trashinfo"))
+		if j.remove(src) {
+			// Deleting from a trash removes its .trashinfo too.
+			if info, ok := j.m.trash.InfoFileFor(src); ok {
+				os.Remove(info)
+			}
 		}
 	}
 	return j.ctx.Err()
@@ -788,16 +790,16 @@ func splitExt(name string) (string, string) {
 // --- manager and HTTP API ---
 
 type jobManager struct {
-	hub        *eventHub
-	trashFiles string
+	hub   *eventHub
+	trash *Trash // deleting a trashed item also removes its .trashinfo
 
 	mu   sync.Mutex
 	next int
 	jobs map[string]*job
 }
 
-func newJobManager(hub *eventHub, trashFiles string) *jobManager {
-	return &jobManager{hub: hub, trashFiles: trashFiles, jobs: map[string]*job{}}
+func newJobManager(hub *eventHub, trash *Trash) *jobManager {
+	return &jobManager{hub: hub, trash: trash, jobs: map[string]*job{}}
 }
 
 func (m *jobManager) start(op string, sources []string, dest string) *job {
