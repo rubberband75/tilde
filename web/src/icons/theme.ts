@@ -70,6 +70,7 @@ export function iconsForMime(mime: string): string[] {
   const names = [mime.replace('/', '-')]
   if (archiveTypes.has(mime)) names.push('package-x-generic')
   if (mime.includes('shellscript')) names.push('text-x-script')
+  if (mime === 'application/x-zerosize') names.push('text-x-generic')
   if (mime === 'application/x-executable' || mime === 'application/x-sharedlib') names.push('application-x-executable')
   if (mime.includes('opendocument.text') || mime.includes('wordprocessing') || mime === 'application/msword')
     names.push('x-office-document')

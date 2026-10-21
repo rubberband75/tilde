@@ -55,9 +55,17 @@ Paths in query strings and bodies are absolute.
 }
 ```
 
+`mime` comes from the name (shared-mime-info globs). Files the name says
+nothing about are sniffed: ELF binaries (`application/x-executable`,
+`application/x-sharedlib`), `#!` scripts by interpreter, empty files
+(`application/x-zerosize`), then text, HTML, images, PDF and archives by
+content. A listing sniffs at most 1000 files; the rest fall back to
+`application/x-executable` (executable bit) or `application/octet-stream`.
+
 | Method | Path | Notes |
 | --- | --- | --- |
 | GET | `/api/v1/fs/list?path=` | `{path, parent, entries: Entry[]}`, folders first |
+| GET | `/api/v1/fs/list?path=&stream=1` | NDJSON (`application/x-ndjson`), for huge folders: `{path, parent}`, then `{entries: Entry[]}` lines of up to 1000 unsorted entries, then `{done: true, total}`; `{error, code}` if reading fails midway. Errors before the first line are normal JSON errors |
 | GET | `/api/v1/fs/stat?path=` | `Entry` (lstat; symlinks report their target's type) |
 | GET | `/api/v1/fs/content?path=[&download=1]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download |
 | PUT | `/api/v1/fs/content?path=[&overwrite=1]` | Body is the file. `201 Entry`; `409 exists` without overwrite |

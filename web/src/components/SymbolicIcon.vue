@@ -19,6 +19,10 @@ export type SymbolicName =
   | 'logout'
   | 'lock'
   | 'chevron-right'
+  | 'chevron-up'
+  | 'chevron-down'
+  | 'zoom-in'
+  | 'zoom-out'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -38,6 +42,10 @@ const paths: Record<SymbolicName, string> = {
   logout: 'M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6',
   lock: 'M4 7.5h8v6H4zM5.5 7.5V5a2.5 2.5 0 0 1 5 0v2.5',
   'chevron-right': 'M6 4l4 4-4 4',
+  'chevron-up': 'M4 10l4-4 4 4',
+  'chevron-down': 'M4 6l4 4 4-4',
+  'zoom-in': 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.5 10.5 14 14M5 7h4M7 5v4',
+  'zoom-out': 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.5 10.5 14 14M5 7h4',
 }
 
 const d = computed(() => paths[props.name])

@@ -22,6 +22,8 @@ export function formatDate(iso: string): string {
 export function mimeLabel(mime: string): string {
   if (mime === 'inode/directory') return 'Folder'
   if (mime === 'application/octet-stream') return 'Binary'
+  if (mime === 'application/x-zerosize') return 'Empty document'
+  if (mime === 'application/x-executable') return 'Program'
   const [major, minor = ''] = mime.split('/')
   const sub = minor.replace(/^x-/, '').replace(/[-+.]/g, ' ')
   switch (major) {

@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
@@ -39,7 +40,16 @@ type ListResponse struct {
 	Entries []Entry `json:"entries"`
 }
 
+// entryFor describes path. Files whose type the name does not tell are
+// sniffed (see mime.go).
 func entryFor(path string, lst fs.FileInfo) Entry {
+	return entryWithBudget(path, lst, nil)
+}
+
+// entryWithBudget is entryFor for listings: budget, if not nil, caps how
+// many files are opened for sniffing, so a huge folder of extensionless
+// files (a git object store, /usr/bin) still lists quickly.
+func entryWithBudget(path string, lst fs.FileInfo, budget *int) Entry {
 	name := lst.Name()
 	if path == "/" {
 		name = "/"
@@ -74,34 +84,8 @@ func entryFor(path string, lst fs.FileInfo) Entry {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
 		e.UID, e.GID = st.Uid, st.Gid
 	}
-	e.MIME = mimeFor(name, info, e.Broken)
+	e.MIME = mimeFor(path, name, info, e.Broken, budget)
 	return e
-}
-
-// mimeFor guesses a MIME type from the file name. On Linux, Go's mime
-// package reads the shared-mime-info globs (/usr/share/mime/globs2) first,
-// so this mostly agrees with Nemo. Content sniffing (magic) is a TODO.
-func mimeFor(name string, info fs.FileInfo, broken bool) string {
-	switch {
-	case broken:
-		return "inode/symlink"
-	case info.IsDir():
-		return "inode/directory"
-	case !info.Mode().IsRegular():
-		return "inode/x-special"
-	}
-	if ext := filepath.Ext(name); ext != "" {
-		if t := mime.TypeByExtension(strings.ToLower(ext)); t != "" {
-			if i := strings.IndexByte(t, ';'); i >= 0 {
-				t = t[:i]
-			}
-			return strings.TrimSpace(t)
-		}
-	}
-	if info.Mode().Perm()&0o111 != 0 {
-		return "application/x-executable"
-	}
-	return "application/octet-stream"
 }
 
 func listDir(dir string) (*ListResponse, error) {
@@ -115,6 +99,7 @@ func listDir(dir string) (*ListResponse, error) {
 		return nil, err
 	}
 	resp := &ListResponse{Path: dir, Entries: make([]Entry, 0, len(des))}
+	budget := sniffBudget
 	if dir != "/" {
 		resp.Parent = filepath.Dir(dir)
 	}
@@ -123,7 +108,7 @@ func listDir(dir string) (*ListResponse, error) {
 		if err != nil {
 			continue // vanished between readdir and lstat
 		}
-		resp.Entries = append(resp.Entries, entryFor(filepath.Join(dir, de.Name()), info))
+		resp.Entries = append(resp.Entries, entryWithBudget(filepath.Join(dir, de.Name()), info, &budget))
 	}
 	sort.Slice(resp.Entries, func(i, j int) bool {
 		a, b := resp.Entries[i], resp.Entries[j]
@@ -141,12 +126,88 @@ func (w *Worker) handleList(rw http.ResponseWriter, r *http.Request) {
 		writeErr(rw, err)
 		return
 	}
+	if r.URL.Query().Get("stream") == "1" {
+		streamDir(rw, r, dir)
+		return
+	}
 	resp, err := listDir(dir)
 	if err != nil {
 		writeErr(rw, err)
 		return
 	}
 	writeJSON(rw, http.StatusOK, resp)
+}
+
+// listBatch is how many entries one line of a streamed listing carries.
+const listBatch = 1000
+
+// streamDir writes a listing as NDJSON, one batch per line, so the browser
+// can show a huge folder while it is still being read and the worker never
+// holds all of it: {"path","parent"}, then {"entries":[...]} lines, then
+// {"done":true,"total":n}, or {"error","code"} if reading fails midway.
+// Entries are not sorted; the client sorts.
+func streamDir(rw http.ResponseWriter, r *http.Request, dir string) {
+	f, err := os.Open(dir)
+	if err != nil {
+		writeErr(rw, err)
+		return
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err != nil {
+		writeErr(rw, err)
+		return
+	} else if !st.IsDir() {
+		writeErr(rw, syscall.ENOTDIR)
+		return
+	}
+	rw.Header().Set("Content-Type", "application/x-ndjson")
+	rw.Header().Set("Cache-Control", "no-store")
+	flusher, _ := rw.(http.Flusher)
+	enc := json.NewEncoder(rw)
+	head := ListResponse{Path: dir}
+	if dir != "/" {
+		head.Parent = filepath.Dir(dir)
+	}
+	if enc.Encode(struct {
+		Path   string `json:"path"`
+		Parent string `json:"parent,omitempty"`
+	}{head.Path, head.Parent}) != nil {
+		return
+	}
+	budget := sniffBudget
+	total := 0
+	for {
+		if r.Context().Err() != nil {
+			return // the client went away (navigated elsewhere)
+		}
+		des, err := f.ReadDir(listBatch)
+		batch := make([]Entry, 0, len(des))
+		for _, de := range des {
+			info, ierr := de.Info()
+			if ierr != nil {
+				continue
+			}
+			batch = append(batch, entryWithBudget(filepath.Join(dir, de.Name()), info, &budget))
+		}
+		total += len(batch)
+		if len(batch) > 0 {
+			if enc.Encode(map[string]any{"entries": batch}) != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if errors.Is(err, io.EOF) || (err == nil && len(des) == 0) {
+			break
+		}
+		if err != nil {
+			_, code := classifyErr(err)
+			enc.Encode(map[string]any{"error": err.Error(), "code": code})
+			return
+		}
+	}
+	enc.Encode(map[string]any{"done": true, "total": total})
 }
 
 func (w *Worker) handleStat(rw http.ResponseWriter, r *http.Request) {
@@ -203,7 +264,7 @@ func (w *Worker) handleDownload(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := filepath.Base(p)
-	ctype := mimeFor(name, st, false)
+	ctype := mimeFor(p, name, st, false, nil)
 	inline := r.URL.Query().Get("download") != "1" && inlineSafe(ctype)
 
 	h := rw.Header()

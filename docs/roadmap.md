@@ -55,9 +55,10 @@ to; tick items off as they land.
 - [x] Drag and drop between windows, the sidebar, the desktop (folders, Home, Trash) and terminals (types the quoted paths)
 - [ ] Thumbnails (freedesktop thumbnail cache, host thumbnailers)
 - [ ] Properties dialog (permissions, owner, size of folders)
-- [ ] Huge directories: stream or paginate the listing
-- [ ] Sorting options, zoom levels, search
-- [ ] MIME sniffing for files without a known extension
+- [x] Huge directories: streamed listing (NDJSON batches), virtualized grid and list (50 000 entries in about half a second)
+- [x] Sorting (name, size, type, date; reversed; natural order; folders first), zoom levels (Ctrl+±, Ctrl+wheel), arrow-key navigation
+- [ ] Search
+- [x] MIME sniffing for files without a known extension (budgeted in listings)
 - [ ] Bookmarks (`~/.config/gtk-3.0/bookmarks`)
 
 ## Phase 4 — Desktop

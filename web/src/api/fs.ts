@@ -7,6 +7,8 @@ export const fsApi = {
   places: () => api.get<{ places: Place[] }>('/api/v1/places').then((r) => r.places),
 
   list: (path: string) => api.get<ListResponse>('/api/v1/fs/list', { path }),
+  listStream: (path: string, onEntries: (batch: Entry[]) => void, signal?: AbortSignal) =>
+    listStream(path, onEntries, signal),
   stat: (path: string) => api.get<Entry>('/api/v1/fs/stat', { path }),
   mkdir: (path: string) => api.post<Entry>('/api/v1/fs/mkdir', { path }),
   rename: (from: string, to: string) => api.post<Entry>('/api/v1/fs/rename', { from, to }),
@@ -72,4 +74,45 @@ export function uniqueName(base: string, names: Set<string>): string {
     const candidate = `${base} ${i}`
     if (!names.has(candidate)) return candidate
   }
+}
+
+type ListLine =
+  | { path: string; parent?: string }
+  | { entries: Entry[] }
+  | { done: true; total: number }
+  | { error: string; code: string }
+
+/**
+ * Streams a folder listing (NDJSON, see docs/api.md): onEntries gets each
+ * batch as it arrives, unsorted. Resolves when the listing is complete.
+ */
+export async function listStream(
+  path: string,
+  onEntries: (batch: Entry[]) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const url = buildUrl('/api/v1/fs/list', { path, stream: 1 })
+  const res = await fetch(url, { credentials: 'same-origin', signal, headers: { Accept: 'application/x-ndjson' } })
+  if (!res.ok || !res.body) {
+    await handleResponse(res, '/api/v1/fs/list')
+    throw new ApiError(res.status, 'error', res.statusText)
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += value
+    let nl: number
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl)
+      buf = buf.slice(nl + 1)
+      if (!line) continue
+      const msg = JSON.parse(line) as ListLine
+      if ('entries' in msg) onEntries(msg.entries)
+      else if ('error' in msg) throw new ApiError(500, msg.code, msg.error)
+      else if ('done' in msg) return
+    }
+  }
+  throw new ApiError(0, 'network', 'The folder listing was cut off.')
 }
