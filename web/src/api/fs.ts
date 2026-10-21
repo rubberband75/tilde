@@ -1,5 +1,5 @@
 import { api, ApiError, buildUrl, handleResponse } from './client'
-import type { Entry, Hello, ListResponse, Place, SystemInfo, TrashItem, TrashResult } from './types'
+import type { Entry, Hello, ListResponse, Place, Properties, SystemInfo, TrashItem, TrashResult, Usage } from './types'
 
 export const fsApi = {
   hello: () => api.get<Hello>('/api/v1/hello'),
@@ -7,6 +7,8 @@ export const fsApi = {
   places: () => api.get<{ places: Place[] }>('/api/v1/places').then((r) => r.places),
 
   list: (path: string) => api.get<ListResponse>('/api/v1/fs/list', { path }),
+  properties: (path: string) => api.get<Properties>('/api/v1/fs/properties', { path }),
+  chmod: (path: string, perm: number) => api.post<Entry>('/api/v1/fs/chmod', { path, perm }),
   listStream: (path: string, onEntries: (batch: Entry[]) => void, signal?: AbortSignal) =>
     listStream(path, onEntries, signal),
   stat: (path: string) => api.get<Entry>('/api/v1/fs/stat', { path }),
@@ -83,7 +85,35 @@ type StreamLine =
   | { error: string; code: string }
 
 /**
- * Reads an NDJSON response of entries (a streamed listing or a search, see
+ * Reads an NDJSON response line by line. onLine returns true to stop early.
+ * A non-2xx response throws the API error.
+ */
+async function readNdjson<T>(url: string, onLine: (msg: T) => boolean | void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(url, { credentials: 'same-origin', signal, headers: { Accept: 'application/x-ndjson' } })
+  if (!res.ok || !res.body) {
+    await handleResponse(res, url.split('?')[0]!)
+    throw new ApiError(res.status, 'error', res.statusText)
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) return
+    buf += value
+    let nl: number
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl)
+      buf = buf.slice(nl + 1)
+      if (line && onLine(JSON.parse(line) as T)) {
+        void reader.cancel()
+        return
+      }
+    }
+  }
+}
+
+/**
+ * Reads a stream of entries (a streamed listing or a search, see
  * docs/api.md): onEntries gets each batch as it arrives. Resolves with the
  * final line when the stream is complete.
  */
@@ -92,30 +122,21 @@ async function readEntryStream(
   onEntries: (batch: Entry[]) => void,
   signal?: AbortSignal,
 ): Promise<{ total: number; truncated?: boolean }> {
-  const res = await fetch(url, { credentials: 'same-origin', signal, headers: { Accept: 'application/x-ndjson' } })
-  const path = url.split('?')[0]!
-  if (!res.ok || !res.body) {
-    await handleResponse(res, path)
-    throw new ApiError(res.status, 'error', res.statusText)
-  }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buf = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buf += value
-    let nl: number
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl)
-      buf = buf.slice(nl + 1)
-      if (!line) continue
-      const msg = JSON.parse(line) as StreamLine
+  let end: { total: number; truncated?: boolean } | undefined
+  await readNdjson<StreamLine>(
+    url,
+    (msg) => {
       if ('entries' in msg) onEntries(msg.entries)
       else if ('error' in msg) throw new ApiError(500, msg.code, msg.error)
-      else if ('done' in msg) return msg
-    }
-  }
-  throw new ApiError(0, 'network', 'The response was cut off.')
+      else if ('done' in msg) {
+        end = msg
+        return true
+      }
+    },
+    signal,
+  )
+  if (!end) throw new ApiError(0, 'network', 'The response was cut off.')
+  return end
 }
 
 /** Streams a folder listing in unsorted batches. */
@@ -132,4 +153,14 @@ export function searchStream(
   signal?: AbortSignal,
 ) {
   return readEntryStream(buildUrl('/api/v1/fs/search', { path, q, hidden: hidden ? 1 : undefined }), onEntries, signal)
+}
+
+/**
+ * Counts what is inside paths (folder sizes), calling onProgress about four
+ * times a second until done. Abort the signal to stop counting.
+ */
+export function usageStream(paths: string[], onProgress: (u: Usage) => void, signal?: AbortSignal) {
+  const q = new URLSearchParams()
+  for (const p of paths) q.append('path', p)
+  return readNdjson<Usage>(`/api/v1/fs/usage?${q}`, (u) => void onProgress(u), signal)
 }

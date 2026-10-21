@@ -271,6 +271,13 @@ onBeforeUnmount(() => {
             <ContextMenuSeparator class="separator" />
             <ContextMenuItem class="item" @select="trashSelected">Move to Trash</ContextMenuItem>
             <ContextMenuItem class="item" @select="deleteSelected">Delete Permanently…</ContextMenuItem>
+            <ContextMenuSeparator class="separator" />
+            <ContextMenuItem
+              class="item"
+              @select="wm.open('file-properties', { paths: selectedEntries.map((e) => e.path) })"
+            >
+              Properties
+            </ContextMenuItem>
           </template>
         </template>
         <template v-else>

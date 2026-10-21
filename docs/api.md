@@ -67,6 +67,9 @@ content. A listing sniffs at most 1000 files; the rest fall back to
 | GET | `/api/v1/fs/list?path=` | `{path, parent, entries: Entry[]}`, folders first |
 | GET | `/api/v1/fs/list?path=&stream=1` | NDJSON (`application/x-ndjson`), for huge folders: `{path, parent}`, then `{entries: Entry[]}` lines of up to 1000 unsorted entries, then `{done: true, total}`; `{error, code}` if reading fails midway. Errors before the first line are normal JSON errors |
 | GET | `/api/v1/fs/search?path=&q=[&hidden=1]` | NDJSON like a streamed listing: entries below `path` whose names contain every word of `q` (case-insensitive), then `{done, total, truncated}`. Hidden items only with `hidden=1`; links are not followed; stays on `path`'s filesystem; at most 5000 results |
+| GET | `/api/v1/fs/properties?path=` | `{entry, owner, group, atime, ctime, mine, free, capacity}`: names of owner and group, whether the user owns it, free space and size of its filesystem |
+| GET | `/api/v1/fs/usage?path=[&path=…]` | NDJSON progress about every 250 ms: `{items, size, unreadable, done}`, counting everything below the paths (like `du -x`: one filesystem, links not followed). Close the request to stop |
+| POST | `/api/v1/fs/chmod` | `{path, perm}` (0–0777) → `Entry`. Keeps setuid/setgid/sticky; refuses links; the kernel allows it only for the owner |
 | GET | `/api/v1/fs/stat?path=` | `Entry` (lstat; symlinks report their target's type) |
 | GET | `/api/v1/fs/content?path=[&download=1]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download |
 | PUT | `/api/v1/fs/content?path=[&overwrite=1]` | Body is the file. `201 Entry`; `409 exists` without overwrite |

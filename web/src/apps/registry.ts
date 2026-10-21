@@ -24,6 +24,18 @@ export const apps: AppManifest[] = [
     component: () => import('./terminal/TerminalApp.vue'),
   },
   {
+    id: 'file-properties',
+    name: 'Properties',
+    comment: 'Show and change the properties of files and folders',
+    icon: 'system-file-manager',
+    category: 'Accessories',
+    // Launched by Files and the desktop with { paths }.
+    hidden: true,
+    defaultSize: { w: 460, h: 440 },
+    minSize: { w: 360, h: 320 },
+    component: () => import('./properties/PropertiesApp.vue'),
+  },
+  {
     id: 'system-info',
     name: 'System Info',
     comment: 'View information about this computer',

@@ -661,6 +661,11 @@ function onDrop(e: DragEvent) {
   else void uploadFiles([...(e.dataTransfer?.files ?? [])])
 }
 
+/** Opens the Properties window for the selection, or for this folder. */
+function showProperties(paths = selectedPaths.value.length ? selectedPaths.value : [location.value]) {
+  if (isPath.value || selectedPaths.value.length) props.ctx.launch('file-properties', { paths })
+}
+
 function openTerminal(path?: string) {
   props.ctx.launch('terminal', { cwd: path ?? location.value })
 }
@@ -686,7 +691,8 @@ function onKey(e: KeyboardEvent) {
   if (renaming.value) return
   const alt = e.altKey
   const ctrl = e.ctrlKey || e.metaKey
-  if (e.key === 'Enter') selectedItems.value.slice(0, 1).forEach(open)
+  if (e.key === 'Enter' && alt) showProperties()
+  else if (e.key === 'Enter') selectedItems.value.slice(0, 1).forEach(open)
   else if (e.key === 'Delete' && e.shiftKey) void deleteSelected()
   else if (e.key === 'Delete') void trashSelected()
   else if (ctrl && e.key.toLowerCase() === 'c') copySelected('copy')
@@ -915,6 +921,8 @@ onBeforeUnmount(() => {
                 <ContextMenuSeparator class="separator" />
                 <ContextMenuItem class="item" @select="downloadSelected">Download</ContextMenuItem>
               </template>
+              <ContextMenuSeparator class="separator" />
+              <ContextMenuItem class="item" @select="showProperties()">Properties</ContextMenuItem>
             </template>
             <template v-else>
               <ContextMenuItem class="item" @select="newFolder">New Folder</ContextMenuItem>
@@ -944,6 +952,8 @@ onBeforeUnmount(() => {
                 {{ showHidden ? '✓ ' : '' }}Show Hidden Files
               </ContextMenuItem>
               <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
+              <ContextMenuSeparator class="separator" />
+              <ContextMenuItem class="item" @select="showProperties([location])">Properties</ContextMenuItem>
             </template>
           </ContextMenuContent>
         </ContextMenuPortal>

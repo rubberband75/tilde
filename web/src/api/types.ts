@@ -133,3 +133,24 @@ export interface Resolution {
 /** Frames on the events WebSocket (GET /api/v1/events). */
 export type WorkerEvent =
   { type: 'snapshot'; jobs: Job[] } | { type: 'job'; job: Job } | { type: 'job-removed'; id: string }
+
+/** GET /api/v1/fs/properties */
+export interface Properties {
+  entry: Entry
+  owner: string
+  group: string
+  atime: string
+  ctime: string
+  /** The user owns it, so may change its permissions. */
+  mine: boolean
+  free: number
+  capacity: number
+}
+
+/** Lines of GET /api/v1/fs/usage */
+export interface Usage {
+  items: number
+  size: number
+  unreadable: number
+  done: boolean
+}
