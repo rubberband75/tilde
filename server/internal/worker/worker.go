@@ -111,6 +111,7 @@ func (w *Worker) Handler() http.Handler {
 
 	m.HandleFunc("GET /api/v1/fs/list", w.handleList)
 	m.HandleFunc("GET /api/v1/fs/stat", w.handleStat)
+	m.HandleFunc("GET /api/v1/fs/search", w.handleSearch)
 	m.HandleFunc("GET /api/v1/fs/content", w.handleDownload)
 	m.HandleFunc("PUT /api/v1/fs/content", w.handleUpload)
 	m.HandleFunc("POST /api/v1/fs/mkdir", w.handleMkdir)

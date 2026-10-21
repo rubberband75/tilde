@@ -20,7 +20,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from 'reka-ui'
-import { baseName, dirName, fsApi, joinPath, uniqueName } from '@/api/fs'
+import { baseName, dirName, fsApi, joinPath, searchStream, uniqueName } from '@/api/fs'
 import type { Entry, Mount, Place, TrashItem } from '@/api/types'
 import type { AppContext } from '@/apps/types'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
@@ -59,6 +59,14 @@ const zoom = ref<Record<ViewMode, number>>({
   list: savedZoom('list'),
 })
 const view = ref<InstanceType<typeof ItemsView> | null>(null)
+
+// Search (Ctrl+F): results replace the folder's items while a query is set.
+const searchOpen = ref(false)
+const query = ref('')
+const searchResults = shallowRef<Entry[]>([])
+const searching = ref(false)
+const searchTruncated = ref(false)
+const searchInput = ref<HTMLInputElement | null>(null)
 const selected = ref(new Set<string>())
 const renaming = ref<string | null>(null)
 const renameValue = ref('')
@@ -104,7 +112,22 @@ const isComputer = computed(() => location.value === COMPUTER)
 const trashFilesDir = computed(() => places.value.find((p) => p.id === 'trash')?.path ?? '')
 const placeIcons = computed(() => new Map(places.value.filter((p) => p.id !== 'trash').map((p) => [p.path, p.icon])))
 
+const searchActive = computed(() => searchOpen.value && isPath.value && query.value.trim() !== '')
+
 const items = computed<Item[]>(() => {
+  if (searchActive.value) {
+    return searchResults.value.map((e) => ({
+      key: e.path,
+      name: e.name,
+      icon: iconsForEntry(e, placeIcons.value),
+      type: mimeLabel(e.mime),
+      size: e.type === 'dir' ? undefined : e.size,
+      mtime: e.mtime,
+      mtimeMs: mtimeMs(e.mtime),
+      location: dirName(e.path),
+      entry: e,
+    }))
+  }
   if (isComputer.value) {
     return mounts.value.map((m) => ({
       key: m.mountPoint,
@@ -201,6 +224,10 @@ const statusText = computed(() => {
   }
   if (sel.length > 1) return `${sel.length} items selected`
   const n = items.value.length
+  if (searchActive.value) {
+    if (searching.value) return `Searching… ${n} found`
+    return `${n === 1 ? '1 result' : `${n} results`}${searchTruncated.value ? ' (stopped at the first 5000)' : ''}`
+  }
   return n === 1 ? '1 item' : `${n} items`
 })
 
@@ -256,6 +283,64 @@ async function loadFolder(path: string, signal: AbortSignal) {
   shownPath = path
 }
 
+let searchAbort: AbortController | undefined
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+watch([query, searchOpen, showHidden, location], () => {
+  clearTimeout(searchTimer)
+  searchAbort?.abort()
+  searchResults.value = []
+  // "Searching…" from the first keystroke, not "0 results" during the delay.
+  searching.value = searchActive.value
+  if (searchActive.value) searchTimer = setTimeout(runSearch, 300)
+})
+
+async function runSearch() {
+  searchAbort?.abort()
+  const ac = new AbortController()
+  searchAbort = ac
+  searching.value = true
+  searchTruncated.value = false
+  error.value = ''
+  const acc: Entry[] = []
+  let last = 0
+  try {
+    const end = await searchStream(
+      location.value,
+      query.value.trim(),
+      showHidden.value,
+      (batch) => {
+        acc.push(...batch)
+        if (performance.now() - last > 250) {
+          searchResults.value = acc.slice()
+          last = performance.now()
+        }
+      },
+      ac.signal,
+    )
+    searchTruncated.value = !!end.truncated
+  } catch (e) {
+    if (!ac.signal.aborted) error.value = (e as Error).message
+  } finally {
+    if (!ac.signal.aborted) {
+      searchResults.value = acc
+      searching.value = false
+    }
+  }
+}
+
+function openSearch() {
+  if (!isPath.value) return
+  searchOpen.value = true
+  void nextTick(() => searchInput.value?.select())
+}
+
+function closeSearch() {
+  searchOpen.value = false
+  query.value = ''
+  viewEl.value?.focus()
+}
+
 function navigate(to: string, push = true) {
   if (to === location.value) {
     void load()
@@ -265,6 +350,8 @@ function navigate(to: string, push = true) {
     backStack.value.push(location.value)
     forwardStack.value = []
   }
+  searchOpen.value = false
+  query.value = ''
   location.value = to
   selected.value = new Set()
   renaming.value = null
@@ -611,6 +698,7 @@ function onKey(e: KeyboardEvent) {
   else if (alt && e.key === 'ArrowLeft') goBack()
   else if (alt && e.key === 'ArrowRight') goForward()
   else if (ctrl && e.key.toLowerCase() === 'h') toggleHidden()
+  else if (ctrl && e.key.toLowerCase() === 'f') openSearch()
   else if (ctrl && e.key.toLowerCase() === 'a') selected.value = new Set(items.value.map((i) => i.key))
   else if (ctrl && (e.key === '+' || e.key === '=')) setZoom(1)
   else if (ctrl && e.key === '-') setZoom(-1)
@@ -624,6 +712,7 @@ let offFs: (() => void) | undefined
 onMounted(async () => {
   offFs = onFsChanged((dir) => {
     if (dir === location.value || (isTrash.value && dir === trashFilesDir.value)) void load()
+    if (searchActive.value && (dir === location.value || dir.startsWith(location.value + '/'))) void runSearch()
   })
   void load()
   try {
@@ -663,6 +752,15 @@ onBeforeUnmount(() => {
           <span v-if="c.label">{{ c.label }}</span>
         </button>
       </nav>
+      <button
+        class="btn icon-only"
+        :class="{ active: searchOpen }"
+        title="Search (Ctrl+F)"
+        :disabled="!isPath"
+        @click="searchOpen ? closeSearch() : openSearch()"
+      >
+        <SymbolicIcon name="search" />
+      </button>
       <div class="view-switch">
         <button
           class="btn icon-only"
@@ -682,6 +780,19 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </header>
+    <div v-if="searchOpen" class="searchbar">
+      <SymbolicIcon name="search" />
+      <input
+        ref="searchInput"
+        v-model="query"
+        class="entry"
+        :placeholder="`Search in “${title}”`"
+        aria-label="Search"
+        @keydown.esc.prevent="closeSearch"
+        @keydown.enter.prevent="viewEl?.focus()"
+        @keydown.down.prevent="viewEl?.focus()"
+      />
+    </div>
 
     <div class="body">
       <aside class="sidebar">
@@ -733,7 +844,7 @@ onBeforeUnmount(() => {
               :sort-key="sortKey"
               :sort-desc="sortDesc"
               :date-label="isTrash ? 'Deleted' : 'Modified'"
-              :show-location="false"
+              :show-location="searchActive"
               @item-click="click"
               @item-open="open"
               @item-context="onItemContext"
@@ -746,7 +857,8 @@ onBeforeUnmount(() => {
               @rename-cancel="cancelRename"
             />
             <p v-if="error" class="message error">{{ error }}</p>
-            <p v-else-if="!loading && items.length === 0" class="message dim">
+            <p v-else-if="searchActive && !searching && items.length === 0" class="message dim">No results</p>
+            <p v-else-if="!searchActive && !loading && items.length === 0" class="message dim">
               {{ isTrash ? 'Trash is empty' : 'This folder is empty' }}
             </p>
           </div>
@@ -907,6 +1019,22 @@ onBeforeUnmount(() => {
 .crumb.current {
   background: var(--button-active-bg);
   font-weight: bold;
+}
+.toolbar > .active {
+  background: var(--button-active-bg);
+}
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--headerbar-bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--view-dim-fg);
+}
+.searchbar .entry {
+  flex: 1;
+  max-width: 480px;
 }
 .view-switch {
   display: flex;

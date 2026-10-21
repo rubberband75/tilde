@@ -57,7 +57,7 @@ to; tick items off as they land.
 - [ ] Properties dialog (permissions, owner, size of folders)
 - [x] Huge directories: streamed listing (NDJSON batches), virtualized grid and list (50 000 entries in about half a second)
 - [x] Sorting (name, size, type, date; reversed; natural order; folders first), zoom levels (Ctrl+±, Ctrl+wheel), arrow-key navigation
-- [ ] Search
+- [x] Search (Ctrl+F): recursive name search streamed from the worker, Location column
 - [x] MIME sniffing for files without a known extension (budgeted in listings)
 - [ ] Bookmarks (`~/.config/gtk-3.0/bookmarks`)
 

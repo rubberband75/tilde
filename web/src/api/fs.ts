@@ -76,25 +76,26 @@ export function uniqueName(base: string, names: Set<string>): string {
   }
 }
 
-type ListLine =
+type StreamLine =
   | { path: string; parent?: string }
   | { entries: Entry[] }
-  | { done: true; total: number }
+  | { done: true; total: number; truncated?: boolean }
   | { error: string; code: string }
 
 /**
- * Streams a folder listing (NDJSON, see docs/api.md): onEntries gets each
- * batch as it arrives, unsorted. Resolves when the listing is complete.
+ * Reads an NDJSON response of entries (a streamed listing or a search, see
+ * docs/api.md): onEntries gets each batch as it arrives. Resolves with the
+ * final line when the stream is complete.
  */
-export async function listStream(
-  path: string,
+async function readEntryStream(
+  url: string,
   onEntries: (batch: Entry[]) => void,
   signal?: AbortSignal,
-): Promise<void> {
-  const url = buildUrl('/api/v1/fs/list', { path, stream: 1 })
+): Promise<{ total: number; truncated?: boolean }> {
   const res = await fetch(url, { credentials: 'same-origin', signal, headers: { Accept: 'application/x-ndjson' } })
+  const path = url.split('?')[0]!
   if (!res.ok || !res.body) {
-    await handleResponse(res, '/api/v1/fs/list')
+    await handleResponse(res, path)
     throw new ApiError(res.status, 'error', res.statusText)
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -108,11 +109,27 @@ export async function listStream(
       const line = buf.slice(0, nl)
       buf = buf.slice(nl + 1)
       if (!line) continue
-      const msg = JSON.parse(line) as ListLine
+      const msg = JSON.parse(line) as StreamLine
       if ('entries' in msg) onEntries(msg.entries)
       else if ('error' in msg) throw new ApiError(500, msg.code, msg.error)
-      else if ('done' in msg) return
+      else if ('done' in msg) return msg
     }
   }
-  throw new ApiError(0, 'network', 'The folder listing was cut off.')
+  throw new ApiError(0, 'network', 'The response was cut off.')
+}
+
+/** Streams a folder listing in unsorted batches. */
+export function listStream(path: string, onEntries: (batch: Entry[]) => void, signal?: AbortSignal) {
+  return readEntryStream(buildUrl('/api/v1/fs/list', { path, stream: 1 }), onEntries, signal)
+}
+
+/** Searches below path for names containing every word of q. */
+export function searchStream(
+  path: string,
+  q: string,
+  hidden: boolean,
+  onEntries: (batch: Entry[]) => void,
+  signal?: AbortSignal,
+) {
+  return readEntryStream(buildUrl('/api/v1/fs/search', { path, q, hidden: hidden ? 1 : undefined }), onEntries, signal)
 }
