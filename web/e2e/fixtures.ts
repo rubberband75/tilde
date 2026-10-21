@@ -31,7 +31,7 @@ export class Api {
     expect([201, 409]).toContain(res.status())
   }
 
-  async write(path: string, body: string) {
+  async write(path: string, body: string | Buffer) {
     const res = await this.request.put(`/api/v1/fs/content?path=${encodeURIComponent(path)}&overwrite=1`, {
       data: body,
       headers: this.headers,
@@ -53,6 +53,12 @@ export class Api {
     if (res.status() !== 202) return
     // Not the job's state: an open desktop dismisses finished jobs.
     for (const p of paths) await expect.poll(() => this.exists(p)).toBe(false)
+  }
+
+  /** Drops a background picked in Tilde, so the desktop follows Cinnamon (or the theme). */
+  async resetBackground() {
+    const res = await this.request.put('/api/v1/desktop/background', { data: { reset: true }, headers: this.headers })
+    expect(res.status(), await res.text()).toBe(200)
   }
 
   /** Clears Tilde's saved desktop layout (an empty saved layout: no Nemo seed). */

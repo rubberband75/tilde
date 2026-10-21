@@ -70,7 +70,7 @@ to; tick items off as they land.
 - [x] Trash icon shows full/empty
 - [x] **Control WebSocket with inotify events**: clients name the folders they show, the worker watches them and pushes changes; replaces the desktop's 10 s polling (D34)
 - [x] Remember icon positions: drag to any grid cell, saved per user, first layout taken from Nemo's; Organize Desktop by Name (D36)
-- [ ] Wallpaper (from the user's Cinnamon settings or a picker)
+- [x] Wallpaper: the user's Cinnamon background by default; a Backgrounds picker (Cinnamon's collections, Pictures, added folders; aspect, gradient, colors) saves Tilde's own (D37)
 - [ ] Per-drive trash; mounts and removable drives via udisks2
 
 ## Phase 5 — Hardening

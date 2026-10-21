@@ -283,6 +283,24 @@ Nemo's metadata (moves in a small browser window would rearrange the real
 desktop, and it needs gvfsd-metadata over D-Bus); pixel positions (break
 when the window size changes).
 
+**D37 — Desktop background: Cinnamon's by default, Tilde's own once picked** (2026-10-21, accepted)
+The desktop shows the user's Cinnamon background
+(`org.cinnamon.desktop.background`: picture, aspect, colors, gradient),
+read with `gsettings` (dconf's database, no session bus needed), drawn
+with CSS as Cinnamon draws it. The Backgrounds app (desktop menu: Change
+Desktop Background) lists what Cinnamon's Backgrounds settings lists
+(the wallpaper XML lists, Pictures, added folders) and saves a choice as
+Tilde's own setting in `~/.config/tilde/desktop-background.json`; "Use
+Cinnamon's Background" drops it. Pictures are loaded through
+`/api/v1/fs/content`, so the kernel decides what the user may show.
+Changes reach other open clients on their next load, not live. Why: same
+pattern as the icon layout (D36): a Mint user's desktop looks like theirs
+from the first login, and trying backgrounds in a browser never changes
+the real desktop. Rejected: writing Cinnamon's gsettings (needs dconf over
+the session bus, and changes the real desktop); a Tilde-only background
+(ignores what the user already chose); slideshow XML backgrounds (shown as
+colors only for now).
+
 ---
 
 ## Open decisions

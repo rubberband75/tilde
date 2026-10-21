@@ -185,3 +185,23 @@ export interface DesktopLayout {
   /** Nemo's arrangement in screen pixels, to start from; grid is its cell size. */
   nemo?: { grid?: [number, number]; icons: Record<string, { x: number; y: number }> }
 }
+
+/** GET /api/v1/desktop/background, in Cinnamon's terms (org.cinnamon.desktop.background). */
+export interface Background {
+  /** tilde: picked in Tilde; cinnamon: the user's Cinnamon background; default: neither (theme background). */
+  source: 'tilde' | 'cinnamon' | 'default'
+  /** Absolute path; empty for colors only. */
+  picture: string
+  options: BackgroundOptions
+  primary: string
+  secondary: string
+  shading: 'solid' | 'vertical' | 'horizontal'
+}
+
+export type BackgroundOptions = 'none' | 'wallpaper' | 'centered' | 'scaled' | 'stretched' | 'zoom' | 'spanned'
+
+/** GET /api/v1/desktop/backgrounds */
+export interface BackgroundCollection {
+  name: string
+  images: Entry[]
+}

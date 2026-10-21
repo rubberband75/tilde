@@ -1,5 +1,7 @@
 import { api, ApiError, buildUrl, handleResponse, request } from './client'
 import type {
+  Background,
+  BackgroundCollection,
   Bookmark,
   Cell,
   DesktopLayout,
@@ -24,6 +26,13 @@ export const fsApi = {
     api.post<{ bookmarks: Bookmark[] }>('/api/v1/bookmarks', { path, name }).then((r) => r.bookmarks),
   removeBookmark: (path: string) =>
     request<{ bookmarks: Bookmark[] }>('DELETE', buildUrl('/api/v1/bookmarks', { path })).then((r) => r.bookmarks),
+  background: () => api.get<Background>('/api/v1/desktop/background'),
+  /** Saves Tilde's own background; returns the one now shown. */
+  setBackground: (bg: Omit<Background, 'source'>) => api.put<Background>('/api/v1/desktop/background', bg),
+  /** Drops Tilde's background, so the desktop follows Cinnamon's again. */
+  resetBackground: () => api.put<Background>('/api/v1/desktop/background', { reset: true }),
+  backgroundCollections: () =>
+    api.get<{ collections: BackgroundCollection[] }>('/api/v1/desktop/backgrounds').then((r) => r.collections),
   desktopLayout: () => api.get<DesktopLayout>('/api/v1/desktop/layout'),
   /** Merges positions into the desktop layout (null removes one); replace starts from nothing. */
   saveDesktopLayout: (positions: Record<string, Cell | null>, replace = false) =>

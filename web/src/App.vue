@@ -3,6 +3,7 @@ import { onMounted, watch } from 'vue'
 import Desktop from '@/shell/Desktop.vue'
 import LoginScreen from '@/shell/LoginScreen.vue'
 import { loadIconIndex } from '@/icons/theme'
+import { useBackground } from '@/stores/background'
 import { useClipboard } from '@/stores/clipboard'
 import { useDialogs } from '@/stores/dialogs'
 import { useJobs } from '@/stores/jobs'
@@ -15,6 +16,7 @@ const wm = useWindows()
 const jobs = useJobs()
 const dialogs = useDialogs()
 const clipboard = useClipboard()
+const background = useBackground()
 
 document.documentElement.dataset.theme = currentStyle.theme
 
@@ -29,6 +31,7 @@ watch(
       jobs.disconnect()
       dialogs.reset()
       clipboard.clear()
+      background.clear()
     }
   },
 )

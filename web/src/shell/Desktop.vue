@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useBackground } from '@/stores/background'
 import DesktopIcons from './DesktopIcons.vue'
 import Dialogs from './Dialogs.vue'
 import JobsPanel from './JobsPanel.vue'
@@ -9,10 +10,12 @@ import WindowLayer from '@/wm/WindowLayer.vue'
 import { useWindows } from '@/stores/windows'
 
 const wm = useWindows()
+const background = useBackground()
 const workArea = ref<HTMLElement | null>(null)
 let ro: ResizeObserver | undefined
 
 onMounted(() => {
+  void background.load()
   ro = new ResizeObserver(([entry]) => {
     if (entry) wm.setArea(entry.contentRect.width, entry.contentRect.height)
   })
@@ -22,7 +25,7 @@ onBeforeUnmount(() => ro?.disconnect())
 </script>
 
 <template>
-  <div class="desktop">
+  <div class="desktop" :style="background.style">
     <div ref="workArea" class="work-area">
       <DesktopIcons />
       <WindowLayer />

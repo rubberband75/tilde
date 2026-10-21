@@ -80,6 +80,7 @@ export async function handleResponse<T>(res: Response, path: string): Promise<T>
 export const api = {
   get: <T>(path: string, query?: Query) => request<T>('GET', path, { query }),
   post: <T>(path: string, json?: unknown) => request<T>('POST', path, { json }),
+  put: <T>(path: string, json?: unknown) => request<T>('PUT', path, { json }),
   del: <T>(path: string) => request<T>('DELETE', path),
 }
 

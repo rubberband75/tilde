@@ -453,6 +453,7 @@ onBeforeUnmount(() => {
           </ContextMenuItem>
           <ContextMenuSeparator class="separator" />
           <ContextMenuItem class="item" @select="organizeByName">Organize Desktop by Name</ContextMenuItem>
+          <ContextMenuItem class="item" @select="wm.open('backgrounds')">Change Desktop Background</ContextMenuItem>
           <ContextMenuItem class="item" @select="load">Refresh</ContextMenuItem>
         </template>
       </ContextMenuContent>

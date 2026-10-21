@@ -36,6 +36,17 @@ export const apps: AppManifest[] = [
     component: () => import('./properties/PropertiesApp.vue'),
   },
   {
+    id: 'backgrounds',
+    name: 'Backgrounds',
+    comment: 'Change your desktop background',
+    icon: 'preferences-desktop-wallpaper',
+    category: 'Preferences',
+    singleInstance: true,
+    defaultSize: { w: 900, h: 580 },
+    minSize: { w: 480, h: 340 },
+    component: () => import('./backgrounds/BackgroundsApp.vue'),
+  },
+  {
     id: 'system-info',
     name: 'System Info',
     comment: 'View information about this computer',

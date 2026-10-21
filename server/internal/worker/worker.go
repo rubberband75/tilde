@@ -127,6 +127,9 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("DELETE /api/v1/bookmarks", w.handleBookmarkRemove)
 	m.HandleFunc("GET /api/v1/desktop/layout", w.handleDesktopLayout)
 	m.HandleFunc("POST /api/v1/desktop/layout", w.handleDesktopLayoutSave)
+	m.HandleFunc("GET /api/v1/desktop/background", w.handleBackground)
+	m.HandleFunc("PUT /api/v1/desktop/background", w.handleBackgroundSet)
+	m.HandleFunc("GET /api/v1/desktop/backgrounds", w.handleBackgrounds)
 
 	m.HandleFunc("GET /api/v1/fs/list", w.handleList)
 	m.HandleFunc("GET /api/v1/fs/stat", w.handleStat)

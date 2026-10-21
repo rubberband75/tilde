@@ -167,7 +167,10 @@ App.vue ── LoginScreen (logged out)
 - **Folder changes** (`src/lib/fswatch.ts`): Files and the desktop register
   the folders they show (`useWatchedDirs`); the events socket sends the set
   to the worker and turns its `fs` events into `emitFsChanged`
-  (`src/lib/bus.ts`), the same signal the shell's own file operations raise. Files and the desktop share `src/lib/fileops.ts`
+  (`src/lib/bus.ts`), the same signal the shell's own file operations raise.
+- **Desktop background** (`src/stores/background.ts`): Cinnamon's or Tilde's
+  own background (D37), turned into CSS on the desktop; the Backgrounds app
+  (`src/apps/backgrounds`) changes it. Files and the desktop share `src/lib/fileops.ts`
   (paste, trash, permanent delete) and `src/lib/dnd.ts` (drag and drop).
 - **Files views** (`src/apps/files/ItemsView.vue`): a virtualized grid and
   list with fixed cell sizes per zoom level, so huge folders render only what
