@@ -27,6 +27,7 @@ import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitBookmarksChanged, emitFsChanged, onBookmarksChanged, onFsChanged } from '@/lib/bus'
+import { useWatchedDirs } from '@/lib/fswatch'
 import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob } from '@/lib/fileops'
 import { formatSize, mimeLabel } from '@/lib/format'
@@ -238,7 +239,11 @@ let loadAbort: AbortController | undefined
 /** The folder whose listing is on screen, so a refresh can keep it until the new one is complete. */
 let shownPath = ''
 
+/** A change arrived while a listing was loading; load once more after it. */
+let refreshQueued = false
+
 async function load() {
+  refreshQueued = false
   loadAbort?.abort()
   const ac = new AbortController()
   loadAbort = ac
@@ -255,8 +260,21 @@ async function load() {
     trashItems.value = []
     shownPath = ''
   } finally {
-    if (loadAbort === ac) loading.value = false
+    if (loadAbort === ac) {
+      loading.value = false
+      if (refreshQueued) void load()
+    }
   }
+}
+
+/**
+ * Reloads after a change. Unlike load it never cuts a running listing
+ * short, so a folder that keeps changing (a big copy into it) still
+ * refreshes a few times a second instead of never finishing.
+ */
+function refresh() {
+  if (loading.value) refreshQueued = true
+  else void load()
 }
 
 /**
@@ -755,11 +773,15 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault()
 }
 
+// The worker reports changes to the folder on screen (the trash's files
+// folder for the Trash view) over the events socket.
+useWatchedDirs(() => [isPath.value ? location.value : isTrash.value ? trashFilesDir.value : ''])
+
 let offFs: (() => void) | undefined
 let offBookmarks: (() => void) | undefined
 onMounted(async () => {
   offFs = onFsChanged((dir) => {
-    if (dir === location.value || (isTrash.value && dir === trashFilesDir.value)) void load()
+    if (dir === location.value || (isTrash.value && dir === trashFilesDir.value)) refresh()
     if (searchActive.value && (dir === location.value || dir.startsWith(location.value + '/'))) void runSearch()
   })
   offBookmarks = onBookmarksChanged(loadBookmarks)

@@ -1,15 +1,22 @@
-// The events WebSocket: the worker pushes job progress (and, in phase 4,
-// filesystem changes) instead of the browser polling. It reconnects with
-// backoff; every connection starts with a full snapshot, so nothing is lost
-// while it was down.
+// The events WebSocket: the worker pushes job progress and changes to the
+// folders the client watches, instead of the browser polling. It reconnects
+// with backoff; every connection starts with a full job snapshot, and
+// onOpen lets the caller resend its watches and refresh what it may have
+// missed while it was down.
 import { api, wsUrl } from './client'
-import type { WorkerEvent } from './types'
+import type { ClientMessage, WorkerEvent } from './types'
 
 export interface EventStream {
+  /** Sends a message if connected; onOpen covers the gaps. */
+  send(msg: ClientMessage): void
   close(): void
 }
 
-export function connectEvents(onEvent: (ev: WorkerEvent) => void): EventStream {
+export function connectEvents(
+  onEvent: (ev: WorkerEvent) => void,
+  onOpen?: (reconnected: boolean) => void,
+): EventStream {
+  let opened = false
   let ws: WebSocket | undefined
   let closed = false
   let retries = 0
@@ -21,6 +28,8 @@ export function connectEvents(onEvent: (ev: WorkerEvent) => void): EventStream {
     ws = socket
     socket.onopen = () => {
       retries = 0
+      onOpen?.(opened)
+      opened = true
     }
     socket.onmessage = (e) => {
       if (typeof e.data !== 'string') return
@@ -43,6 +52,9 @@ export function connectEvents(onEvent: (ev: WorkerEvent) => void): EventStream {
 
   open()
   return {
+    send(msg) {
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
+    },
     close() {
       closed = true
       clearTimeout(timer)

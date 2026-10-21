@@ -67,7 +67,7 @@ to; tick items off as they land.
 - [x] Desktop context menu: New Folder, Open in Terminal, Refresh
 - [x] Drop files on the desktop to upload
 - [x] Trash icon shows full/empty
-- [ ] **Control WebSocket with inotify events** (replace the 10 s polling in DesktopIcons and refresh in Files)
+- [x] **Control WebSocket with inotify events**: clients name the folders they show, the worker watches them and pushes changes; replaces the desktop's 10 s polling (D34)
 - [ ] Remember icon positions (Nemo stores them as gvfs metadata)
 - [ ] Wallpaper (from the user's Cinnamon settings or a picker)
 - [ ] Per-drive trash; mounts and removable drives via udisks2

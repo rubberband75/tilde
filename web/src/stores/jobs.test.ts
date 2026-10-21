@@ -53,6 +53,16 @@ describe('jobs store', () => {
   })
 })
 
+describe('fs events', () => {
+  it('pass changed folders on to the windows', () => {
+    const changed = vi.fn()
+    const off = onFsChanged(changed)
+    useJobs().onEvent({ type: 'fs', dirs: ['/home/me', '/home/me/Desktop'] })
+    expect(changed.mock.calls.map((c) => c[0])).toEqual(['/home/me', '/home/me/Desktop'])
+    off()
+  })
+})
+
 describe('affectedDirs', () => {
   it('lists source folders and the destination once', () => {
     expect(affectedDirs(job({ op: 'delete', dest: undefined, sources: ['/a/x', '/a/y', '/b/z'] }))).toEqual([

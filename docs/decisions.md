@@ -225,6 +225,25 @@ hostile files, as under Nemo, two at a time, in their own process group,
 killed after 20 s. Rejected: a private cache (duplicates Nemo's work and
 disk), generating in the browser (would download whole files).
 
+**D34 — Folder changes: clients name what they show, the worker uses inotify** (2026-10-21, accepted)
+Each client sends the folders on its screen over the events socket
+(`{"type":"watch","dirs"}`, replacing its previous set); the worker keeps
+one non-recursive inotify watch per folder, counted across clients, and
+publishes changed folders as `fs` events after collecting changes for
+200 ms. Reads are not changes (no `IN_ACCESS`/`IN_CLOSE_NOWRITE`), so the
+worker's own listing, sniffing and thumbnailing never cause a reload, and
+file contents count when a writer closes (`IN_CLOSE_WRITE`), not on every
+write. The shell's own operations still announce their result at once, and
+Files never cuts a running listing short for a change (it reloads once
+more afterwards), so a folder that keeps changing still refreshes. After a
+reconnect the client resends its set and reloads, since missed changes are
+not replayed. Why: the folders on screen are exactly the ones whose changes
+matter, a watch per folder is cheap, and the events socket already exists
+(D11, D31). Rejected: polling (the desktop polled every 10 s); recursive
+watches (a watch per subfolder of a home folder can exhaust
+`max_user_watches`, and a window shows one folder); fanotify (needs
+`CAP_SYS_ADMIN`); per-event messages (a big copy would flood the socket).
+
 ---
 
 ## Open decisions
@@ -236,6 +255,6 @@ disk), generating in the browser (would download whole files).
 | Per-drive trash | `$topdir/.Trash-$uid` for other filesystems | implement with udisks | Phase 4 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |
-| Events | inotify and notifications on the events WebSocket (job progress done, D31) | per D11 | Phase 4 |
+| Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |
 | Packaging | `.deb` with systemd unit (depends on libpam0g); update method | nfpm or debhelper | Before first release |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |

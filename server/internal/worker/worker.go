@@ -45,6 +45,7 @@ type Worker struct {
 	trash      *Trash
 	terms      *terminalManager
 	events     *eventHub
+	watcher    *dirWatcher
 	jobs       *jobManager
 }
 
@@ -84,6 +85,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		trash:      trash,
 		terms:      newTerminalManager(info.Shell, info.Home),
 		events:     events,
+		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
 		jobs:       newJobManager(events, filepath.Join(trash.Dir(), "files")),
 	}
 }
@@ -175,6 +177,7 @@ func (w *Worker) handleHello(rw http.ResponseWriter, r *http.Request) {
 
 // Shutdown stops file jobs and hangs up all terminals, as logging out does.
 func (w *Worker) Shutdown() {
+	w.watcher.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 }

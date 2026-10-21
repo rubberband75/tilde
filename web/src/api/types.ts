@@ -134,7 +134,14 @@ export interface Resolution {
 
 /** Frames on the events WebSocket (GET /api/v1/events). */
 export type WorkerEvent =
-  { type: 'snapshot'; jobs: Job[] } | { type: 'job'; job: Job } | { type: 'job-removed'; id: string }
+  | { type: 'snapshot'; jobs: Job[] }
+  | { type: 'job'; job: Job }
+  | { type: 'job-removed'; id: string }
+  /** Watched folders whose contents changed. */
+  | { type: 'fs'; dirs: string[] }
+
+/** Client → worker on the events WebSocket: the folders to watch (replaces the previous set). */
+export type ClientMessage = { type: 'watch'; dirs: string[] }
 
 /** GET /api/v1/fs/properties */
 export interface Properties {

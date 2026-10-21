@@ -74,7 +74,9 @@ could already do.
   `renameat2(RENAME_NOREPLACE)`; copies go through a temporary file; deletes
   walk directory descriptors so a swapped-in symlink is never followed.
 - Pushes events on a WebSocket (`events.go`): a snapshot of all jobs on
-  connect, then every change as a whole job object. Phase 4 adds inotify.
+  connect, then every change as a whole job object, and changes to the
+  folders clients show (`watch.go`: one inotify watch per folder for all
+  clients, changes coalesced for 200 ms; D34).
 - Streams big listings and searches as NDJSON, sniffs MIME types of
   extensionless files (budgeted per listing), and makes thumbnails into the
   shared freedesktop cache with the host's thumbnailers (D33).
@@ -161,7 +163,11 @@ App.vue ── LoginScreen (logged out)
 - **File jobs** (`src/stores/jobs.ts`, `src/shell/JobsPanel.vue`): the store
   mirrors the worker's jobs over the events WebSocket (`src/api/events.ts`);
   the panel shows progress and the conflict dialog, and folders a job touched
-  reload when it ends. Files and the desktop share `src/lib/fileops.ts`
+  reload when it ends.
+- **Folder changes** (`src/lib/fswatch.ts`): Files and the desktop register
+  the folders they show (`useWatchedDirs`); the events socket sends the set
+  to the worker and turns its `fs` events into `emitFsChanged`
+  (`src/lib/bus.ts`), the same signal the shell's own file operations raise. Files and the desktop share `src/lib/fileops.ts`
   (paste, trash, permanent delete) and `src/lib/dnd.ts` (drag and drop).
 - **Files views** (`src/apps/files/ItemsView.vue`): a virtualized grid and
   list with fixed cell sizes per zoom level, so huge folders render only what

@@ -16,6 +16,7 @@ import type { Entry } from '@/api/types'
 import FileIcon from '@/components/FileIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
+import { useWatchedDirs } from '@/lib/fswatch'
 import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob, type FileOpsHost } from '@/lib/fileops'
 import { openEntry } from '@/shell/actions'
@@ -64,7 +65,16 @@ const items = computed<Item[]>(() => [
     .map((e) => ({ key: e.path, name: e.name, icon: iconsForEntry(e), entry: e, open: () => openEntry(e) })),
 ])
 
+let loading = false
+let reloadQueued = false
+
+/** Reloads the icons; a request while one runs queues a single rerun. */
 async function load() {
+  if (loading) {
+    reloadQueued = true
+    return
+  }
+  loading = true
   try {
     if (!desktopDir.value) {
       const places = await fsApi.places()
@@ -76,6 +86,12 @@ async function load() {
     trashFull.value = trash.status === 'fulfilled' && trash.value.items.length > 0
   } catch {
     // Session problems are handled globally; keep the last known icons.
+  } finally {
+    loading = false
+    if (reloadQueued) {
+      reloadQueued = false
+      void load()
+    }
   }
 }
 
@@ -210,20 +226,18 @@ async function onDrop(e: DragEvent) {
   if (files.length) emitFsChanged(desktopDir.value)
 }
 
-let poll: ReturnType<typeof setInterval> | undefined
+// The worker reports changes to these folders (and the trash, for the full
+// or empty icon) over the events socket.
+useWatchedDirs(() => [desktopDir.value, trashFilesDir.value])
+
 let offFs: (() => void) | undefined
 onMounted(() => {
   void load()
-  // TODO(phase 4): replace polling with inotify events from the worker.
-  poll = setInterval(() => document.visibilityState === 'visible' && load(), 10_000)
   offFs = onFsChanged((dir) => {
     if (dir === desktopDir.value || dir === trashFilesDir.value) void load()
   })
 })
-onBeforeUnmount(() => {
-  clearInterval(poll)
-  offFs?.()
-})
+onBeforeUnmount(() => offFs?.())
 </script>
 
 <template>

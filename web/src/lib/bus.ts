@@ -1,5 +1,6 @@
-// Tiny event bus for "a directory changed" until the worker pushes inotify
-// events over the control WebSocket (docs/roadmap.md, phase 4).
+// Tiny event bus between windows. "A folder changed" comes from the worker's
+// inotify events (lib/fswatch.ts) and from the shell's own file operations,
+// which announce their result at once instead of waiting for the event.
 
 type Handler = (dir: string) => void
 const fsHandlers = new Set<Handler>()

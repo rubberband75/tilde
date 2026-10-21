@@ -141,7 +141,18 @@ its `.trashinfo`. Logging out cancels running jobs.
 a job changes (progress at most every 150 ms) and `{"type":"job-removed","id"}`.
 Events carry whole objects, so a client never has to merge partial updates.
 A client that falls too far behind is closed with 1013 and should reconnect.
-Phase 4 adds filesystem change events here.
+
+Folder changes (D34): the client sends `{"type":"watch","dirs":[...]}` with
+every folder it shows (absolute, clean paths; at most 256). Each message
+replaces the client's previous set, and resending a folder whose watch was
+lost (it was deleted and has come back) watches it again. The worker
+watches them with inotify, not recursively, and sends
+`{"type":"fs","dirs":[...]}` when entries are added, removed or renamed,
+change metadata or finish being written, or the folder itself goes away.
+Changes are collected for 200 ms, so a busy folder costs a few events a
+second. `fs` events go to every client of the user; ignore folders you do
+not show. After reconnecting, send the set again and reload what you show:
+changes made while disconnected are not replayed.
 
 ### Terminals
 
@@ -166,5 +177,5 @@ Terminal WebSocket:
 
 ## Planned
 
-- Filesystem change (inotify) and notification events on `/api/v1/events`.
+- Notification events on `/api/v1/events`.
 - `POST /api/auth/unlock` for the lock screen.

@@ -13,18 +13,26 @@ import (
 
 // The events WebSocket (GET /api/v1/events) is the control channel D11
 // planned: the worker pushes changes instead of the browser polling. It
-// carries job progress now; filesystem change notifications (inotify) join
-// it in phase 4.
+// carries job progress and changes to the folders the client watches.
 
 // event is one JSON text frame on the events socket.
 type event struct {
-	Type string `json:"type"` // "snapshot", "job", "job-removed"
+	Type string `json:"type"` // "snapshot", "job", "job-removed", "fs"
 	// snapshot: every job, sent first on each connection.
 	Jobs []JobInfo `json:"jobs,omitempty"`
 	// job: the whole changed job.
 	Job *JobInfo `json:"job,omitempty"`
 	// job-removed: the id of a dismissed job.
 	ID string `json:"id,omitempty"`
+	// fs: watched folders whose contents changed.
+	Dirs []string `json:"dirs,omitempty"`
+}
+
+// clientMessage is a frame from the client: {"type":"watch","dirs":[...]}
+// replaces the set of folders it wants "fs" events for.
+type clientMessage struct {
+	Type string   `json:"type"`
+	Dirs []string `json:"dirs"`
 }
 
 // eventBuffer is how many events a client may fall behind before it is
@@ -86,8 +94,18 @@ func (w *Worker) handleEvents(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.CloseNow()
-	// The client never sends anything; CloseRead notices when it goes.
-	ctx := c.CloseRead(context.Background())
+	// Room for maxWatchesPerClient long paths.
+	c.SetReadLimit(1 << 20)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// The reader owns the client's watches and drops them when the
+	// connection ends (the deferred CloseNow makes its Read fail).
+	go func() {
+		defer cancel()
+		watches := &watchSet{w: w.watcher}
+		defer watches.clear()
+		readClient(ctx, c, watches)
+	}()
 
 	first, ch, unsubscribe := w.events.subscribe(func() event {
 		return event{Type: "snapshot", Jobs: w.jobs.list()}
@@ -109,6 +127,21 @@ func (w *Worker) handleEvents(rw http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+}
+
+// readClient applies the client's watch messages until it disconnects.
+func readClient(ctx context.Context, c *websocket.Conn, watches *watchSet) {
+	for {
+		typ, b, err := c.Read(ctx)
+		if err != nil {
+			return
+		}
+		var m clientMessage
+		if typ != websocket.MessageText || json.Unmarshal(b, &m) != nil || m.Type != "watch" {
+			continue
+		}
+		watches.set(m.Dirs)
 	}
 }
 
