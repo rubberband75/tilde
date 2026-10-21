@@ -31,6 +31,8 @@ type Entry struct {
 	MTime   time.Time `json:"mtime"`
 	MIME    string    `json:"mime"`
 	Hidden  bool      `json:"hidden,omitempty"`
+	// Thumb is set when GET /api/v1/fs/thumbnail can make a thumbnail.
+	Thumb bool `json:"thumb,omitempty"`
 }
 
 // ListResponse is returned by GET /api/v1/fs/list.
@@ -85,6 +87,7 @@ func entryWithBudget(path string, lst fs.FileInfo, budget *int) Entry {
 		e.UID, e.GID = st.Uid, st.Gid
 	}
 	e.MIME = mimeFor(path, name, info, e.Broken, budget)
+	e.Thumb = !e.Broken && canThumbnail(path, e.MIME, info)
 	return e
 }
 

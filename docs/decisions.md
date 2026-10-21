@@ -214,6 +214,17 @@ forty in the e2e VM). Found by the e2e VM; `TestRepeatedLogins` guards it.
 Rejected: making pam_loginuid `optional` (loses the audit login uid and
 session id, which logind and auditing rely on).
 
+**D33 — Thumbnails follow the freedesktop spec** (2026-10-20, accepted)
+The worker makes thumbnails on demand into `~/.cache/thumbnails` exactly as
+the spec says (MD5 of the GLib-escaped file URI, `Thumb::URI` and
+`Thumb::MTime`, 0600 files, failures recorded under `fail/`), so Nemo and
+Tilde share one cache. Generation uses the host's `*.thumbnailer` files, as
+Nemo does, with a built-in scaler for PNG, JPEG and GIF when none is
+installed (no EXIF rotation). Thumbnailers run as the user on possibly
+hostile files, as under Nemo, two at a time, in their own process group,
+killed after 20 s. Rejected: a private cache (duplicates Nemo's work and
+disk), generating in the browser (would download whole files).
+
 ---
 
 ## Open decisions
@@ -221,7 +232,7 @@ session id, which logind and auditing rely on).
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
 | Absolute session lifetime | 12 h re-login vs lock-only like Mint | 12 h, confirm | Phase 5 |
-| Freedesktop compatibility beyond trash | thumbnail cache spec (`~/.cache/thumbnails`) and host thumbnailers; drives via udisks2 over D-Bus | follow the specs | Phase 3–4 |
+| Drives | mounts and removable drives via udisks2 over D-Bus (thumbnails done, D33) | follow the specs | Phase 4 |
 | Per-drive trash | `$topdir/.Trash-$uid` for other filesystems | implement with udisks | Phase 4 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |

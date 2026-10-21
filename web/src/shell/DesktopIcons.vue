@@ -13,7 +13,7 @@ import {
 } from 'reka-ui'
 import { fsApi, joinPath, uniqueName } from '@/api/fs'
 import type { Entry } from '@/api/types'
-import ThemeIcon from '@/components/ThemeIcon.vue'
+import FileIcon from '@/components/FileIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
 import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
           @dragleave="dropTarget === item.key && (dropTarget = null)"
           @drop="onIconDrop(item, $event)"
         >
-          <ThemeIcon :name="item.icon" :size="48" />
+          <FileIcon :name="item.icon" :size="48" :entry="item.entry" />
           <span class="label">{{ item.name }}</span>
         </button>
       </div>

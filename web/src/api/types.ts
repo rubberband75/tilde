@@ -22,6 +22,8 @@ export interface Entry {
   mtime: string
   mime: string
   hidden?: boolean
+  /** A thumbnail can be made (GET /api/v1/fs/thumbnail). */
+  thumb?: boolean
 }
 
 export interface ListResponse {

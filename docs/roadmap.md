@@ -53,7 +53,7 @@ to; tick items off as they land.
 - [x] **File-operation jobs**: copy/move/delete trees in the worker with progress, cancel, and Replace/Skip/Rename/Merge prompts; cut/copy/paste (D31)
 - [x] Permanent delete (Shift+Delete, Delete in the trash) with confirmation; delete offered for items that cannot be trashed
 - [x] Drag and drop between windows, the sidebar, the desktop (folders, Home, Trash) and terminals (types the quoted paths)
-- [ ] Thumbnails (freedesktop thumbnail cache, host thumbnailers)
+- [x] Thumbnails (freedesktop thumbnail cache shared with Nemo, host thumbnailers, built-in PNG/JPEG/GIF scaler)
 - [x] Properties dialog: type, size or live folder contents, location, link target, free space, dates; permissions as in Nemo (Alt+Enter)
 - [x] Huge directories: streamed listing (NDJSON batches), virtualized grid and list (50 000 entries in about half a second)
 - [x] Sorting (name, size, type, date; reversed; natural order; folders first), zoom levels (Ctrl+±, Ctrl+wheel), arrow-key navigation

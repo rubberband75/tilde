@@ -34,7 +34,12 @@ func startWorker(t *testing.T) (*http.Client, string) {
 	home := t.TempDir()
 	info.Home = home
 	info.Shell = "/bin/sh"
-	w := New(info, Options{DataHome: filepath.Join(home, ".local", "share"), ConfigHome: filepath.Join(home, ".config")})
+	w := New(info, Options{
+		DataHome:        filepath.Join(home, ".local", "share"),
+		ConfigHome:      filepath.Join(home, ".config"),
+		CacheHome:       filepath.Join(home, ".cache"),
+		ThumbnailerDirs: []string{filepath.Join(home, ".local", "share", "thumbnailers")},
+	})
 
 	serverEnd, clientEnd := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())

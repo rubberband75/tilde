@@ -5,7 +5,7 @@
 // and drops are owned by FilesApp; this component draws and reports events.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
-import ThemeIcon from '@/components/ThemeIcon.vue'
+import FileIcon from '@/components/FileIcon.vue'
 import { formatDate, formatSize } from '@/lib/format'
 import type { Item, SortKey, ViewMode } from './types'
 
@@ -179,7 +179,7 @@ function droppable(item: Item) {
           @drop="droppable(item) && emit('itemDrop', item, $event)"
         >
           <div class="col name">
-            <ThemeIcon :name="item.icon" :size="iconSize" />
+            <FileIcon :key="item.key" :name="item.icon" :size="iconSize" :entry="item.entry" />
             <input
               v-if="renaming === item.key"
               v-model="renameValue"

@@ -40,6 +40,7 @@ type Worker struct {
 	info       *userinfo.Info
 	hostname   string
 	configHome string
+	cacheHome  string
 	umask      os.FileMode
 	trash      *Trash
 	terms      *terminalManager
@@ -51,6 +52,9 @@ type Worker struct {
 type Options struct {
 	DataHome   string // $XDG_DATA_HOME, default ~/.local/share
 	ConfigHome string // $XDG_CONFIG_HOME, default ~/.config
+	CacheHome  string // $XDG_CACHE_HOME, default ~/.cache
+	// ThumbnailerDirs overrides where *.thumbnailer files are looked up.
+	ThumbnailerDirs []string
 }
 
 // New builds a Worker for info.
@@ -61,6 +65,13 @@ func New(info *userinfo.Info, opt Options) *Worker {
 	if opt.ConfigHome == "" {
 		opt.ConfigHome = xdgDir("XDG_CONFIG_HOME", filepath.Join(info.Home, ".config"))
 	}
+	if opt.CacheHome == "" {
+		opt.CacheHome = xdgDir("XDG_CACHE_HOME", filepath.Join(info.Home, ".cache"))
+	}
+	if opt.ThumbnailerDirs == nil {
+		opt.ThumbnailerDirs = thumbnailerDirs(opt.DataHome)
+	}
+	setThumbnailers(loadThumbnailers(opt.ThumbnailerDirs))
 	host, _ := os.Hostname()
 	trash := NewTrash(opt.DataHome)
 	events := newEventHub()
@@ -68,6 +79,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		info:       info,
 		hostname:   host,
 		configHome: opt.ConfigHome,
+		cacheHome:  opt.CacheHome,
 		umask:      readUmask(),
 		trash:      trash,
 		terms:      newTerminalManager(info.Shell, info.Home),
@@ -119,6 +131,7 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("GET /api/v1/fs/usage", w.handleUsage)
 	m.HandleFunc("POST /api/v1/fs/chmod", w.handleChmod)
 	m.HandleFunc("GET /api/v1/fs/content", w.handleDownload)
+	m.HandleFunc("GET /api/v1/fs/thumbnail", w.handleThumbnail)
 	m.HandleFunc("PUT /api/v1/fs/content", w.handleUpload)
 	m.HandleFunc("POST /api/v1/fs/mkdir", w.handleMkdir)
 	m.HandleFunc("POST /api/v1/fs/rename", w.handleRename)

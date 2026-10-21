@@ -54,7 +54,8 @@ Paths in query strings and bodies are absolute.
   "type": "file",            // "dir" | "file" | "other"
   "symlink": false, "target": "", "broken": false,
   "size": 11, "mode": "-rw-r--r--", "perm": 420, "uid": 1000, "gid": 1000,
-  "mtime": "2026-10-20T13:02:54Z", "mime": "text/plain", "hidden": false
+  "mtime": "2026-10-20T13:02:54Z", "mime": "text/plain", "hidden": false,
+  "thumb": false             // a thumbnail can be made
 }
 ```
 
@@ -74,6 +75,7 @@ content. A listing sniffs at most 1000 files; the rest fall back to
 | GET | `/api/v1/fs/usage?path=[&path=…]` | NDJSON progress about every 250 ms: `{items, size, unreadable, done}`, counting everything below the paths (like `du -x`: one filesystem, links not followed). Close the request to stop |
 | POST | `/api/v1/fs/chmod` | `{path, perm}` (0–0777) → `Entry`. Keeps setuid/setgid/sticky; refuses links; the kernel allows it only for the owner |
 | GET | `/api/v1/fs/stat?path=` | `Entry` (lstat; symlinks report their target's type) |
+| GET | `/api/v1/fs/thumbnail?path=&size=normal\|large[&v=mtime]` | PNG thumbnail (128 or 256 px) from the freedesktop cache (`~/.cache/thumbnails`, shared with Nemo), made on demand by the host's thumbnailers or, for PNG/JPEG/GIF, a built-in scaler. `404 no_thumbnail` if none can be made (failures are cached per the spec). Only for entries with `thumb: true` |
 | GET | `/api/v1/fs/content?path=[&download=1]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download |
 | PUT | `/api/v1/fs/content?path=[&overwrite=1]` | Body is the file. `201 Entry`; `409 exists` without overwrite |
 | POST | `/api/v1/fs/mkdir` | `{path}` → `201 Entry` |

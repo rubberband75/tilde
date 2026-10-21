@@ -38,6 +38,10 @@ export const fsApi = {
   restore: (names: string[]) => api.post<{ restored: string[] }>('/api/v1/trash/restore', { names }),
   emptyTrash: () => api.post<void>('/api/v1/trash/empty'),
 
+  /** URL of a file's thumbnail; mtime in the URL lets the browser cache it until the file changes. */
+  thumbnailUrl: (path: string, mtime: string, size: 'normal' | 'large') =>
+    buildUrl('/api/v1/fs/thumbnail', { path, size, v: mtime }),
+
   /** URL that streams a file. With download, the browser saves it. */
   contentUrl: (path: string, download = false) =>
     buildUrl('/api/v1/fs/content', { path, download: download ? '1' : undefined }),
