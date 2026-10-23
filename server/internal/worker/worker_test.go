@@ -27,6 +27,12 @@ import (
 // main server does.
 func startWorker(t *testing.T) (*http.Client, string) {
 	t.Helper()
+	return startWorkerWith(t, nil)
+}
+
+// startWorkerWith is startWorker with a logind connection (D41).
+func startWorkerWith(t *testing.T, logind *logindConn) (*http.Client, string) {
+	t.Helper()
 	info, err := userinfo.Current()
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +46,9 @@ func startWorker(t *testing.T) (*http.Client, string) {
 		CacheHome:       filepath.Join(home, ".cache"),
 		ThumbnailerDirs: []string{filepath.Join(home, ".local", "share", "thumbnailers")},
 	})
+	if logind != nil {
+		w.logind = logind
+	}
 
 	serverEnd, clientEnd := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())

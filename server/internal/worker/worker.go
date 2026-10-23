@@ -48,6 +48,7 @@ type Worker struct {
 	watcher    *dirWatcher
 	drives     *driveService
 	jobs       *jobManager
+	logind     *logindConn
 }
 
 // Options overrides locations, mainly for tests.
@@ -57,6 +58,11 @@ type Options struct {
 	CacheHome  string // $XDG_CACHE_HOME, default ~/.cache
 	// ThumbnailerDirs overrides where *.thumbnailer files are looked up.
 	ThumbnailerDirs []string
+	// LogindSession is the id of the worker's logind session (D41), which
+	// Run connects to after the hello. Without it, Session (tests) or
+	// nothing is followed, and logind is left alone.
+	LogindSession string
+	Session       logindSession
 }
 
 // New builds a Worker for info.
@@ -89,7 +95,15 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
 		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
 		jobs:       newJobManager(events, trash),
+		logind:     newLogindConn(opt),
 	}
+}
+
+func newLogindConn(opt Options) *logindConn {
+	if opt.LogindSession != "" {
+		return &logindConn{id: opt.LogindSession, ready: make(chan struct{})}
+	}
+	return readyLogind(opt.Session)
 }
 
 func xdgDir(env, def string) string {
@@ -168,7 +182,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("GET /api/v1/terminals/{id}/attach", w.handleTerminalAttach)
 
 	// For the server only (protocol.InternalHeader), never proxied.
-	m.HandleFunc("GET /internal/lock-settings", w.handleLockSettings)
+	m.HandleFunc("GET /internal/session", w.handleSession)
+	m.HandleFunc("PUT /internal/session/locked", w.handleSessionLocked)
 
 	m.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
@@ -194,6 +209,13 @@ func (w *Worker) Shutdown() {
 	w.drives.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
+	select {
+	case <-w.logind.ready:
+		if w.logind.s != nil {
+			w.logind.s.close()
+		}
+	default: // still connecting; the process is about to exit
+	}
 }
 
 // Serve runs the API on conn until the yamux session ends.
@@ -230,7 +252,7 @@ func Run() int {
 		slog.Error("worker: look up current user", "err", err)
 		return 1
 	}
-	w := New(info, Options{})
+	w := New(info, Options{LogindSession: os.Getenv("XDG_SESSION_ID")})
 	hello := protocol.WorkerHello{
 		Protocol: protocol.Version,
 		Version:  buildinfo.Version,
@@ -241,6 +263,9 @@ func Run() int {
 	if err := protocol.WriteLine(proto, hello); err != nil {
 		slog.Error("worker: write hello", "err", err)
 		return 1
+	}
+	if w.logind.id != "" {
+		go w.logind.connect()
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)

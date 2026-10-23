@@ -83,8 +83,11 @@ could already do.
 - Lists, unmounts and ejects drives through udisks2 on the system bus, as
   the user (`drives.go`).
 - Reads the user's screensaver settings with gsettings and streams the idle
-  lock delay to the server (`lock.go`, `/internal/lock-settings`, D40): the
-  only route the server calls for itself, never proxied.
+  lock delay to the server (`lock.go`, `/internal/session`, D40), and
+  follows its logind session (`logind.go`, D41): sets `LockedHint` when the
+  server says every browser is locked, and passes on logind's lock
+  requests. These `/internal/` routes are the server's own and never
+  proxied (`server/worker_session.go`).
 - Streams big listings and searches as NDJSON, sniffs MIME types of
   extensionless files (budgeted per listing), and makes thumbnails into the
   shared freedesktop cache with the host's thumbnailers (D33).

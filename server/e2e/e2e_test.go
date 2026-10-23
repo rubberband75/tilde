@@ -354,6 +354,90 @@ func TestLockAndUnlock(t *testing.T) {
 	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
 }
 
+// TestLogindLock checks the logind side of the lock (D41): the web
+// session's LockedHint follows Tilde's lock, and "loginctl lock-session"
+// locks the browsers. It reads logind on this machine, so it only runs
+// against a server on loopback.
+func TestLogindLock(t *testing.T) {
+	e := setup(t)
+	if ip := net.ParseIP(e.base.Hostname()); e.base.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		t.Skip("needs the server on this machine")
+	}
+	id := fields(e.shell(t, "echo session=$XDG_SESSION_ID"))["session"]
+	if id == "" {
+		t.Fatal("no XDG_SESSION_ID in the terminal")
+	}
+	lockedHint := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			out, _ := exec.Command("loginctl", "show-session", id, "-p", "LockedHint", "--value").Output()
+			got := strings.TrimSpace(string(out))
+			if got == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("LockedHint of session %s is %q, want %q", id, got, want)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	pass := os.Getenv("TILDE_PASS")
+	unlock := func() {
+		t.Helper()
+		decode(t, e.do(t, http.MethodPost, "/api/auth/unlock", map[string]string{"password": pass}), http.StatusOK, nil)
+	}
+
+	decode(t, e.do(t, http.MethodPost, "/api/auth/lock", nil), http.StatusNoContent, nil)
+	lockedHint("yes")
+	unlock()
+	lockedHint("no")
+
+	// This test's account is not the Tilde user. A Lock it sends straight
+	// to the user's worker, past the worker's match rules, must not count.
+	worker := fields(e.shell(t, "echo worker=$PPID"))["worker"]
+	list, err := exec.Command("busctl", "--system", "list", "--no-legend").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dest string
+	for _, line := range strings.Split(string(list), "\n") {
+		if f := strings.Fields(line); len(f) > 1 && strings.HasPrefix(f[0], ":") && f[1] == worker {
+			dest = f[0]
+		}
+	}
+	reply, err := exec.Command("busctl", "--system", "call", "org.freedesktop.login1", "/org/freedesktop/login1",
+		"org.freedesktop.login1.Manager", "GetSession", "s", id).Output()
+	path := strings.Trim(strings.TrimPrefix(strings.TrimSpace(string(reply)), "o "), `"`)
+	if dest == "" || err != nil {
+		t.Fatalf("worker %s on the bus as %q, session path %q: %v", worker, dest, path, err)
+	}
+	if out, err := exec.Command("dbus-send", "--system", "--type=signal", "--dest="+dest, path,
+		"org.freedesktop.login1.Session.Lock").CombinedOutput(); err != nil {
+		t.Fatalf("dbus-send: %v %s", err, out)
+	}
+	time.Sleep(2 * time.Second)
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
+
+	if out, err := exec.Command("sudo", "-n", "loginctl", "lock-session", id).CombinedOutput(); err != nil {
+		t.Skipf("cannot run loginctl lock-session: %v %s", err, out)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp := e.do(t, http.MethodGet, "/api/v1/hello", nil)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusLocked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("still %d after loginctl lock-session", resp.StatusCode)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	lockedHint("yes")
+	unlock()
+}
+
 // TestJobsRunAsTheUser checks that file jobs get the kernel's answer for the
 // user: they can neither read /etc/shadow nor delete files in /etc.
 func TestJobsRunAsTheUser(t *testing.T) {

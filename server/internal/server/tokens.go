@@ -33,6 +33,9 @@ type TokenStore struct {
 	// lockAfter returns how long a user's clients may go without input
 	// before they lock; 0 never locks. Nil never locks either.
 	lockAfter func(user string) time.Duration
+	// changed is called, with mu held, when a user's tokens are added,
+	// locked or removed (logind's LockedHint follows, D41).
+	changed func(user string)
 }
 
 type tokenInfo struct {
@@ -95,7 +98,36 @@ func (s *TokenStore) newLocked(user string) (string, error) {
 	now := s.now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.m[hashToken(tok)] = &tokenInfo{user: user, created: now, lastSeen: now, lastInput: now, ctx: ctx, cancel: cancel}
+	s.notify(user)
 	return tok, nil
+}
+
+func (s *TokenStore) notify(user string) {
+	if s.changed != nil {
+		s.changed(user)
+	}
+}
+
+// remove deletes the token stored under hash h. s.mu must be held.
+func (s *TokenStore) remove(h string, ti *tokenInfo) {
+	ti.cancel()
+	delete(s.m, h)
+	s.notify(ti.user)
+}
+
+// AllLocked reports whether no browser of user is unlocked: the logind
+// session's LockedHint (D41). With no browsers at all, nobody can use the
+// session without the password either.
+func (s *TokenStore) AllLocked(user string) bool {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ti := range s.m {
+		if ti.user == user && !ti.locked && now.Sub(ti.created) <= s.maxAge {
+			return false
+		}
+	}
+	return true
 }
 
 // get returns the live token for tok, dropping it if it has expired and
@@ -110,8 +142,7 @@ func (s *TokenStore) get(tok string, now time.Time) (*tokenInfo, string, bool) {
 		return nil, "", false
 	}
 	if now.Sub(ti.created) > s.maxAge {
-		ti.cancel()
-		delete(s.m, h)
+		s.remove(h, ti)
 		return nil, "", false
 	}
 	if !ti.locked && s.idle(ti, now) {
@@ -134,6 +165,7 @@ func (s *TokenStore) lock(ti *tokenInfo, reason string) {
 	ti.locked = true
 	ti.cancel()
 	slog.Info("lock", "user", ti.user, "reason", reason)
+	s.notify(ti.user)
 }
 
 func (ti *tokenInfo) view() Token {
@@ -199,8 +231,7 @@ func (s *TokenStore) BeginUnlock(tok string) bool {
 	}
 	ti.unlockTries++
 	if ti.unlockTries > maxUnlockTries {
-		ti.cancel()
-		delete(s.m, h)
+		s.remove(h, ti)
 		return false
 	}
 	return true
@@ -217,8 +248,7 @@ func (s *TokenStore) Rotate(tok string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	ti.cancel()
-	delete(s.m, h)
+	s.remove(h, ti)
 	fresh, err := s.newLocked(ti.user)
 	if err != nil {
 		return "", false
@@ -231,8 +261,7 @@ func (s *TokenStore) Revoke(tok string) {
 	h := hashToken(tok)
 	s.mu.Lock()
 	if ti, ok := s.m[h]; ok {
-		ti.cancel()
-		delete(s.m, h)
+		s.remove(h, ti)
 	}
 	s.mu.Unlock()
 }
@@ -242,8 +271,7 @@ func (s *TokenStore) RevokeUser(user string) {
 	s.mu.Lock()
 	for h, ti := range s.m {
 		if ti.user == user {
-			ti.cancel()
-			delete(s.m, h)
+			s.remove(h, ti)
 		}
 	}
 	s.mu.Unlock()
@@ -272,8 +300,7 @@ func (s *TokenStore) Sweep() {
 	defer s.mu.Unlock()
 	for h, ti := range s.m {
 		if now.Sub(ti.created) > s.maxAge {
-			ti.cancel()
-			delete(s.m, h)
+			s.remove(h, ti)
 		} else if !ti.locked && s.idle(ti, now) {
 			s.lock(ti, "idle")
 		}

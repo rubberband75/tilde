@@ -52,10 +52,15 @@ Proxied unchanged to the user's worker. Without a valid session:
 session is gone (the frontend returns to login). `423 locked` while this
 browser is locked. `502 worker_unavailable` if the worker stops responding.
 
-The worker also serves `GET /internal/lock-settings` (NDJSON
-`{source, lockAfter}` on connect and on change) to the server only: the
-server proxies nothing outside `/api/v1/`, and the route needs the
-`X-Tilde-Internal` header, which the proxy strips.
+The worker also serves two routes to the server only: the server proxies
+nothing outside `/api/v1/`, and they need the `X-Tilde-Internal` header,
+which the proxy strips.
+
+- `GET /internal/session`: NDJSON, `{"type":"settings", source, lockAfter}`
+  on connect and when the lock settings change (D40), and `{"type":"lock"}`
+  when logind asks the session to lock (D41).
+- `PUT /internal/session/locked` `{locked}` → `204`: sets the logind
+  session's `LockedHint`; `502 logind` if logind refuses.
 
 Paths in query strings and bodies are absolute.
 

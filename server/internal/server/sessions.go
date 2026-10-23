@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +52,12 @@ type UserSession struct {
 	// lockAfter is the user's idle lock delay, nil until the worker has
 	// reported it (D40).
 	lockAfter atomic.Pointer[time.Duration]
+	// lockRequested locks every browser of the user when logind asks the
+	// session to lock; allLocked says whether every browser is locked, for
+	// logind's LockedHint; hint wakes followLockedHint (D41).
+	lockRequested func()
+	allLocked     func() bool
+	hint          chan struct{}
 }
 
 // Done is closed when the session has ended.
@@ -71,73 +76,6 @@ func (us *UserSession) LockAfter() time.Duration {
 	return defaultLockAfter
 }
 
-// lockSettingsRetry is how long to wait before asking the worker again
-// after its lock settings stream ended while the session was running.
-const lockSettingsRetry = 30 * time.Second
-
-// followLockSettings keeps LockAfter current until the session ends: the
-// worker reads the user's screensaver settings (the server never opens
-// user files) and streams them on connect and whenever they change.
-func (us *UserSession) followLockSettings() {
-	for {
-		err := us.readLockSettings()
-		select {
-		case <-us.done:
-			return
-		default:
-		}
-		slog.Warn("lock settings from the worker", "user", us.User, "err", err)
-		select {
-		case <-us.done:
-			return
-		case <-time.After(lockSettingsRetry):
-		}
-	}
-}
-
-func (us *UserSession) readLockSettings() error {
-	req, err := http.NewRequest(http.MethodGet, "http://worker/internal/lock-settings", nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set(protocol.InternalHeader, "1")
-	resp, err := us.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
-	}
-	// The worker runs as the user, who could make it send anything: read
-	// short lines only, so this root process never buffers much.
-	lines := bufio.NewScanner(resp.Body)
-	lines.Buffer(make([]byte, 0, 1024), maxLockSettingsLine)
-	for lines.Scan() {
-		var settings struct {
-			Source    string `json:"source"`
-			LockAfter int64  `json:"lockAfter"`
-		}
-		if err := json.Unmarshal(lines.Bytes(), &settings); err != nil {
-			return err
-		}
-		// Past a day, a lock could only come after the token's 12 hours.
-		d := time.Duration(min(max(settings.LockAfter, 0), maxLockAfter)) * time.Second
-		if old := us.lockAfter.Swap(&d); old == nil || *old != d {
-			slog.Info("idle lock", "user", us.User, "after", d, "source", settings.Source)
-		}
-	}
-	if err := lines.Err(); err != nil {
-		return err
-	}
-	return io.EOF
-}
-
-const (
-	maxLockSettingsLine = 4096
-	maxLockAfter        = 24 * 60 * 60 // seconds
-)
-
 // ServeHTTP forwards a browser request to the user's worker.
 func (us *UserSession) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	us.proxy.ServeHTTP(w, r)
@@ -147,6 +85,10 @@ func (us *UserSession) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type Manager struct {
 	self  string // path of the tilde binary
 	onEnd func(user string)
+	// lockRequested and allLocked connect sessions to the token store
+	// (D41): logind's lock requests, and its LockedHint.
+	lockRequested func(user string)
+	allLocked     func(user string) bool
 
 	mu       sync.Mutex
 	sessions map[string]*UserSession
@@ -327,12 +269,20 @@ func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) 
 		proxy:   newWorkerProxy(transport),
 		client:  &http.Client{Transport: transport},
 		done:    make(chan struct{}),
+		hint:    make(chan struct{}, 1),
+		lockRequested: func() {
+			if m.lockRequested != nil {
+				m.lockRequested(req.User)
+			}
+		},
+		allLocked: func() bool { return m.allLocked != nil && m.allLocked(req.User) },
 	}
 	m.mu.Lock()
 	m.sessions[req.User] = us
 	m.mu.Unlock()
 	slog.Info("session started", "user", us.User, "uid", us.UID)
-	go us.followLockSettings()
+	go us.followSession()
+	go us.followLockedHint()
 
 	// If the stream breaks (keepalive failure), stop the helper.
 	go func() {

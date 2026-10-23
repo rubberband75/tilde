@@ -77,7 +77,7 @@ to; tick items off as they land.
 ## Phase 5 — Hardening
 
 - [x] Lock screen following Cinnamon's idle/lock settings; unlock through helper `verify` mode (D40): kept by the server per browser, Lock Screen (menu, Ctrl+Alt+L) locks every browser, unlock replaces the token
-- [~] Idle detection: each browser locks after the user's idle delay (D40). Next: tell logind (`IdleHint` when every browser is idle, `LockedHint` when every one is locked) and lock on `loginctl lock-session`
+- [x] Idle detection: each browser locks after the user's idle delay (D40); logind's `LockedHint` follows the lock and `loginctl lock-session` locks every browser (D41). logind refuses `IdleHint` for web sessions
 - [ ] Revocable device tokens ("remember this device"), device list
 - [ ] Multi-step PAM conversations (TOTP 2FA)
 - [ ] Polkit authentication agent in the browser; then mounting drives from Files (D39)

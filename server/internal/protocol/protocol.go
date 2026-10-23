@@ -64,9 +64,9 @@ type WorkerHello struct {
 }
 
 // InternalHeader marks requests the server makes to the worker for itself,
-// on routes under /internal/ (the idle lock delay, D40). Browsers never
-// reach those routes: the server proxies only /api/v1/*, and its proxy
-// deletes this header from everything it forwards.
+// on routes under /internal/ (the idle lock delay and logind, D40, D41).
+// Browsers never reach those routes: the server proxies only /api/v1/*,
+// and its proxy deletes this header from everything it forwards.
 const InternalHeader = "X-Tilde-Internal"
 
 // Error codes shared between helper, server and frontend.

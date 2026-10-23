@@ -316,28 +316,147 @@ func TestLockClearsCache(t *testing.T) {
 	}
 }
 
-// TestLockSettingsStream: the root server reads the worker, which the user
-// controls, one short line at a time, and clamps the delay.
-func TestLockSettingsStream(t *testing.T) {
-	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// fakeWorker serves the worker's internal routes: the session stream
+// sends lines, and LockedHint updates are recorded.
+type fakeWorker struct {
+	*httptest.Server
+	lines []string
+	mu    sync.Mutex
+	hints []string
+	fail  int // answer this many hint updates with 502 first
+}
+
+func newFakeWorker(t *testing.T, lines ...string) *fakeWorker {
+	f := &fakeWorker{lines: lines}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(protocol.InternalHeader) == "" {
 			http.NotFound(w, r)
 			return
 		}
-		io.WriteString(w, `{"source":"cinnamon","lockAfter":99999999999}`+"\n")
-		io.WriteString(w, `{"source":"`+strings.Repeat("x", 1<<20))
+		switch r.URL.Path {
+		case "/internal/session":
+			for _, l := range f.lines {
+				io.WriteString(w, l)
+			}
+		case "/internal/session/locked":
+			b, _ := io.ReadAll(r.Body)
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.fail > 0 {
+				f.fail--
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			f.hints = append(f.hints, string(b))
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
 	}))
-	defer worker.Close()
-	us := &UserSession{User: "alice", done: make(chan struct{}), client: &http.Client{Transport: &http.Transport{
+	t.Cleanup(f.Close)
+	return f
+}
+
+func (f *fakeWorker) client() *http.Client {
+	return &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "tcp", worker.Listener.Addr().String())
+			return (&net.Dialer{}).DialContext(ctx, "tcp", f.Listener.Addr().String())
 		},
-	}}}
-	if err := us.readLockSettings(); !errors.Is(err, bufio.ErrTooLong) {
+	}}
+}
+
+// TestSessionStream: the root server reads the worker, which the user
+// controls, one short line at a time, clamps the delay, and passes on
+// logind's lock requests.
+func TestSessionStream(t *testing.T) {
+	worker := newFakeWorker(t,
+		`{"type":"settings","source":"cinnamon","lockAfter":99999999999}`+"\n",
+		`{"type":"lock"}`+"\n",
+		`{"type":"lock"}`+"\n", // a flood: one a second is passed on
+		`{"type":"settings","source":"`+strings.Repeat("x", 1<<20))
+	locks := 0
+	us := &UserSession{User: "alice", done: make(chan struct{}), client: worker.client(), lockRequested: func() { locks++ }}
+	if err := us.readSession(); !errors.Is(err, bufio.ErrTooLong) {
 		t.Fatalf("err = %v, want a line too long", err)
 	}
 	if got := us.LockAfter(); got != 24*time.Hour {
 		t.Fatalf("LockAfter = %v, want it clamped to a day", got)
+	}
+	if locks != 1 {
+		t.Fatalf("%d lock requests passed on, want 1", locks)
+	}
+}
+
+// TestLockedHint: logind's LockedHint says whether every browser of the
+// user is locked, and logind's lock requests lock them all (D41). A failed
+// update is tried again.
+func TestLockedHint(t *testing.T) {
+	lt := newLockTest(t, noContent)
+	worker := newFakeWorker(t)
+	worker.fail = 1
+	us := lt.us
+	us.client = worker.client()
+	us.hint = make(chan struct{}, 1)
+	us.allLocked = func() bool { return lt.s.tokens.AllLocked("alice") }
+	go us.followLockedHint()
+	t.Cleanup(func() { close(us.done) })
+	hints := func(want ...string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			worker.mu.Lock()
+			got := strings.Join(worker.hints, " ")
+			worker.mu.Unlock()
+			if got == strings.Join(want, " ") {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("hints %q, want %q", got, want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	a, b := lt.login("alice"), lt.login("alice")
+	lt.expect(lt.do(http.MethodPost, "/api/auth/lock", a, ""), http.StatusNoContent, "")
+	hints(`{"locked":true}`)
+	w := lt.do(http.MethodPost, "/api/auth/unlock", b, `{"password":"secret"}`)
+	lt.expect(w, http.StatusOK, "")
+	hints(`{"locked":true}`, `{"locked":false}`)
+	// Signing out the unlocked browser leaves only locked ones.
+	lt.expect(lt.do(http.MethodPost, "/api/auth/leave", w.Result().Cookies()[0].Value, ""), http.StatusNoContent, "")
+	hints(`{"locked":true}`, `{"locked":false}`, `{"locked":true}`)
+
+	// "loginctl lock-session" locks every browser.
+	c := lt.login("alice")
+	hints(`{"locked":true}`, `{"locked":false}`, `{"locked":true}`, `{"locked":false}`)
+	lt.s.sessions.lockRequested("alice")
+	lt.expect(lt.do(http.MethodGet, "/api/v1/hello", c, ""), http.StatusLocked, "locked")
+	hints(`{"locked":true}`, `{"locked":false}`, `{"locked":true}`, `{"locked":false}`, `{"locked":true}`)
+}
+
+// TestLockedHintRetry: a failed update is tried again on its own, with no
+// further change to wake it.
+func TestLockedHintRetry(t *testing.T) {
+	worker := newFakeWorker(t)
+	worker.fail = 1
+	us := &UserSession{User: "alice", done: make(chan struct{}), client: worker.client(),
+		hint: make(chan struct{}, 1), allLocked: func() bool { return true }}
+	go us.followLockedHint()
+	defer close(us.done)
+	us.notifyLocked()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		worker.mu.Lock()
+		got := strings.Join(worker.hints, " ")
+		worker.mu.Unlock()
+		if got == `{"locked":true}` {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hints %q after a failed update", got)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

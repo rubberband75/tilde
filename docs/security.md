@@ -56,9 +56,13 @@ bug in Tilde can never give more than the account already has.
   Not covered yet: files Tilde opened in their own browser tab (types with
   no viewer app) stay open, and the window layout in `localStorage` keeps
   window titles and folder paths.
-- The server reads the worker's lock settings stream in lines of at most
-  4 KiB: the worker is the user's process, and must not be able to make
-  the root server buffer without limit.
+- The server reads the worker's session stream in lines of at most 4 KiB:
+  the worker is the user's process, and must not be able to make the root
+  server buffer without limit.
+- `loginctl lock-session` locks every browser of the session; logind's
+  unlock request is ignored, so only the password unlocks (D41). The worker
+  takes a `Lock` signal only from logind's own bus name: any user can send
+  a signal straight to another user's worker.
 - Origin check (`internal/server/middleware.go`): every non-GET/HEAD/OPTIONS
   request and every WebSocket upgrade must carry an `Origin` whose host equals
   the request's `Host` (or one passed with `--allowed-origins`).

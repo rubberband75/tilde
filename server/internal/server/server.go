@@ -86,6 +86,15 @@ func New(cfg Config) (*Server, error) {
 	s.sessions = NewManager(self, s.tokens.RevokeUser)
 	s.verify = s.sessions.Verify
 	s.tokens.lockAfter = s.lockAfter
+	// logind's view of the session (D41): its lock requests lock every
+	// browser, and its LockedHint follows whether all of them are locked.
+	s.sessions.lockRequested = func(user string) { s.tokens.LockUser(user, "logind") }
+	s.sessions.allLocked = s.tokens.AllLocked
+	s.tokens.changed = func(user string) {
+		if us := s.sessions.Get(user); us != nil {
+			us.notifyLocked()
+		}
+	}
 	return s, nil
 }
 

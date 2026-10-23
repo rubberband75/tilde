@@ -381,6 +381,35 @@ that is only an overlay in the page; idle timers in the page (tabs sharing
 a cookie would disagree); always locking after a fixed time even when the
 desktop's locking is off (the Settings override covers that need).
 
+**D41 — logind sees the lock; no idle hint for web sessions** (2026-10-23, accepted)
+The web session's `LockedHint` is set while every browser of the user is
+locked (or none is signed in), so `loginctl show-session` tells the truth,
+and logind's `Lock` signal (`loginctl lock-session`, `lock-sessions`) locks
+every browser, like the Lock Screen button. The worker does the D-Bus side
+as the user, as for udisks (D39), connecting after its hello so a slow bus
+never holds up a login. It follows the session in `XDG_SESSION_ID` only if
+it is a `web` session of the worker's own uid: when the server is started
+from inside another session (sudo in a desktop terminal), pam_systemd
+joins that one instead, and Tilde must not touch it. A `Lock` counts only
+from logind's bus name, followed through the bus daemon's
+`NameOwnerChanged`: any user can send a signal straight to the worker, past
+its match rules, and would otherwise lock another user's browsers. The
+server pushes the hint over `PUT /internal/session/locked` when the lock
+state of the user's tokens changes (one retry timer, backing off), and the
+worker passes lock requests on the `/internal/session` stream (renamed
+from `/internal/lock-settings`), read in lines of at most 4 KiB, at most
+one lock a second. logind's `Unlock` signal is ignored: only the password
+unlocks a browser. `IdleHint` is not reported: logind refuses it
+for non-graphical sessions ("Idle hint control is not supported on
+non-graphical sessions", systemd 255, checked in the e2e VM), and Tilde's
+session is `web`, which is what it is. So a running Tilde session never
+counts as idle for logind's `IdleAction`. Rejected: registering the
+session as `x11` or `wayland` to get the idle hint (it is neither, and
+tools would treat it as a local display); the root server talking to
+logind itself (it would have to be on the system bus, and D39 keeps D-Bus
+in the worker); having connected browsers forward lock requests (browsers
+that are not connected would stay unlocked).
+
 ---
 
 ## Open decisions

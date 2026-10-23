@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -92,34 +93,99 @@ func gvariantBool(s string, def bool) bool {
 // shorten it.
 var lockSettingsInterval = time.Minute
 
-// handleLockSettings streams the lock settings to the server as NDJSON,
-// once on connect and then whenever they change. Only the server asks
-// (protocol.InternalHeader); browsers learn the delay from the server.
-func (w *Worker) handleLockSettings(rw http.ResponseWriter, r *http.Request) {
+// sessionEvent is one line of the /internal/session stream: "settings"
+// carries the lock settings, "lock" is logind asking to lock (D41).
+type sessionEvent struct {
+	Type string `json:"type"`
+	LockSettings
+}
+
+// internalOnly answers 404 to requests the server did not make for itself
+// (protocol.InternalHeader); the proxy never forwards such a request.
+func internalOnly(rw http.ResponseWriter, r *http.Request) bool {
 	if r.Header.Get(protocol.InternalHeader) == "" {
 		writeJSON(rw, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
+		return false
+	}
+	return true
+}
+
+// handleSession streams to the server as NDJSON: the lock settings on
+// connect and whenever they change, and logind's lock requests. Browsers
+// learn the delay from the server.
+func (w *Worker) handleSession(rw http.ResponseWriter, r *http.Request) {
+	if !internalOnly(rw, r) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/x-ndjson")
 	flusher, _ := rw.(http.Flusher)
 	enc := json.NewEncoder(rw)
+	send := func(ev sessionEvent) bool {
+		if err := enc.Encode(ev); err != nil {
+			return false
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return true
+	}
+	// logind's lock requests, once the worker has connected to it.
+	ready := w.logind.ready
+	var locks <-chan struct{}
 	t := time.NewTicker(lockSettingsInterval)
 	defer t.Stop()
-	var last LockSettings
-	for first := true; ; first = false {
-		if s := readLockSettings(r.Context()); first || s != last {
-			if err := enc.Encode(s); err != nil {
-				return
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-			last = s
-		}
+	last := readLockSettings(r.Context())
+	if !send(sessionEvent{Type: "settings", LockSettings: last}) {
+		return
+	}
+	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-ready:
+			ready = nil
+			if w.logind.s != nil {
+				locks = w.logind.s.locks()
+			}
+		case <-locks:
+			if !send(sessionEvent{Type: "lock"}) {
+				return
+			}
 		case <-t.C:
+			if s := readLockSettings(r.Context()); s != last {
+				if !send(sessionEvent{Type: "settings", LockSettings: s}) {
+					return
+				}
+				last = s
+			}
 		}
 	}
+}
+
+// handleSessionLocked sets the logind session's LockedHint: the server
+// says whether every browser of the session is locked.
+func (w *Worker) handleSessionLocked(rw http.ResponseWriter, r *http.Request) {
+	if !internalOnly(rw, r) {
+		return
+	}
+	var req struct {
+		Locked bool `json:"locked"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(rw, err)
+		return
+	}
+	session, err := w.logind.wait(r.Context())
+	if err != nil {
+		writeJSON(rw, http.StatusServiceUnavailable, apiError{Error: "not connected to logind yet", Code: "logind"})
+		return
+	}
+	if session != nil {
+		if err := session.setLocked(r.Context(), req.Locked); err != nil {
+			slog.Warn("worker: set logind's LockedHint", "locked", req.Locked, "err", err)
+			writeJSON(rw, http.StatusBadGateway, apiError{Error: err.Error(), Code: "logind"})
+			return
+		}
+	}
+	rw.WriteHeader(http.StatusNoContent)
 }
