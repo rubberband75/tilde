@@ -132,6 +132,9 @@ func (us *UserSession) followLockedHint() {
 			continue
 		}
 		if err := us.putLocked(locked); err != nil {
+			if us.conn != nil && us.conn.IsClosed() {
+				return // logging out: the session is going anyway
+			}
 			slog.Warn("set logind's LockedHint", "user", us.User, "err", err)
 			if retry == nil {
 				retry = time.NewTimer(backoff)
