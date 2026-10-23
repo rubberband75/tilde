@@ -100,8 +100,8 @@ bug in Tilde can never give more than the account already has.
 
 ## Not yet (see roadmap phase 5)
 
-- "Remember this device" as a revocable server-side device token.
-- TOTP and other multi-step PAM conversations.
+- TOTP and other multi-step PAM conversations (D43: PAM's prompts passed
+  to the browser; unlock asks for the code too).
 - Password re-prompt for admin actions through a polkit agent.
 - Audit log of logins, started commands and deletions.
 

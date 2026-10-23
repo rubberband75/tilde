@@ -56,7 +56,8 @@ has no license file, so Tilde borrows ideas, never code. Studied on
   session into its own scope.
 - **Local web apps** (port discovery from `/proc/net/tcp`, open code-server
   or Jupyter in a window) are on the roadmap, served from a separate origin.
-- **Device tokens** replace "remember me".
+- **No "remember me"** that keeps the password: the login screen may remember
+  the user name only (D42).
 - **A system monitor tray applet**: always send full snapshots (a widget that
   mounted late saw `undefined` fields there).
 - **Packaging**: it shipped a static `CGO_ENABLED=0` binary; Tilde needs cgo

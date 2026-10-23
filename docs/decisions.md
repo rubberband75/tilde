@@ -92,7 +92,7 @@ settings via gsettings (`org.cinnamon.desktop.session idle-delay`,
 screensaver `lock-enabled`, `lock-delay`) — not implemented yet. Closing the
 tab leaves the session running; no auto-logout by default.
 
-**D16 — Tokens** (2026-10-19, accepted, 4e; idle locking and the 12 hours amended by D40)
+**D16 — Tokens** (2026-10-19, accepted, 4e; idle locking and the 12 hours amended by D40; no device tokens, D42)
 Random 256-bit token in an `HttpOnly; Secure; SameSite=Strict` cookie
 (`__Host-tilde`), stored server-side by hash, rotated on every login and
 unlock, revoked on logout. Idle (no input from any client) → lock.
@@ -410,13 +410,41 @@ logind itself (it would have to be on the system bus, and D39 keeps D-Bus
 in the worker); having connected browsers forward lock requests (browsers
 that are not connected would stay unlocked).
 
+**D42 — No "remember this device"; the login screen may remember the user name** (2026-10-23, accepted)
+Every login and unlock types the password: there will be no device token,
+cookie or stored secret that saves the password or lets a browser skip it.
+The login screen gets an opt-in "Remember user name", kept in the
+browser's `localStorage` (a user name is not a secret). Chosen by the
+user. Replaces the plan in D16 and CLAUDE.md for a revocable server-side
+device token. Rejected: device tokens that start or rejoin a session
+without the password (a login has to pass PAM to open its session, and
+skipping it would widen what a stolen browser profile gets).
+
+**D43 — Two-factor through PAM conversations** (2026-10-23, accepted)
+Tilde keeps no second-factor secrets of its own. PAM does the checking
+(`pam_google_authenticator`, `pam_oath`, or anything else an administrator
+adds to `/etc/pam.d/tilde`), and Tilde passes PAM's extra questions to the
+browser: the helper answers the first hidden prompt with the password from
+the request, and any later prompt goes to the login screen with PAM's own
+words, hidden or shown as PAM asks, while the helper waits on its main
+thread. A login in progress is tied to the browser by a short-lived
+HttpOnly cookie, times out after about two minutes and counts towards the
+rate limit. Unlocking (D40) and logging in to a running session go through
+the same conversation, so they ask for the code too. Tilde does not turn
+two-factor on: `docs/security.md` shows the line to add, and users set up
+their secret with `google-authenticator` in a terminal; an enrollment page
+can come later. Chosen by the user: unlock asks for the code, two-factor
+is documented rather than shipped on, WebAuthn waits. Rejected for now:
+Tilde's own TOTP store (root would hold the secrets, and it would only
+cover TOTP); passkeys/WebAuthn as a Tilde-native factor (needs Tilde's own
+credential store; maybe later).
+
 ---
 
 ## Open decisions
 
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
-| 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
 | Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |
 | Packaging | `.deb` with systemd unit (depends on libpam0g); update method | nfpm or debhelper | Before first release |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |

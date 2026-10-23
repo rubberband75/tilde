@@ -94,7 +94,8 @@ and ask.
    `Secure`, `SameSite=Strict`. Tokens stay server-side; never put them in URLs
    or browser storage.
 7. **Never store passwords in the browser.** Not in localStorage, IndexedDB or
-   anywhere else. "Remember me" will be a revocable server-side device token.
+   anywhere else. No "remember me" that saves or skips the password: the
+   login screen may only remember the user name (D42).
 8. **Files are served with a sandbox CSP** (`worker/fs.go`, `handleDownload`).
    Anything from a user's disk must never run script on Tilde's origin. Future
    "local web apps" must be served from a separate origin.
