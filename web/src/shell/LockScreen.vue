@@ -2,12 +2,14 @@
 // The lock screen (D40), after cinnamon-screensaver's: the clock, and the
 // password of the user who is logged in. Nothing of the desktop is in the
 // page while it shows; the server refuses this browser's worker requests
-// until the password is checked. Switch User signs only this browser out
-// and leaves the session running.
+// until the password is checked, and PAM's further questions such as a
+// verification code are answered (D43). Switch User signs only this
+// browser out and leaves the session running.
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ApiError } from '@/api/client'
 import { useClock } from '@/lib/clock'
 import { useSession } from '@/stores/session'
+import AuthQuestion from './AuthQuestion.vue'
 
 const session = useSession()
 const { time, date } = useClock()
@@ -23,14 +25,37 @@ async function submit() {
   error.value = ''
   try {
     await session.unlock(password.value)
-  } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'Could not reach the server.'
     password.value = ''
-    await nextTick()
-    input.value?.focus()
+  } catch (e) {
+    await failed(e)
   } finally {
     busy.value = false
   }
+}
+
+async function answer(text: string) {
+  busy.value = true
+  error.value = ''
+  try {
+    await session.answer(text)
+  } catch (e) {
+    await failed(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function cancel() {
+  await session.cancelPrompt()
+  await failed(null)
+}
+
+// Back to the password, with the reason if there is one.
+async function failed(e: unknown) {
+  if (e) error.value = e instanceof ApiError ? e.message : 'Could not reach the server.'
+  password.value = ''
+  await nextTick()
+  input.value?.focus()
 }
 
 onMounted(() => input.value?.focus())
@@ -47,7 +72,9 @@ onMounted(() => input.value?.focus())
       <h1>{{ user }}</h1>
       <!-- For password managers: whose password this is. -->
       <input type="text" name="username" autocomplete="username" :value="user" readonly hidden />
+      <AuthQuestion v-if="session.prompt" :prompt="session.prompt" :busy="busy" @answer="answer" @cancel="cancel" />
       <input
+        v-else
         ref="input"
         v-model="password"
         class="entry"
@@ -58,10 +85,12 @@ onMounted(() => input.value?.focus())
         aria-label="Password"
       />
       <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <button class="btn suggested" type="submit" :disabled="busy || !password">
-        {{ busy ? 'Unlocking…' : 'Unlock' }}
-      </button>
-      <button class="btn flat" type="button" :disabled="busy" @click="session.leave()">Switch User</button>
+      <template v-if="!session.prompt">
+        <button class="btn suggested" type="submit" :disabled="busy || !password">
+          {{ busy ? 'Unlocking…' : 'Unlock' }}
+        </button>
+        <button class="btn flat" type="button" :disabled="busy" @click="session.leave()">Switch User</button>
+      </template>
     </form>
   </main>
 </template>

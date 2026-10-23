@@ -6,6 +6,6 @@ package pamauth
 const Available = false
 
 // Authenticate always fails in builds without PAM.
-func Authenticate(user, password, remoteAddr string) (Session, error) {
+func Authenticate(user, remoteAddr string, conv Conversation) (Session, error) {
 	return nil, ErrUnavailable
 }

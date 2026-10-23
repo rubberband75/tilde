@@ -54,9 +54,14 @@ could already do.
   (D32).
 - Reads one JSON request (user, password, mode) from stdin, byte by byte so it
   never consumes bytes meant for the worker.
-- Runs the PAM `auth` and `account` stacks for service `tilde`.
-- In `verify` mode (logging in to an existing session), replies and exits.
-- In `session` mode: sets `XDG_SESSION_TYPE=web`, `XDG_SESSION_CLASS=user`,
+- Runs the PAM `auth` and `account` stacks for service `tilde`. The first
+  hidden prompt gets the password; any further question (a verification
+  code, D43) goes to the server as a prompt, and the helper waits for the
+  answer, still on its main thread.
+- In `verify` mode (unlocking), replies and exits.
+- In `session` mode, once authenticated, asks the server whether to start:
+  the user may already have a session, which this login then joins. To
+  start one it sets `XDG_SESSION_TYPE=web`, `XDG_SESSION_CLASS=user`,
   calls `pam_setcred` and `pam_open_session`. `pam_systemd` registers a logind
   session for the helper process and moves it into a session scope, which
   provides `XDG_RUNTIME_DIR` and the session D-Bus bus.
@@ -98,7 +103,11 @@ could already do.
 
 ```
 server → helper   {"mode":"session","user":"chandler","password":"…","remoteAddr":"…"}\n
-helper → server   {"ok":true,"uid":1000}\n
+helper → server   {"ok":false,"prompt":{"text":"Verification code:","echo":false}}\n   (only if PAM asks more, D43)
+server → helper   {"answer":"123456"}\n                                                  (the browser's answer)
+helper → server   {"ok":true,"uid":1000}\n                                               (authenticated)
+server → helper   {"start":true}\n                         (false: the user has a session; the helper exits)
+helper → server   {"ok":true,"uid":1000}\n                                               (session opened)
                   (helper execs the worker as the user, same pipe)
 worker → server   {"protocol":1,"version":"…","user":"chandler","uid":1000,"home":"…"}\n
                   … yamux from here on: server = client, worker = server
@@ -191,6 +200,9 @@ App.vue ── LoginScreen (logged out)
 - **Files views** (`src/apps/files/ItemsView.vue`): a virtualized grid and
   list with fixed cell sizes per zoom level, so huge folders render only what
   is visible; sorting in `files/types.ts`; thumbnails via `FileIcon.vue`.
+- **Two-factor** (D43): a login or unlock answer may be `{prompt}` instead of
+  the session; the session store keeps it, and the login and lock screens
+  show it (`shell/AuthQuestion.vue`) until `POST /api/auth/answer` finishes.
 - **Session expiry**: any `401` with `session_ended` / `not_logged_in` from
   `/api/v1/*` makes the session store return to the login screen with a
   message (`src/api/client.ts`).

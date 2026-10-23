@@ -12,7 +12,11 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/tls"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +42,20 @@ type env struct {
 
 func setup(t *testing.T) *env {
 	t.Helper()
-	raw, user, pass := os.Getenv("TILDE_URL"), os.Getenv("TILDE_USER"), os.Getenv("TILDE_PASS")
+	e := connect(t, os.Getenv("TILDE_USER"))
+	resp := e.do(t, http.MethodPost, "/api/auth/login", map[string]string{"username": e.user, "password": os.Getenv("TILDE_PASS")})
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("login: %d %s", resp.StatusCode, body)
+	}
+	resp.Body.Close()
+	return e
+}
+
+// connect returns a client for user that has not logged in yet.
+func connect(t *testing.T, user string) *env {
+	t.Helper()
+	raw, pass := os.Getenv("TILDE_URL"), os.Getenv("TILDE_PASS")
 	if raw == "" || user == "" || pass == "" {
 		t.Skip("set TILDE_URL, TILDE_USER and TILDE_PASS")
 	}
@@ -57,12 +74,6 @@ func setup(t *testing.T) *env {
 			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
 		},
 	}
-	resp := e.do(t, http.MethodPost, "/api/auth/login", map[string]string{"username": user, "password": pass})
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("login: %d %s", resp.StatusCode, body)
-	}
-	resp.Body.Close()
 	return e
 }
 
@@ -573,4 +584,73 @@ func TestDrivesFollowUdisks(t *testing.T) {
 	}
 	// Leave it mounted for the UI tests.
 	udisksctl("mount")
+}
+
+// totp is RFC 6238's code for counter, with SHA-1 and 6 digits, as pam_oath
+// makes it for "HOTP/T30".
+func totp(t *testing.T, secretHex string, counter uint64) string {
+	t.Helper()
+	key, err := hex.DecodeString(secretHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac := hmac.New(sha1.New, key)
+	binary.Write(mac, binary.BigEndian, counter)
+	sum := mac.Sum(nil)
+	off := sum[len(sum)-1] & 0x0f
+	n := binary.BigEndian.Uint32(sum[off:off+4]) & 0x7fffffff
+	return fmt.Sprintf("%06d", n%1000000)
+}
+
+// TestTwoFactor logs in an account that pam_oath asks a TOTP code of (D43):
+// the code question reaches the browser after the password, a wrong code
+// fails, the right one logs in, and unlocking asks for a code too.
+func TestTwoFactor(t *testing.T) {
+	user, secret := os.Getenv("TILDE_2FA_USER"), os.Getenv("TILDE_2FA_SECRET")
+	if user == "" || secret == "" {
+		t.Skip("set TILDE_2FA_USER and TILDE_2FA_SECRET")
+	}
+	// pam_oath refuses a code twice; the VM script resets its record.
+	counter := uint64(time.Now().Unix() / 30)
+	code := func() string {
+		c := totp(t, secret, counter)
+		counter++
+		return c
+	}
+	e := connect(t, user)
+	pass := os.Getenv("TILDE_PASS")
+	var step struct {
+		User   string `json:"user"`
+		Prompt *struct {
+			Text string `json:"text"`
+			Echo bool   `json:"echo"`
+		} `json:"prompt"`
+	}
+	asks := func(resp *http.Response) {
+		t.Helper()
+		step.Prompt = nil
+		decode(t, resp, http.StatusOK, &step)
+		if step.Prompt == nil || step.Prompt.Text == "" || step.Prompt.Echo {
+			t.Fatalf("no hidden code question: %+v", step)
+		}
+	}
+
+	asks(e.do(t, http.MethodPost, "/api/auth/login", map[string]string{"username": user, "password": pass}))
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusUnauthorized, nil)
+	decode(t, e.do(t, http.MethodPost, "/api/auth/answer", map[string]string{"answer": "000000"}), http.StatusUnauthorized, nil)
+
+	asks(e.do(t, http.MethodPost, "/api/auth/login", map[string]string{"username": user, "password": pass}))
+	step.Prompt = nil
+	decode(t, e.do(t, http.MethodPost, "/api/auth/answer", map[string]string{"answer": code()}), http.StatusOK, &step)
+	if step.Prompt != nil || step.User != user {
+		t.Fatalf("after the code: %+v", step)
+	}
+	defer func() { e.do(t, http.MethodPost, "/api/auth/logout", nil).Body.Close() }()
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
+
+	decode(t, e.do(t, http.MethodPost, "/api/auth/lock", nil), http.StatusNoContent, nil)
+	asks(e.do(t, http.MethodPost, "/api/auth/unlock", map[string]string{"password": pass}))
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusLocked, nil)
+	decode(t, e.do(t, http.MethodPost, "/api/auth/answer", map[string]string{"answer": code()}), http.StatusOK, nil)
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
 }

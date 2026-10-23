@@ -10,6 +10,19 @@ export interface SessionInfo extends LockTiming {
   locked: boolean
 }
 
+/** A question PAM asks beyond the password, such as a verification code (D43). */
+export interface AuthPrompt {
+  /** PAM's own words, e.g. "Verification code:". */
+  text: string
+  /** The answer may be shown as it is typed. */
+  echo: boolean
+  /** PAM's messages since the last question. */
+  info?: string[]
+}
+
+/** What logging in, unlocking and answering return: done, or another question. */
+export type AuthStep = SessionInfo | { prompt: AuthPrompt }
+
 /** How input in the browser keeps it from locking; POST /api/auth/activity. */
 export interface LockTiming {
   /** Seconds without input after which this browser locks; 0 never. */

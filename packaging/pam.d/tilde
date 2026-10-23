@@ -7,6 +7,9 @@ auth       requisite  pam_nologin.so
 # Standard Debian/Ubuntu/Mint stacks: pam_unix, plus whatever the admin has
 # added there (pam_faillock lockouts, 2FA modules, ...).
 @include common-auth
+# Two-factor (see docs/security.md): Tilde passes the code question to the
+# browser. Keep it after common-auth, so the password is asked first.
+#auth       required   pam_google_authenticator.so nullok
 @include common-account
 
 # Record the login uid for auditing, and give the session its own keyring.

@@ -54,6 +54,10 @@ TEST_DRIVE=/mnt/tilde-drive
 # A "USB stick" for the drives test: a FAT image the test user sets up and
 # mounts through udisks before each UI run (the test ejects it).
 TEST_USB=TILDE-USB
+# A second account that also needs a TOTP code (pam_oath, D43), with the
+# RFC 6238 test secret; the tests compute codes from it.
+TEST_2FA_USER=tester2fa
+TEST_2FA_SECRET=3132333435363738393031323334353637383930
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
 die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
@@ -187,6 +191,16 @@ install_build() {
     sudo journalctl -u tilde --no-pager -n 50 >&2
     exit 1'
 
+  # Two-factor for the second test account only (test VM only: Tilde ships
+  # without it, D43). pam_oath goes after common-auth, as docs/security.md
+  # says, so the password is asked first.
+  vm_ssh "set -e
+    dpkg -s libpam-oath oathtool >/dev/null 2>&1 ||
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q libpam-oath oathtool >/dev/null
+    id $TEST_2FA_USER >/dev/null 2>&1 || sudo useradd -m -s /bin/bash $TEST_2FA_USER
+    echo '$TEST_2FA_USER:$TEST_PASS' | sudo chpasswd
+    sudo sed -i '/^@include common-auth/a auth [success=1 default=ignore] pam_succeed_if.so user notin $TEST_2FA_USER quiet\\nauth required pam_oath.so usersfile=/etc/users.oath window=5' /etc/pam.d/tilde"
+
   # Lets the test user set up and mount loop images through udisks without
   # an active session, so the drives test has a stick mounted by the user.
   # Test VM only: Tilde itself never mounts (D39).
@@ -209,12 +223,20 @@ EOF
     fi"
 }
 
+# pam_oath refuses a code it has seen, keeping the last one in its users
+# file: start each run from a fresh file, so reruns can use the same codes.
+reset_oath() {
+  vm_ssh "echo 'HOTP/T30 $TEST_2FA_USER - $TEST_2FA_SECRET' | sudo install -m 600 /dev/stdin /etc/users.oath"
+}
+
 run_tests() {
   log "Running the e2e tests"
+  reset_oath
   local status=0
   # The full output is kept in $DIR/last-test.log for flaky failures.
   mount_test_usb
-  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS TILDE_USB=$TEST_USB ./e2e.test -test.v -test.count=1" 2>&1 |
+  vm_ssh "TILDE_URL=https://127.0.0.1:8443 TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS TILDE_USB=$TEST_USB \
+    TILDE_2FA_USER=$TEST_2FA_USER TILDE_2FA_SECRET=$TEST_2FA_SECRET ./e2e.test -test.v -test.count=1" 2>&1 |
     tee "$DIR/last-test.log" || status=$?
   if [ "$status" -ne 0 ]; then
     log "Tests failed; tilde service log:"
@@ -250,6 +272,7 @@ run_ui_tests() {
   (cd "$ROOT/web" && npx playwright install chromium) >/dev/null ||
     die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
 
+  reset_oath
   mount_test_usb
 
   vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
@@ -266,7 +289,8 @@ run_ui_tests() {
   log "Running the UI tests"
   local status=0
   (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
-    TILDE_DRIVE=$TEST_DRIVE TILDE_USB=$TEST_USB npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
+    TILDE_DRIVE=$TEST_DRIVE TILDE_USB=$TEST_USB TILDE_2FA_USER=$TEST_2FA_USER TILDE_2FA_SECRET=$TEST_2FA_SECRET \
+    npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
   kill "$tunnel" 2>/dev/null || true
   trap - EXIT
   if [ "$status" -ne 0 ]; then

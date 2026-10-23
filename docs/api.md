@@ -20,7 +20,8 @@ them in sync.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/api/auth/login` | `{username, password}` | `200 {user, uid, home}` and sets the session cookie. `401 auth_failed`, `403 root_login_disabled` / `account_expired` / `password_expired` / `not_allowed`, `429 rate_limited` |
+| POST | `/api/auth/login` | `{username, password}` | `200 SessionInfo` and sets the session cookie, or `200 {prompt}` when PAM asks more (below). `401 auth_failed`, `403 root_login_disabled` / `account_expired` / `password_expired` / `not_allowed`, `429 rate_limited` |
+| POST | `/api/auth/answer` | `{answer}` or `{cancel: true}` | Answers the question a login or unlock is waiting on: `200 {prompt}` (another one), or what the login or unlock returns when done. `401 auth_failed` (a wrong answer: start again), `401 auth_expired` (no question waiting, or it took over two minutes), `409 busy`, `204` after cancel |
 | POST | `/api/auth/logout` | — | `204`. Ends the user's session on all devices; from a locked browser it only signs that browser out |
 | POST | `/api/auth/leave` | — | `204`. Signs this browser out and leaves the session running (the lock screen's Switch User) |
 | GET | `/api/auth/session` | — | `200 SessionInfo`, also while locked, or `401 not_logged_in` / `session_ended` |
@@ -30,6 +31,14 @@ them in sync.
 
 `SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login
 returns it too.
+
+Two-factor (D43): when PAM asks something after the password (a TOTP
+module's "Verification code:"), login and unlock answer `200 {"prompt":
+{text, echo, info?}}`: PAM's own words, whether the answer may be shown,
+and PAM's messages since the last question. A short-lived `HttpOnly` cookie
+(`__Host-tilde-auth`) holds the waiting check for this browser; send the
+answer to `/api/auth/answer`. The check is the same rate-limited attempt as
+the password.
 
 Locking (D40) is per browser: tabs share the cookie, and the server keeps
 the lock. A browser locks when `lockAfter` seconds pass without an

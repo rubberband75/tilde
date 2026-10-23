@@ -5,10 +5,16 @@
 // Startup sequence on the helper's stdin/stdout pipe:
 //
 //  1. server → helper : HelperRequest (one JSON line)
-//  2. helper → server : HelperResult  (one JSON line)
-//  3. (session mode only) the helper execs the worker with the same pipe
-//  4. worker → server : WorkerHello   (one JSON line)
-//  5. both sides switch to yamux: the server is the yamux client and opens
+//  2. helper → server : HelperResult  (one JSON line). While PAM asks more
+//     than the password (a verification code, D43), the result carries a
+//     Prompt instead, and the server answers each with a HelperAnswer.
+//  3. (session mode, authenticated) server → helper : HelperStart. The
+//     server decides only now whether to start a session: the user may
+//     have one already, started while this login waited for a code. If
+//     it starts one, helper → server : HelperResult for opening it.
+//  4. (session mode, started) the helper execs the worker with the same pipe
+//  5. worker → server : WorkerHello   (one JSON line)
+//  6. both sides switch to yamux: the server is the yamux client and opens
 //     one stream per HTTP request; the worker is the yamux server.
 //
 // Anything else written to stdout corrupts the stream, so both the helper and
@@ -29,10 +35,11 @@ const Version = 1
 
 // Helper modes.
 const (
-	// ModeSession authenticates, opens a PAM session and starts the worker.
+	// ModeSession authenticates and, if the server says so (HelperStart),
+	// opens a PAM session and starts the worker. Logins use it whether or
+	// not the user has a session: the server knows only at the end.
 	ModeSession = "session"
-	// ModeVerify only checks the password (used for logins to an existing
-	// session and for unlocking a locked client).
+	// ModeVerify only checks the password (unlocking a locked client).
 	ModeVerify = "verify"
 )
 
@@ -45,13 +52,38 @@ type HelperRequest struct {
 	RemoteAddr string `json:"remoteAddr,omitempty"`
 }
 
-// HelperResult reports whether authentication (and session setup) worked.
+// HelperResult reports whether authentication worked, or, with Prompt
+// set, that PAM asks the user something more first.
 type HelperResult struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 	// Code is a stable machine-readable error, e.g. "auth_failed".
 	Code string `json:"code,omitempty"`
 	UID  int    `json:"uid,omitempty"`
+	// Prompt, when set, is not the result: PAM is waiting for the answer
+	// to this question, which the server sends as a HelperAnswer.
+	Prompt *Prompt `json:"prompt,omitempty"`
+}
+
+// Prompt is a question PAM asks beyond the password (D43), in PAM's words.
+type Prompt struct {
+	Text string `json:"text"`
+	// Echo: the answer may be shown as it is typed.
+	Echo bool `json:"echo"`
+	// Info holds PAM's messages since the last question ("Duo push sent").
+	Info []string `json:"info,omitempty"`
+}
+
+// HelperAnswer answers a Prompt. It may carry a code, so it is never logged.
+type HelperAnswer struct {
+	Answer string `json:"answer"`
+}
+
+// HelperStart tells a helper in session mode, after authentication,
+// whether to open the session and start the worker, or to exit because
+// the user's session is already running.
+type HelperStart struct {
+	Start bool `json:"start"`
 }
 
 // WorkerHello is the worker's first message once it is running as the user.

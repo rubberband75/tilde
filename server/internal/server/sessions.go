@@ -124,43 +124,125 @@ func (m *Manager) userLock(user string) *sync.Mutex {
 	return l
 }
 
+// Auth is a password check through a session helper. It can take more
+// than one step: PAM may ask more than the password, such as a
+// verification code (D43). While Prompt returns a question the helper
+// waits, and Answer goes on; otherwise the check passed, and for a login
+// Session is the user's session. Failures come back as *AuthError.
+type Auth struct {
+	prompt  *protocol.Prompt
+	session *UserSession
+
+	m   *Manager
+	h   *helperProc
+	req protocol.HelperRequest
+	uid int
+}
+
 // Login checks the password and returns the user's session, starting one if
 // none is running. Every login goes through PAM, even when a session exists.
-func (m *Manager) Login(ctx context.Context, user, password, remoteAddr string) (*UserSession, error) {
-	l := m.userLock(user)
-	l.Lock()
-	defer l.Unlock()
-
-	req := protocol.HelperRequest{User: user, Password: password, RemoteAddr: remoteAddr}
-	if us := m.Get(user); us != nil {
-		req.Mode = protocol.ModeVerify
-		h, res, err := m.spawn(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		h.cmd.Wait()
-		if !res.OK {
-			return nil, &AuthError{Code: res.Code, Message: res.Error}
-		}
-		return us, nil
-	}
-	req.Mode = protocol.ModeSession
-	return m.startSession(ctx, req)
+func (m *Manager) Login(ctx context.Context, user, password, remoteAddr string) (*Auth, error) {
+	return m.begin(ctx, protocol.HelperRequest{Mode: protocol.ModeSession, User: user, Password: password, RemoteAddr: remoteAddr})
 }
 
 // Verify checks a password without touching the session (for unlocking).
-func (m *Manager) Verify(ctx context.Context, user, password, remoteAddr string) error {
-	h, res, err := m.spawn(ctx, protocol.HelperRequest{
-		Mode: protocol.ModeVerify, User: user, Password: password, RemoteAddr: remoteAddr,
-	})
+func (m *Manager) Verify(ctx context.Context, user, password, remoteAddr string) (*Auth, error) {
+	return m.begin(ctx, protocol.HelperRequest{Mode: protocol.ModeVerify, User: user, Password: password, RemoteAddr: remoteAddr})
+}
+
+func (m *Manager) begin(ctx context.Context, req protocol.HelperRequest) (*Auth, error) {
+	h, err := m.spawn(req)
+	req.Password = ""
 	if err != nil {
-		return err
+		return nil, err
 	}
-	h.cmd.Wait()
+	a := &Auth{m: m, h: h, req: req}
+	return a, a.next(ctx)
+}
+
+// Prompt is PAM's question waiting for an answer, or nil.
+func (a *Auth) Prompt() *protocol.Prompt { return a.prompt }
+
+// Session is the user's session once a login has passed.
+func (a *Auth) Session() *UserSession { return a.session }
+
+// Answer gives PAM the user's answer to Prompt and goes on.
+func (a *Auth) Answer(ctx context.Context, answer string) error {
+	if a.prompt == nil {
+		return errors.New("no question is waiting for an answer")
+	}
+	a.prompt = nil
+	if err := protocol.WriteLine(a.h.stdin, protocol.HelperAnswer{Answer: answer}); err != nil {
+		a.h.kill()
+		return fmt.Errorf("send answer to helper: %w", err)
+	}
+	return a.next(ctx)
+}
+
+// Cancel stops a check that is waiting for an answer.
+func (a *Auth) Cancel() {
+	if a.prompt != nil {
+		a.prompt = nil
+		a.h.kill()
+	}
+}
+
+// stepTimeout is how long PAM may take over one step: it sleeps after a
+// failure (pam_faildelay), and push-style modules wait for a phone.
+var stepTimeout = 2 * time.Minute
+
+// next reads the helper's next step: a question, or the result. Callers
+// pass a context the browser cannot cancel: a helper killed mid-check
+// would leave no verdict, and a disconnect must not undo a wrong guess.
+func (a *Auth) next(ctx context.Context) error {
+	var res protocol.HelperResult
+	if err := readLineTimeout(ctx, a.h, &res, stepTimeout); err != nil {
+		return fmt.Errorf("read helper result: %w", err)
+	}
+	if res.Prompt != nil {
+		a.prompt = res.Prompt
+		return nil
+	}
 	if !res.OK {
+		a.h.cmd.Wait()
 		return &AuthError{Code: res.Code, Message: res.Error}
 	}
-	return nil
+	a.uid = res.UID
+	if a.req.Mode == protocol.ModeVerify {
+		a.h.cmd.Wait()
+		return nil
+	}
+	us, err := a.m.join(ctx, a)
+	a.session = us
+	return err
+}
+
+// join decides, once the user is authenticated, whether this login starts
+// the session or joins the one that is running, which may have started
+// while this login waited for a code. The user's lock keeps two logins from
+// starting two sessions.
+func (m *Manager) join(ctx context.Context, a *Auth) (*UserSession, error) {
+	l := m.userLock(a.req.User)
+	l.Lock()
+	defer l.Unlock()
+	if us := m.Get(a.req.User); us != nil {
+		_ = protocol.WriteLine(a.h.stdin, protocol.HelperStart{Start: false})
+		a.h.cmd.Wait()
+		return us, nil
+	}
+	if err := protocol.WriteLine(a.h.stdin, protocol.HelperStart{Start: true}); err != nil {
+		a.h.kill()
+		return nil, fmt.Errorf("tell helper to start: %w", err)
+	}
+	var res protocol.HelperResult
+	if err := readLineTimeout(ctx, a.h, &res, 60*time.Second); err != nil {
+		return nil, fmt.Errorf("read helper result: %w", err)
+	}
+	if !res.OK {
+		a.h.cmd.Wait()
+		return nil, &AuthError{Code: res.Code, Message: res.Error}
+	}
+	return m.startSession(ctx, a.h, a.req, a.uid)
 }
 
 type helperProc struct {
@@ -170,10 +252,8 @@ type helperProc struct {
 	br     *bufio.Reader
 }
 
-// spawn starts "tilde session-helper", sends the request and reads the
-// helper's result line.
-func (m *Manager) spawn(ctx context.Context, req protocol.HelperRequest) (*helperProc, protocol.HelperResult, error) {
-	var res protocol.HelperResult
+// spawn starts "tilde session-helper" and sends it the request.
+func (m *Manager) spawn(req protocol.HelperRequest) (*helperProc, error) {
 	cmd := exec.Command(m.self, "session-helper")
 	// The helper gets a minimal, known environment, never the server's.
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8"}
@@ -182,31 +262,27 @@ func (m *Manager) spawn(ctx context.Context, req protocol.HelperRequest) (*helpe
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, res, err
+		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, res, err
+		return nil, err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, res, err
+		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, res, fmt.Errorf("start session helper: %w", err)
+		return nil, fmt.Errorf("start session helper: %w", err)
 	}
 	go logLines(stderr, req.User)
 
 	h := &helperProc{cmd: cmd, stdin: stdin, stdout: stdout, br: bufio.NewReaderSize(stdout, 64*1024)}
 	if err := protocol.WriteLine(stdin, req); err != nil {
 		h.kill()
-		return nil, res, fmt.Errorf("send request to helper: %w", err)
+		return nil, fmt.Errorf("send request to helper: %w", err)
 	}
-	// PAM may sleep after a failure (pam_faildelay), so allow plenty of time.
-	if err := readLineTimeout(ctx, h, &res, 60*time.Second); err != nil {
-		return nil, res, fmt.Errorf("read helper result: %w", err)
-	}
-	return h, res, nil
+	return h, nil
 }
 
 func (h *helperProc) kill() {
@@ -234,15 +310,9 @@ func readLineTimeout(ctx context.Context, h *helperProc, v any, timeout time.Dur
 	}
 }
 
-func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) (*UserSession, error) {
-	h, res, err := m.spawn(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if !res.OK {
-		h.cmd.Wait()
-		return nil, &AuthError{Code: res.Code, Message: res.Error}
-	}
+// startSession takes over the worker a helper has just started, once the
+// session is open. m's lock for the user is held.
+func (m *Manager) startSession(ctx context.Context, h *helperProc, req protocol.HelperRequest, uid int) (*UserSession, error) {
 	var hello protocol.WorkerHello
 	if err := readLineTimeout(ctx, h, &hello, 20*time.Second); err != nil {
 		return nil, fmt.Errorf("worker did not start: %w", err)
@@ -254,9 +324,9 @@ func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) 
 	// The hello comes from a process the user owns, the helper's result
 	// from root. Tokens are issued for the hello's user, so it must be the
 	// account that logged in, at the uid the helper started.
-	if hello.User != req.User || hello.UID != res.UID {
+	if hello.User != req.User || hello.UID != uid {
 		h.kill()
-		return nil, fmt.Errorf("worker says it runs as %q (uid %d), but %q (uid %d) logged in", hello.User, hello.UID, req.User, res.UID)
+		return nil, fmt.Errorf("worker says it runs as %q (uid %d), but %q (uid %d) logged in", hello.User, hello.UID, req.User, uid)
 	}
 
 	conn := &stdio.Conn{Reader: h.br, Writer: h.stdin, Closers: []io.Closer{h.stdin, h.stdout}}

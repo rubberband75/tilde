@@ -57,9 +57,11 @@ type Server struct {
 	limiter  *loginLimiter
 	cookie   string
 	secure   bool
-	// verify checks a user's password through the session helper (for
-	// unlocking); tests replace it.
-	verify func(ctx context.Context, user, password, remoteAddr string) error
+	// login and verify check a password through the session helper, for
+	// logging in and unlocking; tests replace them.
+	login, verify func(ctx context.Context, user, password, remoteAddr string) (check, error)
+	// pending holds checks waiting for the answer to a PAM question (D43).
+	pending pendingStore
 }
 
 // New creates a Server.
@@ -84,7 +86,13 @@ func New(cfg Config) (*Server, error) {
 		s.cookie = "tilde_session"
 	}
 	s.sessions = NewManager(self, s.tokens.RevokeUser)
-	s.verify = s.sessions.Verify
+	s.login = func(ctx context.Context, user, password, addr string) (check, error) {
+		return asCheck(s.sessions.Login(ctx, user, password, addr))
+	}
+	s.verify = func(ctx context.Context, user, password, addr string) (check, error) {
+		return asCheck(s.sessions.Verify(ctx, user, password, addr))
+	}
+	s.pending.m = map[string]*pending{}
 	s.tokens.lockAfter = s.lockAfter
 	// logind's view of the session (D41): its lock requests lock every
 	// browser, and its LockedHint follows whether all of them are locked.
@@ -96,6 +104,14 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 	return s, nil
+}
+
+// asCheck keeps a nil *Auth from becoming a non-nil check.
+func asCheck(a *Auth, err error) (check, error) {
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
 // lockAfter is how long user's clients may go without input before they
@@ -117,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /api/auth/activity", s.handleActivity)
 	m.HandleFunc("POST /api/auth/lock", s.handleLock)
 	m.HandleFunc("POST /api/auth/unlock", s.handleUnlock)
+	m.HandleFunc("POST /api/auth/answer", s.handleAnswer)
 	m.HandleFunc("/api/v1/", s.handleWorkerAPI)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
@@ -191,43 +208,17 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	s.dropPending(r)
+	ctx, cancel := checkContext(r)
 	defer cancel()
-	us, err := s.sessions.Login(ctx, req.Username, req.Password, addr)
+	c, err := s.login(ctx, req.Username, req.Password, addr)
 	req.Password = ""
+	p := &pending{check: c, user: req.Username, addr: addr}
 	if err != nil {
-		var ae *AuthError
-		if errors.As(err, &ae) {
-			status := http.StatusForbidden
-			msg := ae.Message
-			if ae.Code == protocol.CodeAuthFailed {
-				status = http.StatusUnauthorized
-				msg = "Incorrect user name or password."
-			} else {
-				s.limiter.Cancel(addr, req.Username)
-			}
-			writeJSON(w, status, apiError{Error: msg, Code: ae.Code})
-			return
-		}
-		s.limiter.Cancel(addr, req.Username)
-		slog.Error("login: could not start session", "user", req.Username, "err", err)
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "Could not start your session. See the server log.", Code: protocol.CodeInternal})
+		s.checkFailed(w, p, err, "Incorrect user name or password.")
 		return
 	}
-	s.limiter.Succeed(addr, req.Username)
-
-	tok, err := s.tokens.New(us.User)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "could not create a session token", Code: protocol.CodeInternal})
-		return
-	}
-	// The new cookie replaces this browser's old one; drop its token too.
-	if old, err := r.Cookie(s.cookie); err == nil {
-		s.tokens.Revoke(old.Value)
-	}
-	http.SetCookie(w, s.sessionCookie(tok, int(s.cfg.SessionMaxAge.Seconds())))
-	slog.Info("login", "user", us.User, "rhost", addr)
-	writeJSON(w, http.StatusOK, s.info(us, false))
+	s.carryOn(w, r, p)
 }
 
 func (s *Server) sessionCookie(value string, maxAge int) *http.Cookie {
@@ -407,42 +398,17 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	s.dropPending(r)
+	ctx, cancel := checkContext(r)
 	defer cancel()
-	err := s.verify(ctx, t.User, req.Password, addr)
+	c, err := s.verify(ctx, t.User, req.Password, addr)
 	req.Password = ""
+	p := &pending{check: c, unlock: true, user: t.User, addr: addr}
 	if err != nil {
-		var ae *AuthError
-		if errors.As(err, &ae) {
-			status := http.StatusForbidden
-			msg := ae.Message
-			if ae.Code == protocol.CodeAuthFailed {
-				status = http.StatusUnauthorized
-				msg = "Incorrect password."
-			} else {
-				s.limiter.Cancel(addr, t.User)
-			}
-			slog.Warn("unlock failed", "user", t.User, "rhost", addr, "code", ae.Code)
-			writeJSON(w, status, apiError{Error: msg, Code: ae.Code})
-			return
-		}
-		s.limiter.Cancel(addr, t.User)
-		slog.Error("unlock: could not check the password", "user", t.User, "err", err)
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "Could not check your password. See the server log.", Code: protocol.CodeInternal})
+		s.checkFailed(w, p, err, "Incorrect password.")
 		return
 	}
-	s.limiter.Succeed(addr, t.User)
-
-	fresh, ok := s.tokens.Rotate(tok)
-	if !ok {
-		// Not clearing the cookie: another tab of this browser may have
-		// unlocked at the same moment and set a fresh one.
-		writeJSON(w, http.StatusUnauthorized, apiError{Error: "not logged in", Code: "not_logged_in"})
-		return
-	}
-	http.SetCookie(w, s.sessionCookie(fresh, int(s.cfg.SessionMaxAge.Seconds())))
-	slog.Info("unlock", "user", t.User, "rhost", addr)
-	writeJSON(w, http.StatusOK, s.info(us, false))
+	s.carryOn(w, r, p)
 }
 
 // handleWorkerAPI authenticates the request and forwards it to the worker.

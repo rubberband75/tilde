@@ -33,6 +33,9 @@ type lockTest struct {
 	now time.Time
 	// addr is the client address requests come from.
 	addr string
+	// code, if set, is the verification code PAM asks for after the
+	// password (D43).
+	code string
 }
 
 func newLockTest(t *testing.T, worker http.Handler) *lockTest {
@@ -43,15 +46,52 @@ func newLockTest(t *testing.T, worker http.Handler) *lockTest {
 	}
 	lt := &lockTest{t: t, s: s, h: s.Handler(), now: time.Now(), addr: "192.0.2.1:1234"}
 	s.tokens.now = func() time.Time { return lt.now }
-	s.verify = func(_ context.Context, user, password, _ string) error {
-		if user == "alice" && password == "secret" {
-			return nil
+	check := func(_ context.Context, user, password, _ string) (check, error) {
+		if user != "alice" || password != "secret" {
+			return nil, &AuthError{Code: protocol.CodeAuthFailed, Message: "authentication failed"}
 		}
-		return &AuthError{Code: protocol.CodeAuthFailed, Message: "authentication failed"}
+		c := &fakeCheck{us: lt.us}
+		if lt.code != "" {
+			c.prompts, c.answers = []string{"Verification code:"}, []string{lt.code}
+		}
+		return c, nil
 	}
+	s.login, s.verify = check, check
 	lt.us = lt.addSession("alice", worker)
 	return lt
 }
+
+// fakeCheck is a password check that passed, asking its prompts first.
+// With again set, a wrong answer is asked again, as pam_duo does.
+type fakeCheck struct {
+	prompts, answers []string
+	again            bool
+	us               *UserSession
+	cancelled        bool
+}
+
+func (f *fakeCheck) Prompt() *protocol.Prompt {
+	if len(f.prompts) == 0 {
+		return nil
+	}
+	return &protocol.Prompt{Text: f.prompts[0]}
+}
+
+func (f *fakeCheck) Session() *UserSession { return f.us }
+
+func (f *fakeCheck) Answer(_ context.Context, answer string) error {
+	if f.again && answer != f.answers[0] {
+		return nil
+	}
+	want := f.answers[0]
+	f.prompts, f.answers = f.prompts[1:], f.answers[1:]
+	if answer != want {
+		return &AuthError{Code: protocol.CodeAuthFailed, Message: "authentication failed"}
+	}
+	return nil
+}
+
+func (f *fakeCheck) Cancel() { f.cancelled = true }
 
 func (lt *lockTest) addSession(user string, worker http.Handler) *UserSession {
 	us := &UserSession{User: user, UID: 1000, Home: "/home/" + user, proxy: worker, done: make(chan struct{})}
@@ -72,6 +112,14 @@ func (lt *lockTest) login(user string) string {
 
 // do sends a same-origin request with tok as the session cookie.
 func (lt *lockTest) do(method, path, tok, body string) *httptest.ResponseRecorder {
+	if tok == "" {
+		return lt.send(method, path, body)
+	}
+	return lt.send(method, path, body, &http.Cookie{Name: lt.s.cookie, Value: tok})
+}
+
+// send sends a same-origin request with cookies.
+func (lt *lockTest) send(method, path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	var r io.Reader
 	if body != "" {
 		r = strings.NewReader(body)
@@ -79,8 +127,8 @@ func (lt *lockTest) do(method, path, tok, body string) *httptest.ResponseRecorde
 	req := httptest.NewRequest(method, "http://desk.lan"+path, r)
 	req.Header.Set("Origin", "http://desk.lan")
 	req.RemoteAddr = lt.addr
-	if tok != "" {
-		req.AddCookie(&http.Cookie{Name: lt.s.cookie, Value: tok})
+	for _, c := range cookies {
+		req.AddCookie(c)
 	}
 	w := httptest.NewRecorder()
 	lt.h.ServeHTTP(w, req)
@@ -233,10 +281,10 @@ func TestUnlockRateLimit(t *testing.T) {
 func TestParallelUnlocks(t *testing.T) {
 	lt := newLockTest(t, noContent)
 	var checks atomic.Int32
-	lt.s.verify = func(context.Context, string, string, string) error {
+	lt.s.verify = func(context.Context, string, string, string) (check, error) {
 		checks.Add(1)
 		time.Sleep(50 * time.Millisecond) // PAM's delay after a failure
-		return &AuthError{Code: protocol.CodeAuthFailed, Message: "authentication failed"}
+		return nil, &AuthError{Code: protocol.CodeAuthFailed, Message: "authentication failed"}
 	}
 	// Many locked browsers at one address, so the per-token limit is not
 	// what stops them.

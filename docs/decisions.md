@@ -433,8 +433,16 @@ rate limit. Unlocking (D40) and logging in to a running session go through
 the same conversation, so they ask for the code too. Tilde does not turn
 two-factor on: `docs/security.md` shows the line to add, and users set up
 their secret with `google-authenticator` in a terminal; an enrollment page
-can come later. Chosen by the user: unlock asks for the code, two-factor
-is documented rather than shipped on, WebAuthn waits. Rejected for now:
+can come later. Logins always start the helper in session mode, and the
+server tells it only after authentication whether to open a session or let
+the user join the one running: a login can wait minutes for a code, too
+long to hold the user's lock. Checks run under a server deadline, not the
+request's, and an attempt that reached PAM is never refunded: a browser
+that hangs up on slow (wrong) answers would otherwise guess for free.
+Answers after the first count as attempts too. Chosen by the user: unlock
+asks for the code, two-factor is documented rather than shipped on,
+WebAuthn waits.
+Rejected for now:
 Tilde's own TOTP store (root would hold the secrets, and it would only
 cover TOTP); passkeys/WebAuthn as a Tilde-native factor (needs Tilde's own
 credential store; maybe later).

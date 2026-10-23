@@ -80,6 +80,27 @@ describe('session store and the lock screen', () => {
     expect(s.notice).toBe('Too many wrong passwords. Log in again.')
   })
 
+  it("asks PAM's question before logging in, and starts over after a wrong answer", async () => {
+    const question = { prompt: { text: 'Verification code:', echo: false } }
+    routes['/api/auth/login'] = () => json(200, question)
+    let right = false
+    routes['/api/auth/answer'] = () =>
+      right ? json(200, alice) : json(401, { error: 'Incorrect password or code.', code: 'auth_failed' })
+    const s = useSession()
+    await s.login('alice', 'secret')
+    expect(s.status).not.toBe('loggedIn')
+    expect(s.prompt?.text).toBe('Verification code:')
+
+    await expect(s.answer('000000')).rejects.toMatchObject({ code: 'auth_failed' })
+    expect(s.prompt).toBeNull()
+
+    await s.login('alice', 'secret')
+    right = true
+    await s.answer('123456')
+    expect(s.status).toBe('loggedIn')
+    expect(s.prompt).toBeNull()
+  })
+
   it('keeps the desktop if the server could not lock', async () => {
     routes['/api/auth/session'] = () => json(200, alice)
     routes['/api/auth/lock'] = () => Promise.reject(new TypeError('network down'))

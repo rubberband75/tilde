@@ -32,6 +32,15 @@ bug in Tilde can never give more than the account already has.
   `pam_faillock`, 2FA modules and `pam_systemd` apply), `pam_loginuid`,
   `pam_keyinit`, `pam_env`, optional `pam_gnome_keyring`.
 - Root login refused before PAM runs; any UID 0 account refused after lookup.
+- Two-factor through PAM (D43): questions PAM asks after the password go
+  to the login and lock screens, held by a 2-minute `HttpOnly` cookie;
+  a wrong answer starts over and counts as a failed attempt, as does every
+  answer after the first when a module asks again. Checks run under the
+  server's own deadline, so hanging up early never undoes a wrong guess,
+  and an attempt is only taken back on cancel before any answer or on a
+  verdict that says nothing about the secret (an expired account). At most
+  2 checks wait per user, 4 per address and 64 in all. Off by default; see
+  "Two-factor" below.
 - The worker's hello (user and uid) must match the account that logged in
   and the uid the root helper started: the worker is the user's process,
   and tokens are issued for the user it names.
@@ -100,10 +109,30 @@ bug in Tilde can never give more than the account already has.
 
 ## Not yet (see roadmap phase 5)
 
-- TOTP and other multi-step PAM conversations (D43: PAM's prompts passed
-  to the browser; unlock asks for the code too).
 - Password re-prompt for admin actions through a polkit agent.
 - Audit log of logins, started commands and deletions.
+
+## Two-factor
+
+Tilde asks whatever PAM asks, so two-factor is a PAM module in
+`/etc/pam.d/tilde` (D43). For TOTP codes from an authenticator app:
+
+1. `sudo apt install libpam-google-authenticator`
+2. Each user runs `google-authenticator` once, in a terminal (a Tilde
+   terminal works), and scans the QR code.
+3. Uncomment the line after `@include common-auth` in `/etc/pam.d/tilde`:
+
+   ```
+   auth       required   pam_google_authenticator.so nullok
+   ```
+
+   `nullok` lets accounts that have not set up a code log in with the
+   password alone; drop it once everyone has.
+
+Put the module after `@include common-auth`: Tilde answers PAM's first
+hidden prompt with the password, and a wrong password then fails before the
+code is asked. Unlocking a locked screen asks for a code too. `pam_oath`
+works the same way (the e2e VM tests with it).
 
 ## Deployment advice
 
@@ -111,7 +140,7 @@ bug in Tilde can never give more than the account already has.
   WireGuard (`--listen <vpn-address>:8443`). This removes most of the risk.
 - If it must face a LAN, use your own certificate (`--tls-cert`,
   `--tls-key`) and enable `pam_faillock` in `common-auth`.
-- Do not put it on the public internet without 2FA, and even then prefer a
-  VPN.
+- Do not put it on the public internet without two-factor (above), and even
+  then prefer a VPN.
 - Behind a reverse proxy, pass `--allowed-origins https://your.host` and
   `--trust-proxy`.

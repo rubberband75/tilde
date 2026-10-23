@@ -4,8 +4,10 @@
 // on stdin/stdout. The helper:
 //
 //  1. reads a HelperRequest (user, password, mode),
-//  2. authenticates through PAM,
-//  3. in session mode, opens a PAM session (so pam_systemd registers a
+//  2. authenticates through PAM, passing any question beyond the password
+//     (a verification code, D43) to the server and waiting for the answer,
+//  3. in session mode, if the server says to start (the user may already
+//     have a session), opens a PAM session (so pam_systemd registers a
 //     logind session of type "web"), then starts "tilde worker" as the user
 //     with the same stdin/stdout pipe,
 //  4. waits for the worker to exit and closes the PAM session.
@@ -21,12 +23,14 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"sort"
+	"strings"
 	"syscall"
 
 	"tilde/internal/pamauth"
@@ -51,7 +55,7 @@ func Run() int {
 		reply(proto, failure(protocol.CodeInternal, "read request: "+err.Error()))
 		return 1
 	}
-	password := req.Password
+	conv := &conversation{user: req.User, password: req.Password, proto: proto, in: os.Stdin}
 	req.Password = ""
 
 	privileged := os.Geteuid() == 0
@@ -61,8 +65,8 @@ func Run() int {
 		return 1
 	}
 
-	sess, err := pamauth.Authenticate(req.User, password, req.RemoteAddr)
-	password = ""
+	sess, err := pamauth.Authenticate(req.User, req.RemoteAddr, conv)
+	conv.password = ""
 	if err != nil {
 		slog.Warn("helper: authentication failed", "user", req.User, "rhost", req.RemoteAddr, "err", err)
 		reply(proto, failureFor(err))
@@ -80,13 +84,19 @@ func Run() int {
 		return 1
 	}
 
-	if req.Mode == protocol.ModeVerify {
-		reply(proto, protocol.HelperResult{OK: true, UID: int(info.UID)})
-		return 0
-	}
-	if req.Mode != protocol.ModeSession {
+	if req.Mode != protocol.ModeVerify && req.Mode != protocol.ModeSession {
 		reply(proto, failure(protocol.CodeInternal, "unknown mode "+req.Mode))
 		return 1
+	}
+	reply(proto, protocol.HelperResult{OK: true, UID: int(info.UID)})
+	if req.Mode == protocol.ModeVerify {
+		return 0
+	}
+	// Authenticated. The server says whether to start a session or join
+	// the one the user already has.
+	var start protocol.HelperStart
+	if err := protocol.ReadLineUnbuffered(os.Stdin, &start); err != nil || !start.Start {
+		return 0
 	}
 
 	env := baseEnv(info)
@@ -231,5 +241,51 @@ func failureFor(err error) protocol.HelperResult {
 func reply(w *os.File, res protocol.HelperResult) {
 	if err := protocol.WriteLine(w, res); err != nil {
 		slog.Error("helper: write result", "err", err)
+	}
+}
+
+// conversation answers PAM for the helper (D43). The first hidden prompt
+// gets the password from the request, and a visible "login:" prompt before
+// it the user name. Every other question goes to the server, which puts it
+// to the browser and sends the answer back; PAM's messages ride along with
+// the next question. Answers are read byte by byte, like the request: the
+// worker inherits stdin.
+type conversation struct {
+	user, password string
+	passwordUsed   bool
+	proto          io.Writer
+	in             io.Reader
+	info           []string
+}
+
+func (c *conversation) Prompt(text string, echo bool) (string, error) {
+	if !c.passwordUsed {
+		if !echo {
+			c.passwordUsed = true
+			return c.password, nil
+		}
+		if lower := strings.ToLower(strings.TrimSpace(text)); strings.HasPrefix(lower, "login") || strings.HasPrefix(lower, "user") {
+			return c.user, nil
+		}
+	} else if !echo && strings.Contains(strings.ToLower(text), "password") {
+		// The password went to an earlier prompt: a module before
+		// common-auth in /etc/pam.d/tilde (docs/security.md).
+		slog.Warn("helper: PAM asks for a password after the first; check the order of /etc/pam.d/tilde", "user", c.user, "prompt", text)
+	}
+	p := &protocol.Prompt{Text: strings.TrimSpace(text), Echo: echo, Info: c.info}
+	c.info = nil
+	if err := protocol.WriteLine(c.proto, protocol.HelperResult{Prompt: p}); err != nil {
+		return "", err
+	}
+	var a protocol.HelperAnswer
+	if err := protocol.ReadLineUnbuffered(c.in, &a); err != nil {
+		return "", err
+	}
+	return a.Answer, nil
+}
+
+func (c *conversation) Message(text string, _ bool) {
+	if text = strings.TrimSpace(text); text != "" && len(c.info) < 8 {
+		c.info = append(c.info, text)
 	}
 }

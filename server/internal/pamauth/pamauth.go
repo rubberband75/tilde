@@ -19,6 +19,15 @@ var (
 	ErrUnavailable     = errors.New("tilde was built without PAM support")
 )
 
+// Conversation answers what PAM asks while it authenticates. The password
+// is one answer; two-factor modules ask more (D43).
+type Conversation interface {
+	// Prompt answers a question; echo says the answer may be shown.
+	Prompt(text string, echo bool) (string, error)
+	// Message passes on an informational or error message.
+	Message(text string, isError bool)
+}
+
 // Session is an authenticated PAM transaction. Call Open to start a login
 // session, and always call Close when finished.
 type Session interface {

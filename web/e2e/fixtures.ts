@@ -1,9 +1,29 @@
 // Shared fixtures: an API client that acts as the test user, a logged-in
 // desktop, and a scratch folder that is removed afterwards.
+import { createHmac } from 'node:crypto'
 import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 export const user = process.env.TILDE_USER!
 export const password = process.env.TILDE_PASS!
+/** An account that pam_oath asks a TOTP code of (D43), and its hex secret. */
+export const twoFactorUser = process.env.TILDE_2FA_USER ?? ''
+const twoFactorSecret = process.env.TILDE_2FA_SECRET ?? ''
+
+/**
+ * Codes for twoFactorUser, as pam_oath's "HOTP/T30" makes them (RFC 6238,
+ * SHA-1, 6 digits). Each call gives the next one: pam_oath refuses a code
+ * twice, and the VM script resets its record before each run.
+ */
+export function totpCodes(): () => string {
+  let counter = Math.floor(Date.now() / 30_000)
+  return () => {
+    const msg = Buffer.alloc(8)
+    msg.writeBigUInt64BE(BigInt(counter++))
+    const sum = createHmac('sha1', Buffer.from(twoFactorSecret, 'hex')).update(msg).digest()
+    const off = sum[sum.length - 1]! & 0x0f
+    return String((sum.readUInt32BE(off) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+  }
+}
 
 /** The worker API as the test user, sharing the page's session cookie. */
 export class Api {

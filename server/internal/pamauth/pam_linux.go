@@ -14,24 +14,22 @@ import (
 // Available reports whether this build can talk to PAM.
 const Available = true
 
-// Authenticate runs the "auth" and "account" stacks for user.
-//
-// The conversation answers password prompts with password. Prompts that echo
-// (PromptEchoOn) are answered with the user name, which covers modules that
-// ask for "login:". Multi-step prompts such as a TOTP code need a browser
-// round trip and are not supported yet (see docs/roadmap.md, phase 5).
-func Authenticate(user, password, remoteAddr string) (Session, error) {
+// Authenticate runs the "auth" and "account" stacks for user, answering
+// PAM's questions through conv.
+func Authenticate(user, remoteAddr string, conv Conversation) (Session, error) {
 	tx, err := pam.StartFunc(Service, user, func(s pam.Style, msg string) (string, error) {
 		switch s {
 		case pam.PromptEchoOff:
-			return password, nil
+			return conv.Prompt(msg, false)
 		case pam.PromptEchoOn:
-			return user, nil
+			return conv.Prompt(msg, true)
 		case pam.ErrorMsg:
 			slog.Warn("pam message", "user", user, "msg", msg)
+			conv.Message(msg, true)
 			return "", nil
 		case pam.TextInfo:
 			slog.Info("pam info", "user", user, "msg", msg)
+			conv.Message(msg, false)
 			return "", nil
 		}
 		return "", errors.New("unsupported PAM conversation style")

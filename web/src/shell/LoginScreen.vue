@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // Login with a host account. The server checks the password through PAM and
-// starts (or rejoins) that user's session.
+// starts (or rejoins) that user's session. If PAM asks more, such as a
+// verification code (D43), its question takes the password field's place.
 import { nextTick, onMounted, ref } from 'vue'
 import { ApiError } from '@/api/client'
 import { rememberedUser, rememberUser } from '@/lib/rememberUser'
 import { useSession } from '@/stores/session'
+import AuthQuestion from './AuthQuestion.vue'
 
 const session = useSession()
 const username = ref(rememberedUser())
@@ -24,14 +26,37 @@ async function submit() {
     const name = username.value.trim()
     await session.login(name, password.value)
     rememberUser(name, remember.value)
-  } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'Could not reach the server.'
     password.value = ''
-    await nextTick()
-    passInput.value?.focus()
+  } catch (e) {
+    await failed(e)
   } finally {
     busy.value = false
   }
+}
+
+async function answer(text: string) {
+  busy.value = true
+  error.value = ''
+  try {
+    await session.answer(text)
+  } catch (e) {
+    await failed(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function cancel() {
+  await session.cancelPrompt()
+  await failed(null)
+}
+
+// Back to the password, with the reason if there is one.
+async function failed(e: unknown) {
+  if (e) error.value = e instanceof ApiError ? e.message : 'Could not reach the server.'
+  password.value = ''
+  await nextTick()
+  passInput.value?.focus()
 }
 
 onMounted(() => (username.value ? passInput.value : userInput.value)?.focus())
@@ -43,34 +68,37 @@ onMounted(() => (username.value ? passInput.value : userInput.value)?.focus())
       <div class="avatar" aria-hidden="true">{{ (username || '~').slice(0, 1).toUpperCase() }}</div>
       <h1>Welcome</h1>
       <p v-if="session.notice" class="notice">{{ session.notice }}</p>
-      <input
-        ref="userInput"
-        v-model="username"
-        class="entry"
-        name="username"
-        autocomplete="username"
-        autocapitalize="off"
-        spellcheck="false"
-        placeholder="User name"
-        aria-label="User name"
-        @keydown.enter.prevent="passInput?.focus()"
-      />
-      <input
-        ref="passInput"
-        v-model="password"
-        class="entry"
-        type="password"
-        name="password"
-        autocomplete="current-password"
-        placeholder="Password"
-        aria-label="Password"
-      />
-      <label class="check">
-        <input v-model="remember" type="checkbox" />
-        Remember user name
-      </label>
+      <AuthQuestion v-if="session.prompt" :prompt="session.prompt" :busy="busy" @answer="answer" @cancel="cancel" />
+      <template v-else>
+        <input
+          ref="userInput"
+          v-model="username"
+          class="entry"
+          name="username"
+          autocomplete="username"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="User name"
+          aria-label="User name"
+          @keydown.enter.prevent="passInput?.focus()"
+        />
+        <input
+          ref="passInput"
+          v-model="password"
+          class="entry"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          placeholder="Password"
+          aria-label="Password"
+        />
+        <label class="check">
+          <input v-model="remember" type="checkbox" />
+          Remember user name
+        </label>
+      </template>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <button class="btn suggested" type="submit" :disabled="busy || !username || !password">
+      <button v-if="!session.prompt" class="btn suggested" type="submit" :disabled="busy || !username || !password">
         {{ busy ? 'Logging in…' : 'Log In' }}
       </button>
     </form>
