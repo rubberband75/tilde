@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -102,43 +103,48 @@ func (w *Worker) background(ctx context.Context) Background {
 	return defaultBackground()
 }
 
-// cinnamonBackground reads org.cinnamon.desktop.background. gsettings reads
-// dconf's database directly, without the session bus.
+// cinnamonBackground reads org.cinnamon.desktop.background.
 func cinnamonBackground(ctx context.Context) (Background, bool) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, gsettingsCommand, "list-recursively", "org.cinnamon.desktop.background").Output()
-	if err != nil {
+	keys, ok := gsettingsList(ctx, "org.cinnamon.desktop.background")
+	if !ok {
 		// No gsettings, or no Cinnamon schema (not a Mint desktop).
 		return Background{}, false
 	}
-	b := Background{Source: "cinnamon"}
-	sc := bufio.NewScanner(strings.NewReader(string(out)))
-	for sc.Scan() {
-		// "org.cinnamon.desktop.background picture-uri 'file:///…'"
-		parts := strings.SplitN(sc.Text(), " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		v := gvariantString(parts[2])
-		switch parts[1] {
-		case "picture-uri":
-			// Slideshow XML files and remote pictures are not shown.
-			if p, err := pathFromURI(v); err == nil && !strings.HasSuffix(p, ".xml") {
-				b.Picture = p
-			}
-		case "picture-options":
-			b.Options = v
-		case "primary-color":
-			b.Primary = v
-		case "secondary-color":
-			b.Secondary = v
-		case "color-shading-type":
-			b.Shading = v
-		}
+	b := Background{
+		Source:    "cinnamon",
+		Options:   gvariantString(keys["picture-options"]),
+		Primary:   gvariantString(keys["primary-color"]),
+		Secondary: gvariantString(keys["secondary-color"]),
+		Shading:   gvariantString(keys["color-shading-type"]),
+	}
+	// Slideshow XML files and remote pictures are not shown.
+	if p, err := pathFromURI(gvariantString(keys["picture-uri"])); err == nil && !strings.HasSuffix(p, ".xml") {
+		b.Picture = p
 	}
 	b.normalize()
 	return b, true
+}
+
+// gsettingsList reads every key of a schema, as GVariant text by key name.
+// gsettings reads dconf's database directly, without the session bus. It
+// fails when gsettings or the schema is not installed.
+func gsettingsList(ctx context.Context, schema string) (map[string]string, bool) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, gsettingsCommand, "list-recursively", schema).Output()
+	if err != nil {
+		return nil, false
+	}
+	keys := map[string]string{}
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		// "org.cinnamon.desktop.background picture-uri 'file:///…'"
+		parts := strings.SplitN(sc.Text(), " ", 3)
+		if len(parts) == 3 && parts[0] == schema {
+			keys[parts[1]] = parts[2]
+		}
+	}
+	return keys, true
 }
 
 // gvariantString unquotes a GVariant text string ('…' or "…" with

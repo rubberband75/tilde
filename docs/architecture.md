@@ -37,10 +37,12 @@ could already do.
 - Listens on HTTPS (self-signed certificate by default) or, with `--dev`,
   plain HTTP on loopback for the Vite dev server.
 - Serves the embedded frontend (`internal/webui`).
-- `/api/auth/*`: login, logout, session. Login spawns a session helper.
+- `/api/auth/*`: login, logout, session, and the lock screen (activity,
+  lock, unlock, leave). Login and unlock spawn a session helper.
 - `/api/v1/*`: checks the session cookie, then reverse-proxies the request to
   that user's worker over a new yamux stream (`internal/server/sessions.go`).
-  WebSocket upgrades pass through, which is how terminals work.
+  WebSocket upgrades pass through, which is how terminals work. A locked
+  token gets `423`; locking ends the requests made with it (D40).
 - Keeps browser tokens in memory (`tokens.go`) and rate-limits failed logins
   per address (`ratelimit.go`). Per-account lockout is pam_faillock's job.
 - Must run as root (to start helpers), except in `--dev` single-user mode.
@@ -80,6 +82,9 @@ could already do.
   signals (`drives.go`, D39).
 - Lists, unmounts and ejects drives through udisks2 on the system bus, as
   the user (`drives.go`).
+- Reads the user's screensaver settings with gsettings and streams the idle
+  lock delay to the server (`lock.go`, `/internal/lock-settings`, D40): the
+  only route the server calls for itself, never proxied.
 - Streams big listings and searches as NDJSON, sniffs MIME types of
   extensionless files (budgeted per listing), and makes thumbnails into the
   shared freedesktop cache with the host's thumbnailers (D33).
@@ -129,7 +134,11 @@ the user name.
   machine.
 - Tokens: 256-bit random, `HttpOnly; Secure; SameSite=Strict` cookie named
   `__Host-tilde`, stored server-side by hash, revoked on logout, 12-hour
-  absolute lifetime.
+  absolute lifetime from login or the last unlock.
+- **Lock** (D40) is per browser and kept by the server (`tokens.go`): after
+  the user's idle delay without input reports, or Lock Screen on any of the
+  user's browsers. Shells and jobs keep running. Unlocking checks the
+  password through the helper's `verify` mode and replaces the token.
 - A server restart ends all sessions (the pipes close). The frontend gets
   `401 session_ended` and returns to the login screen.
 
@@ -137,6 +146,7 @@ the user name.
 
 ```
 App.vue ── LoginScreen (logged out)
+       ├── LockScreen (locked: clock, password, Switch User)
        └── Desktop
             ├── DesktopIcons      Computer, Home, Trash, ~/Desktop (grid layout: shell/desktopLayout.ts)
             ├── WindowLayer
@@ -181,6 +191,11 @@ App.vue ── LoginScreen (logged out)
 - **Session expiry**: any `401` with `session_ended` / `not_logged_in` from
   `/api/v1/*` makes the session store return to the login screen with a
   message (`src/api/client.ts`).
+- **Lock screen** (D40): `src/lib/activity.ts` reports input to the server,
+  which keeps the idle clock. A `423 locked` from any request (the events
+  socket reconnects as soon as a lock closes it) switches the session store
+  to `locked`; the desktop is unmounted and its stores reset, as on logout,
+  and the window layout comes back from `localStorage` on unlock.
 - **Theme**: design tokens in `src/styles/themes/mint-y-dark.css`, layout in
   `src/theme/desktopStyle.ts`. See `docs/theming.md`.
 - **Icons**: bundled Mint-Y PNGs resolved by freedesktop name through

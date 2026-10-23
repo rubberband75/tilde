@@ -16,8 +16,8 @@ func TestTokenStore(t *testing.T) {
 	a, _ := s.New("alice")
 	b, _ := s.New("alice")
 	c, _ := s.New("bob")
-	if u, ok := s.Lookup(a); !ok || u != "alice" {
-		t.Fatalf("Lookup(a) = %q, %v", u, ok)
+	if u, ok := s.Lookup(a); !ok || u.User != "alice" {
+		t.Fatalf("Lookup(a) = %+v, %v", u, ok)
 	}
 	if _, ok := s.Lookup("not-a-token"); ok {
 		t.Fatal("unknown token accepted")
@@ -40,20 +40,42 @@ func TestLoginLimiter(t *testing.T) {
 	l := newLoginLimiter(3, time.Minute)
 	now := time.Now()
 	l.now = func() time.Time { return now }
+	allowed := func(addr, user string) bool {
+		ok, _ := l.Begin(addr, user)
+		return ok
+	}
+	// Attempts count when they start, before PAM answers.
 	for i := 0; i < 3; i++ {
-		if ok, _ := l.Allowed("1.2.3.4"); !ok {
-			t.Fatalf("blocked after %d failures", i)
+		if !allowed("1.2.3.4", "alice") {
+			t.Fatalf("blocked after %d attempts", i)
 		}
-		l.Fail("1.2.3.4")
 	}
-	if ok, wait := l.Allowed("1.2.3.4"); ok || wait <= 0 {
-		t.Fatal("not blocked after 3 failures")
+	if ok, wait := l.Begin("1.2.3.4", "alice"); ok || wait <= 0 {
+		t.Fatal("not blocked after 3 attempts")
 	}
-	if ok, _ := l.Allowed("5.6.7.8"); !ok {
+	if !allowed("5.6.7.8", "alice") {
 		t.Fatal("other address blocked")
 	}
+
+	// A right password takes back only that user's attempts.
+	l.Succeed("1.2.3.4", "mallory")
+	if allowed("1.2.3.4", "alice") {
+		t.Fatal("another account's login reset the count")
+	}
+	l.Succeed("1.2.3.4", "alice")
+	for i := 0; i < 3; i++ {
+		if !allowed("1.2.3.4", "bob") {
+			t.Fatal("blocked after alice's success")
+		}
+	}
+	// Cancel takes back one attempt that ended without a verdict.
+	l.Cancel("1.2.3.4", "bob")
+	if !allowed("1.2.3.4", "bob") || allowed("1.2.3.4", "bob") {
+		t.Fatal("Cancel did not free exactly one attempt")
+	}
+
 	now = now.Add(2 * time.Minute)
-	if ok, _ := l.Allowed("1.2.3.4"); !ok {
+	if !allowed("1.2.3.4", "alice") {
 		t.Fatal("still blocked after the window")
 	}
 }

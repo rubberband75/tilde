@@ -3,7 +3,9 @@
 // /api/auth/* is handled by the main server; /api/v1/* is proxied to the
 // user's worker. A 401 with code "session_ended" or "not_logged_in" from
 // /api/v1/* means the session is gone; listeners (the session store) send
-// the user back to the login screen instead of retrying forever.
+// the user back to the login screen instead of retrying forever. A 423
+// "locked" means this browser was locked (idle, or Lock Screen on any
+// device, D40); listeners show the lock screen.
 
 export class ApiError extends Error {
   readonly status: number
@@ -25,6 +27,18 @@ export function onSessionExpired(fn: ExpiredListener): () => void {
 
 export function reportExpired(code: string): void {
   expiredListeners.forEach((fn) => fn(code))
+}
+
+const lockedListeners = new Set<() => void>()
+
+export function onLocked(fn: () => void): () => void {
+  lockedListeners.add(fn)
+  return () => lockedListeners.delete(fn)
+}
+
+/** True for errors that mean this browser has no usable session: ended, logged out or locked. */
+export function isSessionLost(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 401 || e.status === 423)
 }
 
 export type Query = Record<string, string | number | boolean | undefined>
@@ -72,6 +86,7 @@ export async function handleResponse<T>(res: Response, path: string): Promise<T>
     if (res.status === 401 && path.startsWith('/api/v1/') && (code === 'session_ended' || code === 'not_logged_in')) {
       reportExpired(code)
     }
+    if (res.status === 423 && code === 'locked') lockedListeners.forEach((fn) => fn())
     throw new ApiError(res.status, code, err.error ?? res.statusText)
   }
   return data as T

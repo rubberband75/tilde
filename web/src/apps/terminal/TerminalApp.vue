@@ -6,7 +6,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { api, ApiError, wsUrl } from '@/api/client'
+import { api, isSessionLost, wsUrl } from '@/api/client'
 import type { TerminalInfo } from '@/api/types'
 import type { AppContext } from '@/apps/types'
 import { dragPaths, isPathDrag, shellQuote } from '@/lib/dnd'
@@ -92,7 +92,8 @@ function connect() {
 async function reconnect() {
   if (disposed) return
   try {
-    // A 401 here signals the session store, which returns to login.
+    // A 401 or 423 here signals the session store, which shows the login
+    // or lock screen.
     const { terminals } = await api.get<{ terminals: TerminalInfo[] }>('/api/v1/terminals')
     if (!terminals.some((t) => t.id === terminalId)) {
       status.value = 'closed'
@@ -100,7 +101,7 @@ async function reconnect() {
       return
     }
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) return
+    if (isSessionLost(e)) return
   }
   connect()
 }

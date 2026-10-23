@@ -76,8 +76,8 @@ to; tick items off as they land.
 
 ## Phase 5 — Hardening
 
-- [ ] Lock screen following Cinnamon's idle/lock settings; unlock through helper `verify` mode
-- [ ] Idle detection across all clients
+- [x] Lock screen following Cinnamon's idle/lock settings; unlock through helper `verify` mode (D40): kept by the server per browser, Lock Screen (menu, Ctrl+Alt+L) locks every browser, unlock replaces the token
+- [~] Idle detection: each browser locks after the user's idle delay (D40). Next: tell logind (`IdleHint` when every browser is idle, `LockedHint` when every one is locked) and lock on `loginctl lock-session`
 - [ ] Revocable device tokens ("remember this device"), device list
 - [ ] Multi-step PAM conversations (TOTP 2FA)
 - [ ] Polkit authentication agent in the browser; then mounting drives from Files (D39)
@@ -94,7 +94,7 @@ to; tick items off as they land.
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
 - [ ] Shared file chooser dialog for apps
-- [ ] Settings app: theme, wallpaper, saved per user in `~/.config/tilde/`
+- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`
 
 ## Phase 7 — Remote windows
 

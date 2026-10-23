@@ -167,6 +167,9 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("DELETE /api/v1/terminals/{id}", w.handleTerminalDelete)
 	m.HandleFunc("GET /api/v1/terminals/{id}/attach", w.handleTerminalAttach)
 
+	// For the server only (protocol.InternalHeader), never proxied.
+	m.HandleFunc("GET /internal/lock-settings", w.handleLockSettings)
+
 	m.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
 	})

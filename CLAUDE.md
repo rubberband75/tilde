@@ -26,10 +26,11 @@ License: AGPL-3.0-or-later. Bundled Mint-Y icons: CC BY-SA 4.0 (some GPLv3).
 ```
 server/                 Go module "tilde" (one binary, three roles)
   cmd/tilde/            main: serve | session-helper | worker
-  internal/server/      root server: TLS, login, tokens, origin checks, proxy
+  internal/server/      root server: TLS, login, tokens, lock screen, origin checks, proxy
   internal/helper/      per-login root helper: PAM auth + session, starts worker
   internal/worker/      per-user API: fs, jobs, events + inotify, search, thumbnails,
-                        bookmarks, trash, places, drives (udisks), terminals
+                        bookmarks, trash, places, drives (udisks), terminals,
+                        idle lock settings
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages

@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -266,6 +267,91 @@ func TestRepeatedLogins(t *testing.T) {
 		e := setup(t)
 		decode(t, e.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
 	}
+}
+
+// TestLockAndUnlock locks every client of the user (D40): a locked client's
+// terminal socket is cut and its worker requests refused, while the shell
+// keeps running. One client unlocks with the password through the helper's
+// verify mode (real PAM) and gets a new cookie; the other stays locked, and
+// logging out from it leaves the session alone.
+func TestLockAndUnlock(t *testing.T) {
+	e, other := setup(t), setup(t)
+	var term struct {
+		ID string `json:"id"`
+	}
+	decode(t, e.do(t, http.MethodPost, "/api/v1/terminals", map[string]int{"cols": 80, "rows": 24}), http.StatusCreated, &term)
+	defer func() { e.do(t, http.MethodDelete, "/api/v1/terminals/"+term.ID, nil).Body.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	wsURL := *e.base
+	wsURL.Scheme = strings.Replace(wsURL.Scheme, "http", "ws", 1)
+	wsURL.Path = "/api/v1/terminals/" + term.ID + "/attach"
+	h := http.Header{}
+	h.Set("Origin", e.base.Scheme+"://"+e.base.Host)
+	conn, _, err := websocket.Dial(ctx, wsURL.String(), &websocket.DialOptions{HTTPClient: e.client, HTTPHeader: h})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+
+	decode(t, e.do(t, http.MethodPost, "/api/auth/lock", nil), http.StatusNoContent, nil)
+	for {
+		// Replayed output may come first; then the socket must close.
+		if _, _, err := conn.Read(ctx); err != nil {
+			if ctx.Err() != nil {
+				t.Fatal("the terminal socket stayed open after locking")
+			}
+			break
+		}
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusLocked, nil)
+	decode(t, other.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusLocked, nil)
+	var info struct {
+		User   string `json:"user"`
+		Locked bool   `json:"locked"`
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/auth/session", nil), http.StatusOK, &info)
+	if !info.Locked || info.User != e.user {
+		t.Fatalf("session %+v", info)
+	}
+
+	old := e.client.Jar.Cookies(e.base)
+	pass := os.Getenv("TILDE_PASS")
+	decode(t, e.do(t, http.MethodPost, "/api/auth/unlock", map[string]string{"password": "wrong-" + pass}), http.StatusUnauthorized, nil)
+	decode(t, e.do(t, http.MethodPost, "/api/auth/unlock", map[string]string{"password": pass}), http.StatusOK, &info)
+	if info.Locked {
+		t.Fatal("still locked after unlocking")
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
+	decode(t, other.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusLocked, nil)
+
+	// The cookie from before the lock is no good any more.
+	req, _ := http.NewRequest(http.MethodGet, e.base.String()+"/api/v1/hello", nil)
+	for _, c := range old {
+		req.AddCookie(c)
+	}
+	resp, err := (&http.Client{Transport: e.client.Transport}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode(t, resp, http.StatusUnauthorized, nil)
+
+	// The shell kept running through the lock.
+	type terminal struct {
+		ID     string `json:"id"`
+		Exited bool   `json:"exited"`
+	}
+	var list struct {
+		Terminals []terminal `json:"terminals"`
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/terminals", nil), http.StatusOK, &list)
+	if !slices.Contains(list.Terminals, terminal{ID: term.ID}) {
+		t.Fatalf("terminal %s gone after the lock: %+v", term.ID, list.Terminals)
+	}
+
+	decode(t, other.do(t, http.MethodPost, "/api/auth/logout", nil), http.StatusNoContent, nil)
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, nil)
 }
 
 // TestJobsRunAsTheUser checks that file jobs get the kernel's answer for the

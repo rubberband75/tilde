@@ -11,7 +11,7 @@ Errors look like:
 Common codes: `bad_request`, `not_found`, `permission_denied`, `exists`,
 `other_drive`, `not_empty`, `not_a_directory`, `is_a_directory`, `no_space`,
 `read_only`, `internal_error`, `not_logged_in`, `session_ended`, `bad_origin`,
-`stale`, `busy`.
+`stale`, `busy`, `locked`.
 
 TypeScript types for these responses live in `web/src/api/types.ts`; keep
 them in sync.
@@ -21,15 +21,41 @@ them in sync.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/api/auth/login` | `{username, password}` | `200 {user, uid, home}` and sets the session cookie. `401 auth_failed`, `403 root_login_disabled` / `account_expired` / `password_expired` / `not_allowed`, `429 rate_limited` |
-| POST | `/api/auth/logout` | — | `204`. Ends the user's session on all devices |
-| GET | `/api/auth/session` | — | `200 {user, uid, home}`, or `401 not_logged_in` / `session_ended` |
+| POST | `/api/auth/logout` | — | `204`. Ends the user's session on all devices; from a locked browser it only signs that browser out |
+| POST | `/api/auth/leave` | — | `204`. Signs this browser out and leaves the session running (the lock screen's Switch User) |
+| GET | `/api/auth/session` | — | `200 SessionInfo`, also while locked, or `401 not_logged_in` / `session_ended` |
+| POST | `/api/auth/activity` | — | `200 {lockAfter, heartbeat}`: there was keyboard or pointer input. `423 locked` if this browser is locked |
+| POST | `/api/auth/lock` | — | `204`. Locks every browser logged in as this user. `423 locked` from a locked browser |
+| POST | `/api/auth/unlock` | `{password}` | `200 SessionInfo` and a new session cookie (the old one stops working); only this browser unlocks. `401 auth_failed`, `403 account_expired` / `password_expired`, `429 rate_limited` (shared with login: 5 attempts per address in 15 minutes), `401 too_many_attempts` after 5 tries on this cookie, which is then signed out |
+
+`SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login
+returns it too.
+
+Locking (D40) is per browser: tabs share the cookie, and the server keeps
+the lock. A browser locks when `lockAfter` seconds pass without an
+`activity` report (`0`: never), or when any of the user's browsers calls
+`lock`. While locked, `/api/v1/*` answers `423 locked` and the server
+closes the browser's open requests and WebSockets; show the lock screen.
+Lock and `423` responses, `session` while locked, logout and leave carry
+`Clear-Site-Data: "cache"`.
+Report input on the first event after a quiet spell, then at most every
+`heartbeat` seconds while it continues; the server allows twice that for
+reports on their way. `lockAfter` follows the user's Cinnamon screensaver
+settings (`idle-delay` + `lock-delay`, when `idle-activation-enabled` and
+`lock-enabled`), else GNOME's, else 900. The token lives 12 hours from
+login or the last unlock.
 
 ## Worker API (`/api/v1/*`)
 
 Proxied unchanged to the user's worker. Without a valid session:
 `401 not_logged_in`, or `401 session_ended` if the token was valid but the
-session is gone (the frontend returns to login). `502 worker_unavailable` if
-the worker stops responding.
+session is gone (the frontend returns to login). `423 locked` while this
+browser is locked. `502 worker_unavailable` if the worker stops responding.
+
+The worker also serves `GET /internal/lock-settings` (NDJSON
+`{source, lockAfter}` on connect and on change) to the server only: the
+server proxies nothing outside `/api/v1/`, and the route needs the
+`X-Tilde-Internal` header, which the proxy strips.
 
 Paths in query strings and bodies are absolute.
 
@@ -210,4 +236,3 @@ Terminal WebSocket:
 ## Planned
 
 - Notification events on `/api/v1/events`.
-- `POST /api/auth/unlock` for the lock screen.

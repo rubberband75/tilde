@@ -69,9 +69,13 @@
   /* Modal dialogs */
   --dialog-overlay: rgba(0, 0, 0, 0.35);
 
-  /* Login dialog */
+  /* Login dialog, also the lock screen's unlock box */
   --login-bg: rgba(34, 34, 38, 0.92);
   --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+
+  /* Lock screen clock, over the desktop background (cinnamon-screensaver) */
+  --lock-clock-fg: #ffffff;
+  --lock-clock-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 
   /* Window decorations */
   --wm-titlebar-height: 32px;

@@ -1,28 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useClock } from '@/lib/clock'
 
-const now = ref(new Date())
-let timer: ReturnType<typeof setInterval> | undefined
-
-onMounted(() => {
-  // Tick on the minute boundary, then every minute.
-  const sync = () => {
-    now.value = new Date()
-  }
-  setTimeout(
-    () => {
-      sync()
-      timer = setInterval(sync, 60_000)
-    },
-    60_000 - (Date.now() % 60_000),
-  )
-})
-onBeforeUnmount(() => clearInterval(timer))
-
-const time = computed(() =>
-  new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now.value),
-)
-const date = computed(() => new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(now.value))
+const { time, date } = useClock()
 </script>
 
 <template>

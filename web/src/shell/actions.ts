@@ -25,6 +25,15 @@ export function openEntry(entry: Entry): void {
   window.open(fsApi.contentUrl(entry.path), '_blank', 'noopener')
 }
 
+/** Locks every browser logged in as this user (menu button, Ctrl+Alt+L). */
+export async function lockScreen(): Promise<void> {
+  try {
+    await useSession().lock()
+  } catch {
+    useNotices().push('Could not lock the screen.', 'error')
+  }
+}
+
 /** Builds the shell API handed to an app window (see apps/types.ts). */
 export function createContext(windowId: string): AppContext {
   const wm = useWindows()

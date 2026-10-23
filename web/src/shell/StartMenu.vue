@@ -9,6 +9,7 @@ import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
+import { lockScreen } from './actions'
 
 const wm = useWindows()
 const session = useSession()
@@ -51,6 +52,11 @@ async function logOut() {
   await session.logout()
 }
 
+async function lock() {
+  open.value = false
+  await lockScreen()
+}
+
 watch(open, async (v) => {
   if (v) {
     query.value = ''
@@ -75,7 +81,7 @@ watch(open, async (v) => {
             </button>
           </div>
           <div class="session">
-            <button class="fav" title="Lock Screen (not available yet)" disabled>
+            <button class="fav" title="Lock Screen" @click="lock">
               <SymbolicIcon name="lock" :size="18" />
             </button>
             <button class="fav" title="Log Out" @click="logOut">

@@ -1,10 +1,21 @@
 // Types mirroring the worker's JSON (server/internal/worker). Keep in sync
 // with docs/api.md.
 
-export interface SessionInfo {
+/** GET /api/auth/session, and what logging in and unlocking return. */
+export interface SessionInfo extends LockTiming {
   user: string
   uid: number
   home: string
+  /** This browser shows the lock screen until it is unlocked (D40). */
+  locked: boolean
+}
+
+/** How input in the browser keeps it from locking; POST /api/auth/activity. */
+export interface LockTiming {
+  /** Seconds without input after which this browser locks; 0 never. */
+  lockAfter: number
+  /** How often, in seconds, to report input while there is some. */
+  heartbeat: number
 }
 
 export interface Entry {

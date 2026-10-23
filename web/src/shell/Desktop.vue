@@ -8,11 +8,22 @@ import Notices from './Notices.vue'
 import Panel from './Panel.vue'
 import WindowLayer from '@/wm/WindowLayer.vue'
 import { useWindows } from '@/stores/windows'
+import { lockScreen } from './actions'
 
 const wm = useWindows()
 const background = useBackground()
 const workArea = ref<HTMLElement | null>(null)
 let ro: ResizeObserver | undefined
+
+// Cinnamon's Lock Screen shortcut. Captured before apps see it, so it works
+// from a terminal too. Windows reports AltGr as Ctrl+Alt: AltGr+L types "ł".
+function onKey(e: KeyboardEvent) {
+  if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.code === 'KeyL' && !e.getModifierState('AltGraph')) {
+    e.preventDefault()
+    e.stopPropagation()
+    void lockScreen()
+  }
+}
 
 onMounted(() => {
   void background.load()
@@ -20,8 +31,12 @@ onMounted(() => {
     if (entry) wm.setArea(entry.contentRect.width, entry.contentRect.height)
   })
   if (workArea.value) ro.observe(workArea.value)
+  window.addEventListener('keydown', onKey, true)
 })
-onBeforeUnmount(() => ro?.disconnect())
+onBeforeUnmount(() => {
+  ro?.disconnect()
+  window.removeEventListener('keydown', onKey, true)
+})
 </script>
 
 <template>

@@ -3,7 +3,7 @@
 // with backoff; every connection starts with a full job snapshot, and
 // onOpen lets the caller resend its watches and refresh what it may have
 // missed while it was down.
-import { api, wsUrl } from './client'
+import { api, isSessionLost, wsUrl } from './client'
 import type { ClientMessage, WorkerEvent } from './types'
 
 export interface EventStream {
@@ -43,9 +43,10 @@ export function connectEvents(
       if (closed || ws !== socket) return
       const delay = Math.min(10_000, 500 * 2 ** retries++)
       timer = setTimeout(() => {
-        // A request first: if the session has ended, the 401 sends the
-        // shell back to the login screen, which closes this stream.
-        api.get('/api/v1/hello').then(open, () => !closed && open())
+        // A request first: if the session has ended or this browser was
+        // locked, the 401 or 423 sends the shell to the login or lock
+        // screen, which closes this stream.
+        api.get('/api/v1/hello').then(open, (e: unknown) => !closed && !isSessionLost(e) && open())
       }, delay)
     }
   }

@@ -32,7 +32,7 @@ const (
 	// ModeSession authenticates, opens a PAM session and starts the worker.
 	ModeSession = "session"
 	// ModeVerify only checks the password (used for logins to an existing
-	// session and, later, for unlocking a locked screen).
+	// session and for unlocking a locked client).
 	ModeVerify = "verify"
 )
 
@@ -62,6 +62,12 @@ type WorkerHello struct {
 	UID      int    `json:"uid"`
 	Home     string `json:"home"`
 }
+
+// InternalHeader marks requests the server makes to the worker for itself,
+// on routes under /internal/ (the idle lock delay, D40). Browsers never
+// reach those routes: the server proxies only /api/v1/*, and its proxy
+// deletes this header from everything it forwards.
+const InternalHeader = "X-Tilde-Internal"
 
 // Error codes shared between helper, server and frontend.
 const (

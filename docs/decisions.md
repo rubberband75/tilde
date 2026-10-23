@@ -92,7 +92,7 @@ settings via gsettings (`org.cinnamon.desktop.session idle-delay`,
 screensaver `lock-enabled`, `lock-delay`) — not implemented yet. Closing the
 tab leaves the session running; no auto-logout by default.
 
-**D16 — Tokens** (2026-10-19, accepted, 4e)
+**D16 — Tokens** (2026-10-19, accepted, 4e; idle locking and the 12 hours amended by D40)
 Random 256-bit token in an `HttpOnly; Secure; SameSite=Strict` cookie
 (`__Host-tilde`), stored server-side by hash, rotated on every login and
 unlock, revoked on logout. Idle (no input from any client) → lock.
@@ -340,15 +340,54 @@ VM has a test-only rule for its `tester` account to set up the test
 stick); building the browser polkit agent first (phase 5; mounting comes
 with it).
 
+**D40 — Lock screen: kept by the server, per browser** (2026-10-23, accepted)
+The server keeps the lock, per session token, so per browser (its tabs share
+the cookie). A locked token gets `423 locked` from `/api/v1/*`, and locking
+cancels the requests already made with it, which closes its terminal and
+events WebSockets; only `/api/auth/*` still answers. Unlocking checks the
+password through the helper's `verify` mode (PAM auth and account stacks)
+under the login rate limit, and replaces the token with a new one.
+Amending D16: (1) idle locks each browser on its own, not "no input from any
+client", because otherwise a tab left open at home stays usable while the
+user is active at work. The browser reports input at most once per
+heartbeat; the server locks a token when the user's delay passes without
+any, on the next request or a sweep every 5 seconds, so a tab on an
+unattended machine loses its sockets too. (2) Lock Screen (menu,
+Ctrl+Alt+L) locks every browser of the user, and each unlocks separately.
+(3) The 12 hours count from the last time the password was typed: unlocking
+starts them again. Expiry still goes to the login screen and the session
+keeps running. Locking drops the desktop from the page, as logging out
+does, rather than covering it: devtools would remove an overlay and could
+read terminal output and file lists from memory. So apps must keep unsaved
+work in the worker (the phase 6 editor's drafts). The delay follows D15:
+Cinnamon's screensaver settings (`idle-delay` + `lock-delay`, if
+`idle-activation-enabled` and `lock-enabled`), else GNOME's, else
+Cinnamon's defaults (15 minutes); locking turned off there means Tilde
+never locks on idle. The worker reads them (the server never opens user
+files) and streams them to the server on `/internal/lock-settings`, a route
+the proxy never forwards. A Tilde-only timeout chosen in the Settings app,
+with Cinnamon's as the default, comes later (roadmap phase 6). From a
+locked browser, Log Out only signs that browser out, so nobody at a locked
+screen can end the session everywhere; the lock screen's Switch User uses
+`/api/auth/leave`, which never ends the session, because another tab may
+have unlocked the cookie meanwhile. A locked browser cannot lock the
+others either. Unlock attempts share the login rate limit, counted when
+they start (parallel guesses get no more), and a locked token gets 5 tries
+before it is revoked. Lock responses clear the browser's HTTP cache
+(`Clear-Site-Data`). Still outside the lock: files opened in their own
+browser tab and the window layout in `localStorage`; the phase 6 viewers
+and keeping the layout in the worker would close those. Rejected: a lock
+that is only an overlay in the page; idle timers in the page (tabs sharing
+a cookie would disagree); always locking after a fixed time even when the
+desktop's locking is off (the Settings override covers that need).
+
 ---
 
 ## Open decisions
 
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
-| Absolute session lifetime | 12 h re-login vs lock-only like Mint | 12 h, confirm | Phase 5 |
 | 2FA through PAM | multi-step PAM conversation round-trips to the browser | needed for TOTP modules | Phase 5 |
-| Lock screen | gsettings-driven idle lock, unlock via `verify` helper mode | per D15 | Phase 5 |
 | Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |
 | Packaging | `.deb` with systemd unit (depends on libpam0g); update method | nfpm or debhelper | Before first release |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |

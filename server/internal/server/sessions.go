@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -44,11 +46,97 @@ type UserSession struct {
 	cmd   *exec.Cmd
 	conn  *yamux.Session
 	proxy http.Handler
-	done  chan struct{}
+	// client makes the server's own requests to the worker (/internal/).
+	client *http.Client
+	done   chan struct{}
+
+	// lockAfter is the user's idle lock delay, nil until the worker has
+	// reported it (D40).
+	lockAfter atomic.Pointer[time.Duration]
 }
 
 // Done is closed when the session has ended.
 func (us *UserSession) Done() <-chan struct{} { return us.done }
+
+// defaultLockAfter applies until the worker reports the user's settings:
+// Cinnamon's default.
+const defaultLockAfter = 15 * time.Minute
+
+// LockAfter returns how long the user's clients may go without input
+// before they lock; 0 never locks.
+func (us *UserSession) LockAfter() time.Duration {
+	if d := us.lockAfter.Load(); d != nil {
+		return *d
+	}
+	return defaultLockAfter
+}
+
+// lockSettingsRetry is how long to wait before asking the worker again
+// after its lock settings stream ended while the session was running.
+const lockSettingsRetry = 30 * time.Second
+
+// followLockSettings keeps LockAfter current until the session ends: the
+// worker reads the user's screensaver settings (the server never opens
+// user files) and streams them on connect and whenever they change.
+func (us *UserSession) followLockSettings() {
+	for {
+		err := us.readLockSettings()
+		select {
+		case <-us.done:
+			return
+		default:
+		}
+		slog.Warn("lock settings from the worker", "user", us.User, "err", err)
+		select {
+		case <-us.done:
+			return
+		case <-time.After(lockSettingsRetry):
+		}
+	}
+}
+
+func (us *UserSession) readLockSettings() error {
+	req, err := http.NewRequest(http.MethodGet, "http://worker/internal/lock-settings", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set(protocol.InternalHeader, "1")
+	resp, err := us.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+	// The worker runs as the user, who could make it send anything: read
+	// short lines only, so this root process never buffers much.
+	lines := bufio.NewScanner(resp.Body)
+	lines.Buffer(make([]byte, 0, 1024), maxLockSettingsLine)
+	for lines.Scan() {
+		var settings struct {
+			Source    string `json:"source"`
+			LockAfter int64  `json:"lockAfter"`
+		}
+		if err := json.Unmarshal(lines.Bytes(), &settings); err != nil {
+			return err
+		}
+		// Past a day, a lock could only come after the token's 12 hours.
+		d := time.Duration(min(max(settings.LockAfter, 0), maxLockAfter)) * time.Second
+		if old := us.lockAfter.Swap(&d); old == nil || *old != d {
+			slog.Info("idle lock", "user", us.User, "after", d, "source", settings.Source)
+		}
+	}
+	if err := lines.Err(); err != nil {
+		return err
+	}
+	return io.EOF
+}
+
+const (
+	maxLockSettingsLine = 4096
+	maxLockAfter        = 24 * 60 * 60 // seconds
+)
 
 // ServeHTTP forwards a browser request to the user's worker.
 func (us *UserSession) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -228,6 +316,7 @@ func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) 
 		h.kill()
 		return nil, err
 	}
+	transport := newWorkerTransport(ys)
 	us := &UserSession{
 		User:    hello.User,
 		UID:     hello.UID,
@@ -235,13 +324,15 @@ func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) 
 		Started: time.Now(),
 		cmd:     h.cmd,
 		conn:    ys,
-		proxy:   newWorkerProxy(ys),
+		proxy:   newWorkerProxy(transport),
+		client:  &http.Client{Transport: transport},
 		done:    make(chan struct{}),
 	}
 	m.mu.Lock()
 	m.sessions[req.User] = us
 	m.mu.Unlock()
 	slog.Info("session started", "user", us.User, "uid", us.UID)
+	go us.followLockSettings()
 
 	// If the stream breaks (keepalive failure), stop the helper.
 	go func() {
@@ -306,11 +397,9 @@ func (m *Manager) EndAll() {
 	wg.Wait()
 }
 
-// newWorkerProxy forwards requests over new yamux streams. WebSocket
-// upgrades pass through, which is how terminals reach the worker's PTYs.
-func newWorkerProxy(ys *yamux.Session) http.Handler {
-	target := &url.URL{Scheme: "http", Host: "worker"}
-	transport := &http.Transport{
+// newWorkerTransport sends HTTP requests over new yamux streams.
+func newWorkerTransport(ys *yamux.Session) *http.Transport {
+	return &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return ys.Open()
 		},
@@ -318,14 +407,22 @@ func newWorkerProxy(ys *yamux.Session) http.Handler {
 		IdleConnTimeout:     90 * time.Second,
 		DisableCompression:  true,
 	}
+}
+
+// newWorkerProxy forwards browser requests to the worker. WebSocket
+// upgrades pass through, which is how terminals reach the worker's PTYs;
+// ending a request's context closes its WebSocket (locking does that).
+func newWorkerProxy(transport http.RoundTripper) http.Handler {
+	target := &url.URL{Scheme: "http", Host: "worker"}
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.Host = "worker"
 			// The worker trusts the server; it never needs the browser's
-			// credentials.
+			// credentials, and only the server makes internal requests.
 			pr.Out.Header.Del("Cookie")
 			pr.Out.Header.Del("Authorization")
+			pr.Out.Header.Del(protocol.InternalHeader)
 		},
 		Transport:     transport,
 		FlushInterval: -1,

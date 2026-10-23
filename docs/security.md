@@ -11,6 +11,7 @@ bug in Tilde can never give more than the account already has.
 | Someone on the network | log in, or ride a logged-in browser | not exposed by default; TLS; PAM; rate limiting + pam_faillock; Origin checks; SameSite=Strict HttpOnly cookies |
 | A malicious website the user visits | act through the user's browser (CSRF, cross-site WebSocket hijacking) | Origin check on every state-changing request and WebSocket upgrade; `SameSite=Strict` |
 | A file on the user's disk (HTML, SVG) | run script on Tilde's origin | downloads served with `Content-Security-Policy: sandbox`, `nosniff`, forced attachment for non-media types |
+| Someone at an unattended browser | use the open session | idle lock per browser (D40), kept by the server: a locked browser's requests are refused and its sockets closed; unlocking needs the password |
 | A bug in Tilde's API code | escape the user's permissions | all user operations run in the worker as the user; the server never touches files |
 | Another local user | reach someone else's session | the worker has no network port; sessions keyed by authenticated user; workers run under different UIDs |
 
@@ -32,11 +33,32 @@ bug in Tilde can never give more than the account already has.
   `pam_keyinit`, `pam_env`, optional `pam_gnome_keyring`.
 - Root login refused before PAM runs; any UID 0 account refused after lookup.
 - Unknown users and wrong passwords get the same error.
-- Login rate limit: 5 failures per address in 15 minutes, then `429`.
-  `X-Forwarded-For` is ignored unless `--trust-proxy`.
+- Rate limit for logins and unlocks together: 5 attempts per address in 15
+  minutes, then `429`. An attempt counts when it starts, before PAM
+  answers, so parallel requests get no more; a right password takes back
+  only that user's attempts. `X-Forwarded-For` is ignored unless
+  `--trust-proxy`.
 - Session tokens: 32 random bytes, stored by SHA-256 hash in memory, cookie
   `__Host-tilde` with `HttpOnly; Secure; SameSite=Strict; Path=/`, 12-hour
-  absolute lifetime, all revoked on logout and when the session ends.
+  absolute lifetime from the last time the password was typed (login or
+  unlock), all revoked on logout and when the session ends.
+- Lock screen (D40): the server locks a browser's token after the user's
+  idle delay without input (Cinnamon's screensaver settings) or when any of
+  the user's browsers presses Lock Screen. A locked token gets `423` from
+  every worker route, and locking ends its open requests and WebSockets.
+  Unlocking runs the PAM auth and account stacks through the helper,
+  counts towards the login rate limit and replaces the token; after 5
+  tries a locked token is revoked, so copying its cookie elsewhere buys no
+  more guesses. A locked browser can neither log the session out (it only
+  signs itself out) nor lock the user's other browsers. The page drops the
+  desktop while locked, and lock, `423`, logout and leave responses send
+  `Clear-Site-Data: "cache"`, so file contents the browser cached are gone.
+  Not covered yet: files Tilde opened in their own browser tab (types with
+  no viewer app) stay open, and the window layout in `localStorage` keeps
+  window titles and folder paths.
+- The server reads the worker's lock settings stream in lines of at most
+  4 KiB: the worker is the user's process, and must not be able to make
+  the root server buffer without limit.
 - Origin check (`internal/server/middleware.go`): every non-GET/HEAD/OPTIONS
   request and every WebSocket upgrade must carry an `Origin` whose host equals
   the request's `Host` (or one passed with `--allowed-origins`).
@@ -71,7 +93,6 @@ bug in Tilde can never give more than the account already has.
 
 ## Not yet (see roadmap phase 5)
 
-- Lock screen and idle detection.
 - "Remember this device" as a revocable server-side device token.
 - TOTP and other multi-step PAM conversations.
 - Password re-prompt for admin actions through a polkit agent.
