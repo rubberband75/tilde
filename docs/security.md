@@ -75,6 +75,15 @@ bug in Tilde can never give more than the account already has.
   unlock request is ignored, so only the password unlocks (D41). The worker
   takes a `Lock` signal only from logind's own bus name: any user can send
   a signal straight to another user's worker.
+- polkit agent (D44): the worker is the authentication agent of its own
+  web session only. It never checks a password: polkit's setuid
+  `polkit-agent-helper-1` runs PAM and reports to polkit, and the worker
+  passes the password and PAM's questions between it and the dialog
+  (answers of at most 511 bytes, no line breaks; never logged). The cookie
+  reaches the helper on stdin, not its command line. Only polkit's own bus
+  name may start or cancel a request, so another user cannot put a
+  password dialog in this user's browser. The browser may answer only as
+  one of the users polkit named. Locked browsers cannot reach it (`423`).
 - Origin check (`internal/server/middleware.go`): every non-GET/HEAD/OPTIONS
   request and every WebSocket upgrade must carry an `Origin` whose host equals
   the request's `Host` (or one passed with `--allowed-origins`).
@@ -109,7 +118,6 @@ bug in Tilde can never give more than the account already has.
 
 ## Not yet (see roadmap phase 5)
 
-- Password re-prompt for admin actions through a polkit agent.
 - Audit log of logins, started commands and deletions.
 
 ## Two-factor

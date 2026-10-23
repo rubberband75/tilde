@@ -20,10 +20,10 @@ import (
 // udisks and polkit decide what the user may do, the way the kernel decides
 // file access.
 //
-// Tilde lists every volume (mounted or not) and can unmount the user's own
-// mounts and eject drives. It does not mount: polkit lets only an active
-// local session mount without an administrator's password, a web session
-// is not one, and Tilde has no authentication agent yet (phase 5).
+// Tilde lists every volume (mounted or not), mounts them, unmounts the
+// user's own mounts and ejects drives. polkit lets only an active local
+// session mount without a password; a web session is not one, so mounting
+// asks for one through Tilde's polkit agent (D44).
 
 // Volume is a filesystem the user can see: mounted, or on a drive udisks
 // knows about.
@@ -162,8 +162,10 @@ func (b *busUdisks) call(ctx context.Context, path dbus.ObjectPath, method strin
 	return b.conn.Object(udisksName, path).CallWithContext(ctx, method, 0, args...).Err
 }
 
-// noInteraction keeps udisks from waiting for a polkit agent Tilde does
-// not have: requests that need a password fail at once.
+// noInteraction keeps udisks from waiting for a password: requests that
+// need one fail at once. Only mounting asks (D44); unmounting someone
+// else's mount or powering a drive off is not worth an administrator's
+// password.
 var noInteraction = map[string]dbus.Variant{"auth.no_user_interaction": dbus.MakeVariant(true)}
 
 // volumes lists what the Computer view shows: udisks' volumes (when udisks
@@ -337,7 +339,7 @@ func formatSizeSI(n uint64) string {
 	return fmt.Sprintf("%.1f %s", f, units[i])
 }
 
-// errNotAuthorized: polkit wants a password Tilde cannot ask for yet.
+// errNotAuthorized: polkit wants a password the request may not ask for.
 var errNotAuthorized = errors.New("not authorized")
 
 // udisksErr turns udisks errors into API errors.
@@ -345,7 +347,9 @@ func udisksErr(err error) (int, string) {
 	var de dbus.Error
 	if errors.As(err, &de) {
 		switch strings.TrimPrefix(de.Name, udisksErrPrefix) {
-		case "NotAuthorized", "NotAuthorizedCanObtain", "NotAuthorizedDismissed":
+		case "NotAuthorizedDismissed":
+			return http.StatusForbidden, "cancelled"
+		case "NotAuthorized", "NotAuthorizedCanObtain":
 			return http.StatusForbidden, "not_authorized"
 		case "DeviceBusy":
 			return http.StatusConflict, "busy"
@@ -369,7 +373,9 @@ func writeUdisksErr(rw http.ResponseWriter, err error) {
 	case "busy":
 		msg = "the volume is in use; close the files, folders and terminals that use it"
 	case "not_authorized":
-		msg = "this needs an administrator's password, which Tilde cannot ask for yet"
+		msg = "not allowed: this needs an administrator's password"
+	case "cancelled":
+		msg = "authentication was cancelled"
 	}
 	writeJSON(rw, status, apiError{Error: msg, Code: code})
 }
@@ -393,7 +399,7 @@ func (w *Worker) findVolume(ctx context.Context, id string) ([]Volume, *Volume, 
 			return vols, &vols[i], nil
 		}
 	}
-	return nil, nil, badRequest{"no such volume (only volumes udisks manages can be unmounted)"}
+	return nil, nil, badRequest{"no such volume (only volumes udisks manages can be mounted or unmounted)"}
 }
 
 func (w *Worker) unmount(ctx context.Context, v *Volume) error {
@@ -402,6 +408,43 @@ func (w *Worker) unmount(ctx context.Context, v *Volume) error {
 		return nil
 	}
 	return err
+}
+
+// handleMount mounts a volume and returns it, mounted. When polkit wants a
+// password, it asks through the agent (D44) and this request waits while
+// the dialog is open; without an agent it fails with not_authorized.
+func (w *Worker) handleMount(rw http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(rw, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), authTimeout+time.Minute)
+	defer cancel()
+	_, v, err := w.findVolume(ctx, req.ID)
+	if err != nil {
+		writeErr(rw, err)
+		return
+	}
+	if v.MountPoint == "" {
+		opts := noInteraction
+		if w.polkit.running() {
+			opts = map[string]dbus.Variant{}
+		}
+		// udisks returns once the mount is in its own records.
+		err := w.drives.source().call(ctx, dbus.ObjectPath(v.ID), udisksFS+".Mount", opts)
+		if err != nil && !udisksErrIs(err, "AlreadyMounted") {
+			writeUdisksErr(rw, err)
+			return
+		}
+		if _, v, err = w.findVolume(ctx, req.ID); err != nil {
+			writeErr(rw, err)
+			return
+		}
+	}
+	writeJSON(rw, http.StatusOK, v)
 }
 
 // handleUnmount unmounts one volume. udisks lets users unmount what they

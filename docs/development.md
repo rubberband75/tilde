@@ -101,12 +101,14 @@ After the Go suite, `make e2e-vm` runs the Playwright UI tests in
 and logout, the desktop icons, layout and background, Files (new folder,
 rename, trash and restore), live updates from inotify, the terminal, and
 per-drive trash on a small ext4 image the script loop-mounts at
-`/mnt/tilde-drive` for `tester` (`TILDE_DRIVE`), and ejecting a "USB
-stick": a FAT image labelled `TILDE-USB` that `tester` sets up and mounts
-through udisks before each run (`TILDE_USB`; the Go suite's
-`TestDrivesFollowUdisks` uses it too). A test-only polkit rule in the VM
+`/mnt/tilde-drive` for `tester` (`TILDE_DRIVE`), and ejecting and mounting
+a "USB stick": a FAT image labelled `TILDE-USB` that `tester` sets up and
+mounts through udisks before each run (`TILDE_USB`; the Go suite's
+`TestDrivesFollowUdisks` and `TestPolkitMount` use it too). A test-only polkit rule in the VM
 (`/etc/polkit-1/rules.d/49-tilde-e2e.rules`) lets `tester` do that without
-an active session. Tests whose variable is unset skip. `make deps` installs Playwright; the first run downloads its
+an active session, and makes mounting from Tilde's web session ask for
+`tester`'s own password, so the drive tests mount through Tilde's polkit
+agent (D44). Tests whose variable is unset skip. `make deps` installs Playwright; the first run downloads its
 Chromium (on a host without the browser's libraries: `cd web && npx
 playwright install --with-deps chromium`). Output is kept in
 `~/.cache/tilde-e2e-vm/last-ui-test.log`; on failure, `cd web && npx

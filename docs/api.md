@@ -136,12 +136,26 @@ the mount table and `udisks` is false.
 | Method | Path | Notes |
 | --- | --- | --- |
 | GET | `/api/v1/drives` | `{udisks, volumes: Volume[]}`: the root first, then mounted volumes, then unmounted ones. `Volume`: `{id, device, name, fsType, size, free?, mountPoint?, removable, canEject, system, icons}`. `id` is a udisks block object path, or `mount:` and the mount point for mounts udisks does not know. `name` is the label, else the mount folder's name, else "4.0 GB Volume". `canEject`: mounted under the user's `/media` (what udisks mounted for them), or on a removable non-system drive. `icons` are freedesktop names, most specific first |
+| POST | `/api/v1/drives/mount` | `{id}` → `Volume`, mounted (at once if it already is). From a web session polkit wants a password: it asks through Tilde's agent (D44), and the request waits while the dialog is open. `403 cancelled` if the user cancels, `403 not_authorized` if polkit refuses (or no agent is running) |
 | POST | `/api/v1/drives/unmount` | `{id}` → `204`. udisks lets users unmount their own mounts; others need an administrator: `403 not_authorized`. `409 busy` while files are open on it |
 | POST | `/api/v1/drives/eject` | `{id}` → `{unmounted, ejected}`. Unmounts every mounted volume of the drive, then powers the drive off (or ejects the medium). polkit refuses that last step outside an active local session, so `ejected` is usually false from a browser; the drive is unmounted and safe to unplug either way |
 
-There is no mount endpoint yet: polkit lets only an active local session
-mount without an administrator's password, and Tilde cannot ask for one
-until it has an authentication agent (phase 5).
+Only mounting asks polkit for a password (through the agent below);
+unmount and eject never wait for one.
+
+### polkit agent (D44)
+
+The worker is the polkit authentication agent of Tilde's web session.
+When a program in the session needs a password (Mount above, `pkexec` in
+a terminal), the request shows up here and the events socket sends
+`{"type":"polkit"}`; every browser of the user shows the dialog, and the
+first answer ends it. Unanswered requests are cancelled after 5 minutes.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/polkit` | `{agent, requests: PolkitRequest[]}`, oldest first. `agent`: registered with polkit. `PolkitRequest`: `{id, action, message, icon?, identities, prompt?}`. `identities` are the users whose password polkit accepts, the user first when listed; `prompt` (`{text, echo, info?}`, as at login) is a question PAM asked after the password, waiting for its answer |
+| POST | `/api/v1/polkit/respond` | `{id, identity?, answer}`. With no `prompt` waiting, `answer` is the password of `identity` (default: the first). `204` authorized (the request ends), `200 {prompt}` another question, `401 auth_failed` wrong (the request stays open; `error` carries PAM's message if it gave one), `404 not_found` the request ended, `409 busy` an answer is being checked. Answers: at most 511 bytes, no line breaks |
+| POST | `/api/v1/polkit/cancel` | `{id}` → `204`; the program that asked is told it was dismissed. `404` if it already ended |
 
 ### Trash (freedesktop Trash spec, D38)
 
@@ -213,6 +227,10 @@ A client that falls too far behind is closed with 1013 and should reconnect.
 `{"type":"drives"}` says drives or volumes changed (plugged in, mounted,
 unmounted, from udisks signals, at most every 300 ms once a client has
 asked for `/api/v1/drives`): fetch the list again.
+
+`{"type":"polkit"}` says polkit's authentication requests changed (D44):
+fetch `/api/v1/polkit` again. Requests made while the socket was down are
+not repeated, so fetch it after each snapshot too.
 
 Folder changes (D34): the client sends `{"type":"watch","dirs":[...]}` with
 every folder it shows (absolute, clean paths; at most 256). Each message

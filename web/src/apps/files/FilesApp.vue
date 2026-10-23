@@ -20,6 +20,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from 'reka-ui'
+import { ApiError } from '@/api/client'
 import { baseName, dirName, fsApi, joinPath, searchStream, uniqueName } from '@/api/fs'
 import type { Bookmark, Entry, Place, TrashItem, Volume } from '@/api/types'
 import type { AppContext } from '@/apps/types'
@@ -429,13 +430,25 @@ async function loadVolumes() {
   }
 }
 
-function openVolume(v: Volume) {
+/** Volumes being mounted by this window, so a double click mounts once. */
+const mounting = new Set<string>()
+
+/** Opens a volume, mounting it first. polkit asks for a password in its own dialog (D44). */
+async function openVolume(v: Volume) {
   if (v.mountPoint) return navigate(v.mountPoint)
-  // Mounting needs polkit's approval, which a web session only gets with an
-  // administrator's password; Tilde cannot ask for one yet (D39).
-  props.ctx.notify(
-    `“${v.name}” is not mounted. Tilde cannot mount drives yet; mount it on the computer, or in a terminal with: udisksctl mount -b ${v.device}`,
-  )
+  if (mounting.has(v.id)) return
+  mounting.add(v.id)
+  try {
+    const mounted = await fsApi.mount(v.id)
+    emitDrivesChanged()
+    if (mounted.mountPoint) navigate(mounted.mountPoint)
+  } catch (e) {
+    if (!(e instanceof ApiError && e.code === 'cancelled')) {
+      props.ctx.notify(`Could not mount “${v.name}”: ${(e as Error).message}`, 'error')
+    }
+  } finally {
+    mounting.delete(v.id)
+  }
 }
 
 /** Unmounts (or ejects the drive of) a volume, leaving it if this window shows it. */
@@ -1071,6 +1084,13 @@ onBeforeUnmount(() => {
             <template v-else-if="isComputer">
               <ContextMenuItem v-if="selectedItems.length === 1" class="item" @select="open(selectedItems[0]!)">
                 Open
+              </ContextMenuItem>
+              <ContextMenuItem
+                v-if="selectedItems.length === 1 && selectedItems[0]!.volume && !selectedItems[0]!.volume.mountPoint"
+                class="item"
+                @select="openVolume(selectedItems[0]!.volume!)"
+              >
+                Mount
               </ContextMenuItem>
               <template v-if="selectedItems.length === 1 && selectedItems[0]!.volume?.canEject">
                 <ContextMenuItem class="item" @select="unmountVolume(selectedItems[0]!.volume!, false)">

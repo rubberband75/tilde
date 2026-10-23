@@ -29,12 +29,28 @@ func (f *fakeUdisks) objects(context.Context) (managedObjects, error) { return f
 func (f *fakeUdisks) call(_ context.Context, path dbus.ObjectPath, method string, args ...any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := string(path) + " " + method[strings.LastIndex(method, ".")+1:]
-	f.calls = append(f.calls, key)
-	if opts, ok := args[0].(map[string]dbus.Variant); !ok || opts["auth.no_user_interaction"].Value() != true {
-		return dbus.Error{Name: "test.MissingNoInteraction"}
+	name := method[strings.LastIndex(method, ".")+1:]
+	key := string(path) + " " + name
+	opts, ok := args[0].(map[string]dbus.Variant)
+	if !ok {
+		return dbus.Error{Name: "test.NoOptions"}
 	}
-	return f.fail[key]
+	if opts["auth.no_user_interaction"].Value() != true {
+		// Only mounting may wait for a password (D44).
+		if name != "Mount" {
+			return dbus.Error{Name: "test.MissingNoInteraction"}
+		}
+		key += " asking"
+	}
+	f.calls = append(f.calls, key)
+	if err := f.fail[key]; err != nil {
+		return err
+	}
+	if name == "Mount" {
+		label := prop[string](f.objs[path][udisksBlock], "IdLabel")
+		f.objs[path][udisksFS]["MountPoints"] = v([][]byte{cbytes("/media/me/" + firstNonEmpty(label, "disk"))})
+	}
+	return nil
 }
 
 func v(x any) dbus.Variant { return dbus.MakeVariant(x) }
@@ -188,6 +204,40 @@ func TestUnmountErrors(t *testing.T) {
 		if rec.Code != c.code || !strings.Contains(rec.Body.String(), c.api) {
 			t.Errorf("unmount %s: %d %s, want %d %s", c.id, rec.Code, rec.Body, c.code, c.api)
 		}
+	}
+}
+
+// TestMount: mounting asks polkit for a password only when Tilde's agent
+// can ask the user (D44), and returns the mounted volume.
+func TestMount(t *testing.T) {
+	f := &fakeUdisks{objs: testObjects(), fail: map[string]error{
+		pathSpare + " Mount": dbus.Error{Name: udisksErrPrefix + "NotAuthorizedCanObtain"},
+	}}
+	w := driveWorker(t, f)
+	rec := serve(t, w, "POST", "/api/v1/drives/mount", `{"id":"`+pathSpare+`"}`)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "not_authorized") {
+		t.Fatalf("mount without an agent: %d %s", rec.Code, rec.Body)
+	}
+
+	w.polkit.session = "c1" // registered
+	f.fail = map[string]error{pathSpare + " Mount asking": dbus.Error{Name: udisksErrPrefix + "NotAuthorizedDismissed"}}
+	rec = serve(t, w, "POST", "/api/v1/drives/mount", `{"id":"`+pathSpare+`"}`)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "cancelled") {
+		t.Fatalf("mount, dialog cancelled: %d %s", rec.Code, rec.Body)
+	}
+	delete(f.fail, pathSpare+" Mount asking")
+	rec = serve(t, w, "POST", "/api/v1/drives/mount", `{"id":"`+pathSpare+`"}`)
+	var vol Volume
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &vol) != nil || vol.MountPoint != "/media/me/disk" {
+		t.Fatalf("mount: %d %s", rec.Code, rec.Body)
+	}
+	want := []string{pathSpare + " Mount", pathSpare + " Mount asking", pathSpare + " Mount asking"}
+	if !reflect.DeepEqual(f.calls, want) {
+		t.Fatalf("calls = %v, want %v", f.calls, want)
+	}
+	// Mounted already: nothing to do.
+	if rec := serve(t, w, "POST", "/api/v1/drives/mount", `{"id":"`+pathSpare+`"}`); rec.Code != http.StatusOK || len(f.calls) != 3 {
+		t.Fatalf("mount again: %d, calls %v", rec.Code, f.calls)
 	}
 }
 

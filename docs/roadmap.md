@@ -72,7 +72,7 @@ to; tick items off as they land.
 - [x] Remember icon positions: drag to any grid cell, saved per user, first layout taken from Nemo's; Organize Desktop by Name (D36)
 - [x] Wallpaper: the user's Cinnamon background by default; a Backgrounds picker (Cinnamon's collections, Pictures, added folders; aspect, gradient, colors) saves Tilde's own (D37)
 - [x] Per-drive trash (`$topdir/.Trash/$uid` or `.Trash-$uid`, as GIO), listed, restored and emptied with the home trash (D38)
-- [x] Drives via udisks2 (D39): Computer lists mounted and unmounted volumes, a Devices section in Files, Unmount and Eject, live updates from udisks signals. Mounting waits for the polkit agent (phase 5)
+- [x] Drives via udisks2 (D39): Computer lists mounted and unmounted volumes, a Devices section in Files, Unmount and Eject, live updates from udisks signals. Mounting came with the polkit agent (phase 5, D44)
 
 ## Phase 5 — Hardening
 
@@ -80,7 +80,7 @@ to; tick items off as they land.
 - [x] Idle detection: each browser locks after the user's idle delay (D40); logind's `LockedHint` follows the lock and `loginctl lock-session` locks every browser (D41). logind refuses `IdleHint` for web sessions
 - [x] Remember the user name on the login screen (opt-in, `localStorage`); no device tokens that save or skip the password (D42)
 - [x] Multi-step PAM conversations for two-factor (D43): PAM's extra prompts go to the login and lock screens; documented, not enabled by default; tested in the VM with `pam_oath`
-- [ ] Polkit authentication agent in the browser; then mounting drives from Files (D39)
+- [x] Polkit authentication agent in the browser (D44): the worker registers for its web session and runs polkit's helper; the dialog shows in every browser. Files mounts drives through it
 - [ ] Audit log (logins, commands started, deletions)
 - [ ] Tray indicator for connected clients
 - [ ] Review: CSP, headers, cookie flags, error messages that leak information

@@ -21,6 +21,8 @@ export const fsApi = {
   hello: () => api.get<Hello>('/api/v1/hello'),
   system: () => api.get<SystemInfo>('/api/v1/system'),
   drives: () => api.get<{ udisks: boolean; volumes: Volume[] }>('/api/v1/drives'),
+  /** Mounts a volume; polkit may ask for a password meanwhile (D44). Returns it, mounted. */
+  mount: (id: string) => api.post<Volume>('/api/v1/drives/mount', { id }),
   unmount: (id: string) => api.post<void>('/api/v1/drives/unmount', { id }),
   /** Unmounts every volume of the drive, then powers it off if polkit allows; either way it is safe to unplug. */
   eject: (id: string) => api.post<{ unmounted: boolean; ejected: boolean }>('/api/v1/drives/eject', { id }),

@@ -184,6 +184,8 @@ export type WorkerEvent =
   | { type: 'fs'; dirs: string[] }
   /** Drives or volumes changed (plugged in, mounted, unmounted): fetch /api/v1/drives again. */
   | { type: 'drives' }
+  /** polkit's authentication requests changed: fetch /api/v1/polkit again (D44). */
+  | { type: 'polkit' }
 
 /** Client → worker on the events WebSocket: the folders to watch (replaces the previous set). */
 export type ClientMessage = { type: 'watch'; dirs: string[] }
@@ -249,4 +251,28 @@ export type BackgroundOptions = 'none' | 'wallpaper' | 'centered' | 'scaled' | '
 export interface BackgroundCollection {
   name: string
   images: Entry[]
+}
+
+/**
+ * polkit asking for a password (D44): a program in the session (Mount in
+ * Files, pkexec in a terminal) wants something that needs one.
+ */
+export interface PolkitRequest {
+  id: string
+  /** polkit's action id, e.g. org.freedesktop.udisks2.filesystem-mount. */
+  action: string
+  /** polkit's own text, e.g. "Authentication is required to mount TILDE-USB". */
+  message: string
+  icon?: string
+  /** Users whose password polkit accepts; the user first when listed. */
+  identities: string[]
+  /** A question after the password (a verification code), waiting for its answer. */
+  prompt?: AuthPrompt
+}
+
+/** GET /api/v1/polkit */
+export interface PolkitState {
+  /** Tilde's agent is registered for the session, so polkit can ask. */
+  agent: boolean
+  requests: PolkitRequest[]
 }

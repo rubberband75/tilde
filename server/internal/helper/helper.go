@@ -264,7 +264,7 @@ func (c *conversation) Prompt(text string, echo bool) (string, error) {
 			c.passwordUsed = true
 			return c.password, nil
 		}
-		if lower := strings.ToLower(strings.TrimSpace(text)); strings.HasPrefix(lower, "login") || strings.HasPrefix(lower, "user") {
+		if protocol.IsUserPrompt(text) {
 			return c.user, nil
 		}
 	} else if !echo && strings.Contains(strings.ToLower(text), "password") {

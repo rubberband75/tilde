@@ -90,6 +90,17 @@ export class Api {
     expect(res.status(), await res.text()).toBe(200)
   }
 
+  /** Unmounts the volume labelled name, if it is mounted. */
+  async unmount(name: string) {
+    const res = await this.request.get('/api/v1/drives')
+    const { volumes } = (await res.json()) as { volumes: { id: string; name: string; mountPoint?: string }[] }
+    const vol = volumes.find((v) => v.name === name)
+    expect(vol, `${name} is not listed`).toBeTruthy()
+    if (!vol!.mountPoint) return
+    const un = await this.request.post('/api/v1/drives/unmount', { data: { id: vol!.id }, headers: this.headers })
+    expect(un.status(), await un.text()).toBe(204)
+  }
+
   async places() {
     const res = await this.request.get('/api/v1/places')
     return ((await res.json()) as { places: { id: string; path: string }[] }).places

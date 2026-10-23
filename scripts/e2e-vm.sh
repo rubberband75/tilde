@@ -203,13 +203,25 @@ install_build() {
 
   # Lets the test user set up and mount loop images through udisks without
   # an active session, so the drives test has a stick mounted by the user.
-  # Test VM only: Tilde itself never mounts (D39).
+  # From Tilde's web session, mounting asks for the user's own password
+  # instead, as polkit asks an administrator's, so the tests go through
+  # Tilde's polkit agent (D44). Test VM only.
   vm_ssh "sudo tee /etc/polkit-1/rules.d/49-tilde-e2e.rules >/dev/null" <<EOF
 polkit.addRule(function (action, subject) {
-  if (subject.user == "$TEST_USER" && (action.id == "org.freedesktop.udisks2.loop-setup" ||
-      action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") == 0)) {
+  if (subject.user != "$TEST_USER") {
+    return polkit.Result.NOT_HANDLED;
+  }
+  if (action.id == "org.freedesktop.udisks2.loop-setup") {
     return polkit.Result.YES;
   }
+  if (action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") == 0) {
+    var type = "";
+    try {
+      type = polkit.spawn(["/usr/bin/loginctl", "show-session", subject.session, "-p", "Type", "--value"]).trim();
+    } catch (e) {}
+    return type == "web" ? polkit.Result.AUTH_SELF : polkit.Result.YES;
+  }
+  return polkit.Result.NOT_HANDLED;
 });
 EOF
 

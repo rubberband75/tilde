@@ -6,6 +6,7 @@ import type { Job, WorkerEvent } from '@/api/types'
 import { dirName } from '@/api/fs'
 import { emitDrivesChanged, emitFsChanged } from '@/lib/bus'
 import { setWatchSender, watchedDirs } from '@/lib/fswatch'
+import { usePolkit } from './polkit'
 
 /** Folders whose listing a job changes. */
 export function affectedDirs(job: Job): string[] {
@@ -18,7 +19,8 @@ export function affectedDirs(job: Job): string[] {
  * File operation jobs of this user, kept in sync with the worker over the
  * events WebSocket. Jobs started on another device show up here too. The
  * store also owns that socket's other traffic: the watched folders
- * (lib/fswatch.ts) go up, and changes to them come back as emitFsChanged.
+ * (lib/fswatch.ts) go up, and changes to them come back as emitFsChanged;
+ * polkit's requests (stores/polkit.ts) are fetched when they change.
  */
 export const useJobs = defineStore('jobs', () => {
   const byId = ref<Record<string, Job>>({})
@@ -41,6 +43,8 @@ export const useJobs = defineStore('jobs', () => {
     switch (ev.type) {
       case 'snapshot':
         byId.value = Object.fromEntries(ev.jobs.map((j) => [j.id, j]))
+        // Requests that came while the socket was down were not reported.
+        void usePolkit().refresh()
         break
       case 'job':
         apply(ev.job)
@@ -56,6 +60,9 @@ export const useJobs = defineStore('jobs', () => {
         break
       case 'drives':
         emitDrivesChanged()
+        break
+      case 'polkit':
+        void usePolkit().refresh()
         break
     }
   }
@@ -76,6 +83,7 @@ export const useJobs = defineStore('jobs', () => {
     stream?.close()
     stream = undefined
     byId.value = {}
+    usePolkit().reset()
   }
 
   /** Starts a job; progress arrives over the events socket. */

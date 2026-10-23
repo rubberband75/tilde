@@ -319,7 +319,7 @@ other GIO programs already look in these folders. Mounting and removable
 drives (udisks2) stay a separate item. Rejected: copying to the home trash;
 waiting for udisks (per-drive trash only needs the mount table).
 
-**D39 — Drives through udisks2 with godbus; no mounting until the polkit agent** (2026-10-21, accepted)
+**D39 — Drives through udisks2 with godbus; no mounting until the polkit agent** (2026-10-21, accepted; mounting added by D44)
 The worker talks to udisks2 on the system bus with `github.com/godbus/dbus/v5`
 (pure Go, also what the D-Bus tray applets will need), as the user, so
 udisks and polkit make every decision. It lists volumes (mounted or not,
@@ -446,6 +446,35 @@ Rejected for now:
 Tilde's own TOTP store (root would hold the secrets, and it would only
 cover TOTP); passkeys/WebAuthn as a Tilde-native factor (needs Tilde's own
 credential store; maybe later).
+
+**D44 — A polkit authentication agent in the worker; mounting asks for a password** (2026-10-23, accepted)
+The worker registers as the polkit authentication agent of its logind
+session, only when that is Tilde's own web session (as for D41), so a
+program in the session that needs a password (Mount in Files, `pkexec`
+or `systemctl` in a terminal) gets Tilde's dialog, as it would get
+Cinnamon's on the desktop. The agent never checks a password: like
+GNOME's and Cinnamon's, it runs polkit's setuid `polkit-agent-helper-1`
+(user name as argument, cookie on stdin), which runs PAM (service
+`polkit-1`) and gives polkit the verdict itself. The worker carries the
+conversation as the helper does for logins (D43): the password answers
+PAM's first hidden prompt, later questions go to the dialog, and a wrong
+password leaves the request open for another try. Requests show in every
+browser of the user (a `polkit` event, then `GET /api/v1/polkit`), the
+first answer ends them, and nobody answering for 5 minutes cancels them.
+polkit's `unix-group` identities become the group's members, the user
+first when listed. Calls count only from polkit's bus name, since any
+user on the system bus can call the agent. No extra rate limit: the user
+can already run the helper from a terminal, and PAM's own delays and
+`pam_faillock` apply. With the agent, Files mounts volumes (`POST
+/api/v1/drives/mount`), the only udisks call that may now wait for a
+password; unmounting someone else's mount and powering a drive off still
+never ask, as an administrator's password is not worth it there.
+Without polkit, its helper or a web session, nothing registers and
+mounting fails as before. Rejected: checking passwords in the worker or
+through the session helper (polkit accepts verdicts only from its own
+helper, as root); a polkit rule letting web sessions mount without a
+password (D39); `pkttyagent` per request (a terminal agent, no way to
+show its questions in the browser).
 
 ---
 

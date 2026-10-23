@@ -6,6 +6,7 @@ import Dialogs from './Dialogs.vue'
 import JobsPanel from './JobsPanel.vue'
 import Notices from './Notices.vue'
 import Panel from './Panel.vue'
+import PolkitDialog from './PolkitDialog.vue'
 import WindowLayer from '@/wm/WindowLayer.vue'
 import { useWindows } from '@/stores/windows'
 import { lockScreen } from './actions'
@@ -49,6 +50,7 @@ onBeforeUnmount(() => {
     </div>
     <Panel />
     <Dialogs />
+    <PolkitDialog />
   </div>
 </template>
 

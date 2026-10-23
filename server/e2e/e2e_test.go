@@ -586,6 +586,116 @@ func TestDrivesFollowUdisks(t *testing.T) {
 	udisksctl("mount")
 }
 
+// TestPolkitMount mounts the test stick through Tilde's polkit agent (D44):
+// the VM's rule makes polkit ask the user's own password in a web
+// session, the request reaches the browser's API, a wrong password leaves
+// it open, the right one mounts, and cancelling refuses the mount.
+func TestPolkitMount(t *testing.T) {
+	label := os.Getenv("TILDE_USB")
+	if label == "" {
+		t.Skip("set TILDE_USB to the label of a volume the test user mounted through udisks")
+	}
+	e := setup(t)
+	type request struct {
+		ID, Action, Message string
+		Identities          []string
+	}
+	var state struct {
+		Agent    bool
+		Requests []request
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/polkit", nil), http.StatusOK, &state)
+	if !state.Agent {
+		t.Fatal("the worker did not register a polkit agent for its session")
+	}
+	var res struct {
+		Volumes []struct{ ID, Name, MountPoint string }
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/drives", nil), http.StatusOK, &res)
+	id := ""
+	for _, v := range res.Volumes {
+		if v.Name == label {
+			id = v.ID
+			if v.MountPoint != "" {
+				decode(t, e.do(t, http.MethodPost, "/api/v1/drives/unmount", map[string]string{"id": id}), http.StatusNoContent, nil)
+			}
+		}
+	}
+	if id == "" {
+		t.Fatalf("%s not listed", label)
+	}
+
+	// mount starts a mount, which waits for the dialog, and returns the
+	// request polkit made.
+	mount := func() (chan *http.Response, request) {
+		t.Helper()
+		done := make(chan *http.Response, 1)
+		go func() {
+			b, _ := json.Marshal(map[string]string{"id": id})
+			req, _ := http.NewRequest(http.MethodPost, e.base.String()+"/api/v1/drives/mount", bytes.NewReader(b))
+			req.Header.Set("Origin", e.base.Scheme+"://"+e.base.Host)
+			resp, err := e.client.Do(req)
+			if err != nil {
+				t.Error(err)
+			}
+			done <- resp
+		}()
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+			decode(t, e.do(t, http.MethodGet, "/api/v1/polkit", nil), http.StatusOK, &state)
+			if len(state.Requests) == 1 {
+				return done, state.Requests[0]
+			}
+		}
+		t.Fatal("polkit did not ask the agent")
+		return nil, request{}
+	}
+
+	done, r := mount()
+	if !strings.HasPrefix(r.Action, "org.freedesktop.udisks2.filesystem-mount") || !slices.Equal(r.Identities, []string{e.user}) || r.Message == "" {
+		t.Fatalf("request %+v", r)
+	}
+	respond := func(answer string) *http.Response {
+		return e.do(t, http.MethodPost, "/api/v1/polkit/respond", map[string]string{"id": r.ID, "answer": answer})
+	}
+	decode(t, respond("not-the-password"), http.StatusUnauthorized, nil)
+	decode(t, respond(os.Getenv("TILDE_PASS")), http.StatusNoContent, nil)
+	var vol struct{ MountPoint string }
+	decode(t, <-done, http.StatusOK, &vol)
+	if vol.MountPoint != "/media/"+e.user+"/"+label {
+		t.Fatalf("mounted at %q", vol.MountPoint)
+	}
+	decode(t, e.do(t, http.MethodPost, "/api/v1/drives/unmount", map[string]string{"id": id}), http.StatusNoContent, nil)
+
+	done, r = mount()
+	decode(t, e.do(t, http.MethodPost, "/api/v1/polkit/cancel", map[string]string{"id": r.ID}), http.StatusNoContent, nil)
+	var refused struct{ Code string }
+	decode(t, <-done, http.StatusForbidden, &refused)
+	if refused.Code != "cancelled" {
+		t.Fatalf("after cancel: %+v", refused)
+	}
+
+	// Leave it mounted for the UI tests.
+	if out, err := exec.Command("sudo", "-u", e.user, "udisksctl", "mount", "--no-user-interaction", "-b",
+		volumeDevice(t, e, id)).CombinedOutput(); err != nil {
+		t.Fatalf("udisksctl mount: %v: %s", err, out)
+	}
+}
+
+func volumeDevice(t *testing.T, e *env, id string) string {
+	t.Helper()
+	var res struct {
+		Volumes []struct{ ID, Device string }
+	}
+	decode(t, e.do(t, http.MethodGet, "/api/v1/drives", nil), http.StatusOK, &res)
+	for _, v := range res.Volumes {
+		if v.ID == id {
+			return v.Device
+		}
+	}
+	t.Fatalf("volume %s gone", id)
+	return ""
+}
+
 // totp is RFC 6238's code for counter, with SHA-1 and 6 digits, as pam_oath
 // makes it for "HOTP/T30".
 func totp(t *testing.T, secretHex string, counter uint64) string {

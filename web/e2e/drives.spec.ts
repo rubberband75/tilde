@@ -1,10 +1,10 @@
-import { desktopIcon, expect, fileItem, test, windowNamed } from './fixtures'
+import { desktopIcon, expect, fileItem, password, test, windowNamed } from './fixtures'
 
 // The label of a stick the user mounted through udisks (the e2e VM sets
-// one up before each run; this test ejects it).
+// one up before each run; this test ejects it and mounts it again).
 const usb = process.env.TILDE_USB
 
-test('ejecting a USB stick, which then shows as not mounted', async ({ desktop: page, home }) => {
+test('ejecting a USB stick, then mounting it with a password', async ({ desktop: page, home }) => {
   test.skip(!usb, 'set TILDE_USB to the label of a volume the user mounted through udisks')
   const user = home.split('/').pop()!
 
@@ -29,7 +29,45 @@ test('ejecting a USB stick, which then shows as not mounted', async ({ desktop: 
   const mounted = await page.request.get(`/api/v1/fs/stat?path=${encodeURIComponent(`/media/${user}/${usb}`)}`)
   expect(mounted.status()).toBe(404)
 
-  // Mounting is not offered yet; opening it says how to mount it.
+  // Opening it mounts it. polkit wants a password for that from a web
+  // session (the VM's rule asks for the user's own), and asks through
+  // Tilde's agent (D44).
   await item.dblclick()
-  await expect(page.getByText(/is not mounted\. .*udisksctl mount -b \/dev\/loop\d+/)).toBeVisible()
+  const dialog = page.getByRole('alertdialog', { name: 'Authentication Required' })
+  await expect(dialog).toContainText('Authentication is required to mount')
+  await expect(dialog).toContainText(`Password for ${user}`)
+  const entry = dialog.getByLabel('Password', { exact: true })
+  await entry.fill('not-the-password')
+  await dialog.getByRole('button', { name: 'Authenticate' }).click()
+  await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 15_000 })
+  await expect(entry).toBeFocused()
+  await entry.fill(password)
+  await dialog.getByRole('button', { name: 'Authenticate' }).click()
+  await expect(dialog).toBeHidden({ timeout: 15_000 })
+  await expect(windowNamed(page, usb!)).toBeVisible()
+  expect((await page.request.get(`/api/v1/fs/stat?path=${encodeURIComponent(`/media/${user}/${usb}`)}`)).status()).toBe(
+    200,
+  )
+})
+
+test('cancelling the password dialog leaves the stick unmounted', async ({ desktop: page, home, api }) => {
+  test.skip(!usb, 'set TILDE_USB to the label of a volume the user mounted through udisks')
+  const user = home.split('/').pop()!
+  await api.unmount(usb!)
+
+  await desktopIcon(page, 'Computer').dblclick()
+  const computer = windowNamed(page, 'Computer')
+  const mounted = page.waitForResponse((r) => r.url().endsWith('/api/v1/drives/mount'))
+  await fileItem(computer, usb!).dblclick()
+  const dialog = page.getByRole('alertdialog', { name: 'Authentication Required' })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  expect((await mounted).status()).toBe(403)
+  // Cancelling is not an error worth a notice.
+  await expect(page.getByText(/Could not mount/)).toHaveCount(0)
+  await expect(fileItem(computer, usb!)).toHaveClass(/hidden/)
+  expect((await page.request.get(`/api/v1/fs/stat?path=${encodeURIComponent(`/media/${user}/${usb}`)}`)).status()).toBe(
+    404,
+  )
 })

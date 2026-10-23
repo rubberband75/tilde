@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Version is bumped whenever the server/worker contract changes in a way
@@ -72,6 +73,14 @@ type Prompt struct {
 	Echo bool `json:"echo"`
 	// Info holds PAM's messages since the last question ("Duo push sent").
 	Info []string `json:"info,omitempty"`
+}
+
+// IsUserPrompt reports whether a visible PAM question asks for the user
+// name ("login:", "Username:"), which a conversation answers itself with
+// the account being checked rather than asking the browser.
+func IsUserPrompt(text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	return strings.HasPrefix(lower, "login") || strings.HasPrefix(lower, "user")
 }
 
 // HelperAnswer answers a Prompt. It may carry a code, so it is never logged.

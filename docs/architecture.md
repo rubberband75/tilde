@@ -85,8 +85,11 @@ could already do.
   folders clients show (`watch.go`: one inotify watch per folder for all
   clients, changes coalesced for 200 ms; D34), and drive changes from udisks
   signals (`drives.go`, D39).
-- Lists, unmounts and ejects drives through udisks2 on the system bus, as
-  the user (`drives.go`).
+- Lists, mounts, unmounts and ejects drives through udisks2 on the system
+  bus, as the user (`drives.go`).
+- Is the polkit authentication agent of Tilde's web session (`polkit.go`,
+  D44): polkit's requests for a password go to a dialog in every browser,
+  and polkit's setuid `polkit-agent-helper-1` checks the answers.
 - Reads the user's screensaver settings with gsettings and streams the idle
   lock delay to the server (`lock.go`, `/internal/session`, D40), and
   follows its logind session (`logind.go`, D41): sets `LockedHint` when the

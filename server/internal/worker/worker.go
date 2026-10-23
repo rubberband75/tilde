@@ -49,6 +49,7 @@ type Worker struct {
 	drives     *driveService
 	jobs       *jobManager
 	logind     *logindConn
+	polkit     *polkitAgent
 }
 
 // Options overrides locations, mainly for tests.
@@ -96,6 +97,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
+		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
 	}
 }
 
@@ -139,6 +141,7 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("GET /api/v1/system", w.handleSystem)
 	m.HandleFunc("GET /api/v1/places", w.handlePlaces)
 	m.HandleFunc("GET /api/v1/drives", w.handleDrives)
+	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
 	m.HandleFunc("GET /api/v1/bookmarks", w.handleBookmarks)
@@ -176,6 +179,10 @@ func (w *Worker) Handler() http.Handler {
 
 	m.HandleFunc("GET /api/v1/events", w.handleEvents)
 
+	m.HandleFunc("GET /api/v1/polkit", w.handlePolkit)
+	m.HandleFunc("POST /api/v1/polkit/respond", w.handlePolkitRespond)
+	m.HandleFunc("POST /api/v1/polkit/cancel", w.handlePolkitCancel)
+
 	m.HandleFunc("GET /api/v1/terminals", w.handleTerminalList)
 	m.HandleFunc("POST /api/v1/terminals", w.handleTerminalCreate)
 	m.HandleFunc("DELETE /api/v1/terminals/{id}", w.handleTerminalDelete)
@@ -207,6 +214,7 @@ func (w *Worker) handleHello(rw http.ResponseWriter, r *http.Request) {
 func (w *Worker) Shutdown() {
 	w.watcher.close()
 	w.drives.close()
+	w.polkit.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 	select {
@@ -265,7 +273,14 @@ func Run() int {
 		return 1
 	}
 	if w.logind.id != "" {
-		go w.logind.connect()
+		go func() {
+			w.logind.connect()
+			// Only for Tilde's own web session: started from inside
+			// another session, the worker shares that session's agent.
+			if w.logind.s != nil {
+				w.polkit.start(w.logind.id)
+			}
+		}()
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
