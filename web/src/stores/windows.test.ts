@@ -137,6 +137,20 @@ describe('layout persistence', () => {
     expect(wm.windows).toHaveLength(0)
   })
 
+  it('keeps a change made just before the layout is reset (lock, logout)', async () => {
+    const wm = useWindows()
+    wm.load('alice')
+    const id = wm.open('terminal')!
+    await nextTick()
+    wm.saveState(id, { terminalId: 't1' })
+    await nextTick()
+    wm.reset()
+    expect(localStorage.getItem('')).toBeNull()
+
+    wm.load('alice')
+    expect(wm.get(id)?.args).toEqual({ terminalId: 't1' })
+  })
+
   it('drops unknown apps and other layout versions', () => {
     const win = {
       id: 'w1',

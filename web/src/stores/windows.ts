@@ -211,8 +211,16 @@ export const useWindows = defineStore('windows', () => {
     }
   }
 
-  /** Forget windows without running close handlers (logout, expiry). */
+  /**
+   * Forget windows without running close handlers (logout, lock, expiry).
+   * A change still waiting to be saved is saved first: unlocking comes
+   * back to this layout (D40).
+   */
   function reset() {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      save()
+    }
     storageKey = ''
     windows.value = []
     focusedId.value = null
@@ -221,21 +229,24 @@ export const useWindows = defineStore('windows', () => {
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined
+  function save() {
+    timer = undefined
+    if (!storageKey) return
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ version: LAYOUT_VERSION, windows: windows.value, focusedId: focusedId.value }),
+      )
+    } catch {
+      // ignore quota and privacy-mode errors
+    }
+  }
   watch(
     [windows, focusedId],
     () => {
       if (!storageKey) return
       clearTimeout(timer)
-      timer = setTimeout(() => {
-        try {
-          localStorage.setItem(
-            storageKey,
-            JSON.stringify({ version: LAYOUT_VERSION, windows: windows.value, focusedId: focusedId.value }),
-          )
-        } catch {
-          // ignore quota and privacy-mode errors
-        }
-      }, 300)
+      timer = setTimeout(save, 300)
     },
     { deep: true },
   )
