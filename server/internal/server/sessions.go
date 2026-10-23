@@ -251,6 +251,13 @@ func (m *Manager) startSession(ctx context.Context, req protocol.HelperRequest) 
 		h.kill()
 		return nil, fmt.Errorf("worker speaks protocol %d, server speaks %d", hello.Protocol, protocol.Version)
 	}
+	// The hello comes from a process the user owns, the helper's result
+	// from root. Tokens are issued for the hello's user, so it must be the
+	// account that logged in, at the uid the helper started.
+	if hello.User != req.User || hello.UID != res.UID {
+		h.kill()
+		return nil, fmt.Errorf("worker says it runs as %q (uid %d), but %q (uid %d) logged in", hello.User, hello.UID, req.User, res.UID)
+	}
 
 	conn := &stdio.Conn{Reader: h.br, Writer: h.stdin, Closers: []io.Closer{h.stdin, h.stdout}}
 	ys, err := yamux.Client(conn, mux.Config())

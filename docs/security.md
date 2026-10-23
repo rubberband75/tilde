@@ -32,6 +32,9 @@ bug in Tilde can never give more than the account already has.
   `pam_faillock`, 2FA modules and `pam_systemd` apply), `pam_loginuid`,
   `pam_keyinit`, `pam_env`, optional `pam_gnome_keyring`.
 - Root login refused before PAM runs; any UID 0 account refused after lookup.
+- The worker's hello (user and uid) must match the account that logged in
+  and the uid the root helper started: the worker is the user's process,
+  and tokens are issued for the user it names.
 - Unknown users and wrong passwords get the same error.
 - Rate limit for logins and unlocks together: 5 attempts per address in 15
   minutes, then `429`. An attempt counts when it starts, before PAM
