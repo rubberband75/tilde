@@ -3,10 +3,13 @@
 // starts (or rejoins) that user's session.
 import { nextTick, onMounted, ref } from 'vue'
 import { ApiError } from '@/api/client'
+import { rememberedUser, rememberUser } from '@/lib/rememberUser'
 import { useSession } from '@/stores/session'
 
 const session = useSession()
-const username = ref('')
+const username = ref(rememberedUser())
+// Only the name is remembered, never the password (D42).
+const remember = ref(username.value !== '')
 const password = ref('')
 const error = ref('')
 const busy = ref(false)
@@ -18,7 +21,9 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    await session.login(username.value.trim(), password.value)
+    const name = username.value.trim()
+    await session.login(name, password.value)
+    rememberUser(name, remember.value)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Could not reach the server.'
     password.value = ''
@@ -29,7 +34,7 @@ async function submit() {
   }
 }
 
-onMounted(() => userInput.value?.focus())
+onMounted(() => (username.value ? passInput.value : userInput.value)?.focus())
 </script>
 
 <template>
@@ -60,6 +65,10 @@ onMounted(() => userInput.value?.focus())
         placeholder="Password"
         aria-label="Password"
       />
+      <label class="check">
+        <input v-model="remember" type="checkbox" />
+        Remember user name
+      </label>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <button class="btn suggested" type="submit" :disabled="busy || !username || !password">
         {{ busy ? 'Logging in…' : 'Log In' }}
@@ -113,6 +122,15 @@ h1 {
 .btn {
   height: 36px;
   margin-top: 4px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--menu-fg);
+}
+.check input {
+  accent-color: var(--accent);
 }
 .error {
   margin: 0;

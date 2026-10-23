@@ -78,7 +78,7 @@ to; tick items off as they land.
 
 - [x] Lock screen following Cinnamon's idle/lock settings; unlock through helper `verify` mode (D40): kept by the server per browser, Lock Screen (menu, Ctrl+Alt+L) locks every browser, unlock replaces the token
 - [x] Idle detection: each browser locks after the user's idle delay (D40); logind's `LockedHint` follows the lock and `loginctl lock-session` locks every browser (D41). logind refuses `IdleHint` for web sessions
-- [ ] Remember the user name on the login screen (opt-in); no device tokens that save or skip the password (D42)
+- [x] Remember the user name on the login screen (opt-in, `localStorage`); no device tokens that save or skip the password (D42)
 - [ ] Multi-step PAM conversations for two-factor (D43): PAM's extra prompts go to the login and lock screens; documented, not enabled by default; tested in the VM with `pam_oath`
 - [ ] Polkit authentication agent in the browser; then mounting drives from Files (D39)
 - [ ] Audit log (logins, commands started, deletions)
