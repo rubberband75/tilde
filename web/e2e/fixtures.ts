@@ -1,6 +1,7 @@
 // Shared fixtures: an API client that acts as the test user, a logged-in
 // desktop, and a scratch folder that is removed afterwards.
 import { createHmac } from 'node:crypto'
+import { crc32, deflateSync } from 'node:zlib'
 import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 export const user = process.env.TILDE_USER!
@@ -142,6 +143,31 @@ export const test = base.extend<Fixtures>({
 })
 
 export { expect }
+
+/** A PNG of one color, w × h pixels, for image tests. */
+export function png(w: number, h: number, rgb: [number, number, number] = [200, 60, 60]): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([len, body, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0)
+  ihdr.writeUInt32BE(h, 4)
+  ihdr.set([8, 2, 0, 0, 0], 8) // 8-bit RGB
+  const row = Buffer.alloc(1 + 3 * w)
+  for (let x = 0; x < w; x++) row.set(rgb, 1 + 3 * x)
+  const pixels = Buffer.concat(Array.from({ length: h }, () => row))
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(pixels)),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
 
 /** A window frame by its title. */
 export function windowNamed(page: Page, title: string | RegExp): Locator {

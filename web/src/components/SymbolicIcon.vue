@@ -27,6 +27,11 @@ export type SymbolicName =
   | 'devices'
   | 'edit'
   | 'folder-new'
+  | 'rotate-left'
+  | 'rotate-right'
+  | 'fullscreen'
+  | 'trash'
+  | 'play'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -54,6 +59,11 @@ const paths: Record<SymbolicName, string> = {
   devices: 'M1.5 2.5h9v7h-9zM3.5 12.5h5M6 9.5v3M11.5 6.5h3v7h-3z',
   edit: 'M10.5 2.5l3 3-8 8h-3v-3zM8.5 4.5l3 3',
   'folder-new': 'M1.5 3.5h4l1.5 1.5h7.5v8h-13zM8 7v4M6 9h4',
+  'rotate-left': 'M3.5 8a4.5 4.5 0 1 0 1.3-3.2M4.5 2v3h3',
+  'rotate-right': 'M12.5 8a4.5 4.5 0 1 1-1.3-3.2M11.5 2v3h-3',
+  fullscreen: 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10',
+  trash: 'M2.5 4.5h11M6 4.5V2.5h4v2M4 4.5l.8 9h6.4l.8-9M6.8 7v4M9.2 7v4',
+  play: 'M5 3l8 5-8 5z',
 }
 
 const d = computed(() => paths[props.name])

@@ -218,6 +218,11 @@ App.vue ── LoginScreen (logged out)
   worker as the user types and before Lock Screen (`src/lib/beforeLock.ts`),
   reopens them after a reload or lock, and saves against the version it
   opened.
+- **Image viewer** (`src/apps/image-viewer`, D50): an `<img>` on
+  `fs/content` (the mtime in the URL), the folder's images in name order
+  (`viewer.ts`: types, order, zoom steps, Best Fit), zoom by scaling and
+  scrolling a canvas, rotation as a CSS transform, fullscreen with the
+  browser's Fullscreen API.
 - **Two-factor** (D43): a login or unlock answer may be `{prompt}` instead of
   the session; the session store keeps it, and the login and lock screens
   show it (`shell/AuthQuestion.vue`) until `POST /api/auth/answer` finishes.

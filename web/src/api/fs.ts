@@ -65,9 +65,13 @@ export const fsApi = {
   thumbnailUrl: (path: string, mtime: string, size: 'normal' | 'large') =>
     buildUrl('/api/v1/fs/thumbnail', { path, size, v: mtime }),
 
-  /** URL that streams a file. With download, the browser saves it. */
-  contentUrl: (path: string, download = false) =>
-    buildUrl('/api/v1/fs/content', { path, download: download ? '1' : undefined }),
+  /**
+   * URL that streams a file. With download, the browser saves it. A
+   * version (the mtime) makes a changed file a new URL, so an <img> that
+   * shows it reloads.
+   */
+  contentUrl: (path: string, download = false, version?: string) =>
+    buildUrl('/api/v1/fs/content', { path, download: download ? '1' : undefined, v: version }),
 
   /**
    * Uploads a file. Uses XMLHttpRequest because fetch cannot report upload

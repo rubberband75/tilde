@@ -43,6 +43,8 @@ gnome-system-monitor
 accessories-text-editor
 text-editor
 multimedia-video-player
+xviewer
+multimedia-photo-viewer
 help-about
 system-software-install
 

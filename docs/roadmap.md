@@ -91,7 +91,7 @@ to; tick items off as they land.
 - [x] Shared file chooser for apps (D49): `ctx.chooseFile` opens a GTK-style chooser as a modal dialog window (open, save, select folder; filters, several files, typed locations); the text editor's Open and Save As use it
 - [ ] Text editor: reopening untitled drafts whose window is gone, tabs
 - [ ] Media player (uses `fs/content` Range requests)
-- [ ] Image viewer
+- [x] Image viewer (D50): opened from Files for the image types browsers draw; the folder's images in order, Best Fit, zoom and drag, turning the view, Move to Trash, fullscreen and a slideshow
 - [ ] Process manager (`/proc`, signals; systemd units over D-Bus)
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**

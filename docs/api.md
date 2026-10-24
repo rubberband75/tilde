@@ -132,7 +132,7 @@ content. A listing sniffs at most 1000 files; the rest fall back to
 | POST | `/api/v1/fs/chmod` | `{path, perm}` (0–0777) → `Entry`. Keeps setuid/setgid/sticky; refuses links; the kernel allows it only for the owner |
 | GET | `/api/v1/fs/stat?path=` | `Entry` (lstat; symlinks report their target's type) |
 | GET | `/api/v1/fs/thumbnail?path=&size=normal\|large[&v=mtime]` | PNG thumbnail (128 or 256 px) from the freedesktop cache (`~/.cache/thumbnails`, shared with Nemo), made on demand by the host's thumbnailers or, for PNG/JPEG/GIF, a built-in scaler. `404 no_thumbnail` if none can be made (failures are cached per the spec). Only for entries with `thumb: true` |
-| GET | `/api/v1/fs/content?path=[&download=1]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download |
+| GET | `/api/v1/fs/content?path=[&download=1][&v=]` | File bytes; supports `Range`. Sandboxed CSP; non-media types are forced to download. `v` is ignored: the UI puts the mtime there so a changed file gets a new URL |
 | PUT | `/api/v1/fs/content?path=[&overwrite=1]` | Body is the file. `201 Entry`; `409 exists` without overwrite |
 | POST | `/api/v1/fs/mkdir` | `{path}` → `201 Entry` |
 | POST | `/api/v1/fs/rename` | `{from, to, overwrite?}` → `Entry`. Same filesystem only (`409 other_drive` otherwise); without `overwrite` an existing `to` gives `409 exists`, atomically |

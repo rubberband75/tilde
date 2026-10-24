@@ -601,6 +601,33 @@ type=file>` and download prompts (they see the browser's machine, not the
 host); a page-wide modal like `ctx.confirm` (it would block every other
 window while a user browses folders).
 
+**D50 — Image viewer: the browser draws, the worker serves** (2026-10-24, accepted)
+The image viewer is xviewer's in a window: Files and the desktop open
+PNG, JPEG, GIF, WebP, AVIF, BMP, ICO and SVG with it; other image types
+(TIFF, RAW, HEIC) still open in a browser tab as before, since the
+browser cannot draw them. The `<img>` loads `fs/content`, which the
+worker already serves inline with a sandbox CSP and `Last-Modified`, and
+an SVG in an `<img>` never runs script; the URL carries the mtime, so a
+changed file reloads and an unchanged one comes from the cache. The
+viewer steps through the folder's viewable images in Files' name order,
+wrapping around (hidden ones only when a hidden one is shown), fetches
+the next one ahead, and follows the folder's inotify events: a file
+replaced on disk reloads, one deleted moves on to its neighbour. Best Fit
+never enlarges a small image; the wheel zooms around the pointer and a
+picture bigger than the window is dragged. Rotation turns only the view,
+as xviewer does until you save; writing rotated files waits for a reason
+to decode and re-encode images in the worker. Delete moves the file to
+the trash without asking, as in Files. Fullscreen is the browser's, for
+the window's content; F5 starts a five-second slideshow that any key
+ends. The window keeps its file in the layout, and the layout now saves a
+change still waiting for its debounce when the page unloads: a reload
+right after a change used to lose it (and a test of the Backgrounds
+window failed now and then because the window came back only sometimes).
+Rejected: decoding in the worker for every type (cost and attack surface
+for formats few people view in a browser); a canvas renderer (the
+browser's `<img>` already handles EXIF orientation, animation and
+scaling).
+
 ---
 
 ## Open decisions

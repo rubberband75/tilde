@@ -1,5 +1,6 @@
 import { defineAsyncComponent, type Component } from 'vue'
 import type { AppManifest } from './types'
+import { viewableImageTypes } from './image-viewer/viewer'
 
 // What the worker calls text: text/* and the common source and config
 // types that are not under text/ (mime.types, Go's own table).
@@ -55,6 +56,17 @@ export const apps: AppManifest[] = [
     defaultSize: { w: 760, h: 540 },
     minSize: { w: 360, h: 240 },
     component: () => import('./editor/EditorApp.vue'),
+  },
+  {
+    id: 'image-viewer',
+    name: 'Image Viewer',
+    comment: 'Browse and rotate images',
+    icon: 'xviewer',
+    category: 'Graphics',
+    mimeTypes: viewableImageTypes,
+    defaultSize: { w: 820, h: 600 },
+    minSize: { w: 360, h: 260 },
+    component: () => import('./image-viewer/ImageViewerApp.vue'),
   },
   {
     id: 'file-properties',

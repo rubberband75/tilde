@@ -45,8 +45,8 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/shell/            desktop, panel, start menu, window list, login
   src/wm/               window manager (frame, layer)
   src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
-                        editor/, chooser/ (ctx.chooseFile), properties/,
-                        system-info/, backgrounds/
+                        editor/, chooser/ (ctx.chooseFile), image-viewer/,
+                        properties/, system-info/, backgrounds/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus
   src/styles/           base.css + themes/mint-y-dark.css (design tokens)
   e2e/                  Playwright UI tests (run by make e2e-vm)

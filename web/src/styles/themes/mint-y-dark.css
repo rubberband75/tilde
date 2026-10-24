@@ -148,6 +148,10 @@
   --syntax-link: #82aaff;
   --syntax-invalid: #f04a50;
 
+  /* Image viewer: xviewer's dark background, black in fullscreen */
+  --image-viewer-bg: #222226;
+  --image-viewer-fullscreen-bg: #000000;
+
   /* Terminal (gtk-dark.css: vte-terminal) */
   --terminal-bg: #222226;
   --terminal-fg: #ffffff;
