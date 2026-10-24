@@ -31,7 +31,10 @@ test('picking a desktop background, and going back to Cinnamon’s', async ({ de
       .poll(() => page.locator('.desktop').evaluate((el: HTMLElement) => el.style.backgroundRepeat))
       .toBe('repeat')
 
-    // Saved by the worker: still there after a reload.
+    // Saved by the worker: still there after a reload. The window is
+    // closed first, or it comes back over the desktop.
+    await win.getByTitle('Close').click()
+    await expect(win).toHaveCount(0)
     await page.reload()
     await expect.poll(style).toContain(encodeURIComponent(picture))
 

@@ -206,6 +206,16 @@ describe('layout persistence', () => {
     expect(wm.get(id)?.args).toEqual({ terminalId: 't1' })
   })
 
+  it('saves a change still waiting when the page goes away (reload)', async () => {
+    const wm = useWindows()
+    wm.load('alice')
+    wm.open('files', { path: '/tmp' })
+    await nextTick()
+    expect(localStorage.getItem('tilde:layout:alice')).toBeNull()
+    window.dispatchEvent(new Event('pagehide'))
+    expect(localStorage.getItem('tilde:layout:alice')).toContain('/tmp')
+  })
+
   it('drops unknown apps and other layout versions', () => {
     const win = {
       id: 'w1',

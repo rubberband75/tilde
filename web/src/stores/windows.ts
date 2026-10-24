@@ -330,6 +330,13 @@ export const useWindows = defineStore('windows', () => {
     },
     { deep: true },
   )
+  // A reload within the delay still finds the last change.
+  window.addEventListener('pagehide', () => {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      save()
+    }
+  })
 
   return {
     windows,
