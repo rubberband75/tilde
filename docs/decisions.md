@@ -501,6 +501,32 @@ rate limit; a `Host` allowlist would break reaching Tilde by any name the
 administrator did not list. The code question of two-factor (D43) shows
 that the password was right, as every password-then-code login does.
 
+**D46 — Audit log in the system journal, written by root** (2026-10-23, accepted)
+Tilde records who logged in from where and what they did through it:
+logins, failed logins and the rate limit; locks (by the user, idle,
+logind), unlocks and signing out; sessions starting and ending; terminals
+opened and closed; moving to the trash, deleting permanently and emptying
+the trash (the first 20 paths and a count); mounts, unmounts and ejects;
+polkit authentications (D44), granted or failed. Root writes every record
+to the system journal through journald's native protocol, tagged
+`tilde-audit`, with the facility authpriv so rsyslog files it in
+`/var/log/auth.log` next to sshd's, and with `TILDE_*` fields to filter
+on; journald does the rotation, and users cannot change it. The server
+records what it sees; the worker reports what the user does on its
+session stream (D41), and the server writes it under the session's user,
+taking only the event types it knows, at most 200 at once and 20 a second
+per user (failed logins from the network share one such budget), and
+counting what it drops. The server passes the browser's address to the
+worker in `X-Tilde-Client`, so worker events say where an action came
+from. Messages escape control characters: file names are the user's to
+choose. Commands typed in a terminal are not recorded (auditd does that),
+nor are copies, moves and reads. A view of the user's own recent logins
+comes with the Settings app (phase 6). Chosen by the user: the journal,
+these four groups of events, the viewer later. Rejected: a JSON file of
+Tilde's own (rotation to maintain); the worker writing to the journal
+itself (records under the user's uid, of the user's making); recording
+every file operation (noise, and the user's own business).
+
 ---
 
 ## Open decisions

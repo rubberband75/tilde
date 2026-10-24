@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+
+	"tilde/internal/protocol"
 )
 
 // Drives and volumes through udisks2 on the system bus (D39), as the user:
@@ -439,6 +441,7 @@ func (w *Worker) handleMount(rw http.ResponseWriter, r *http.Request) {
 			writeUdisksErr(rw, err)
 			return
 		}
+		w.audit(r, protocol.AuditEvent{Event: "mount", Name: v.Name, Device: v.Device})
 		if _, v, err = w.findVolume(ctx, req.ID); err != nil {
 			writeErr(rw, err)
 			return
@@ -469,6 +472,7 @@ func (w *Worker) handleUnmount(rw http.ResponseWriter, r *http.Request) {
 		writeUdisksErr(rw, err)
 		return
 	}
+	w.audit(r, protocol.AuditEvent{Event: "unmount", Name: v.Name, Device: v.Device})
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -501,6 +505,7 @@ func (w *Worker) handleEject(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	w.audit(r, protocol.AuditEvent{Event: "eject", Name: v.Name, Device: v.Device})
 	res := map[string]any{"unmounted": true, "ejected": false}
 	if v.drive != "" {
 		objs, err := w.drives.source().objects(ctx)

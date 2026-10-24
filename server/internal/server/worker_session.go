@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,11 +70,13 @@ func (us *UserSession) readSession() error {
 	lines := bufio.NewScanner(resp.Body)
 	lines.Buffer(make([]byte, 0, 1024), maxSessionLine)
 	var lastLock time.Time
+	var budget auditBudget
 	for lines.Scan() {
 		var ev struct {
-			Type      string `json:"type"`
-			Source    string `json:"source"`
-			LockAfter int64  `json:"lockAfter"`
+			Type      string               `json:"type"`
+			Source    string               `json:"source"`
+			LockAfter int64                `json:"lockAfter"`
+			Audit     *protocol.AuditEvent `json:"audit"`
 		}
 		if err := json.Unmarshal(lines.Bytes(), &ev); err != nil {
 			return err
@@ -91,12 +94,37 @@ func (us *UserSession) readSession() error {
 				lastLock = now
 				us.lockRequested()
 			}
+		case "audit":
+			if ev.Audit != nil {
+				us.recordAudit(*ev.Audit, &budget)
+			}
 		}
 	}
 	if err := lines.Err(); err != nil {
 		return err
 	}
 	return io.EOF
+}
+
+// recordAudit writes an event the worker reported (D46) under the
+// session's user, within the user's budget; what was dropped, here or in
+// the worker, is counted on the next record that gets through.
+func (us *UserSession) recordAudit(ev protocol.AuditEvent, budget *auditBudget) {
+	// Unknown events count too, or they could flood the server's log.
+	if !budget.allow(time.Now()) {
+		budget.dropped += ev.Dropped
+		return
+	}
+	r, ok := workerRecord(us.User, ev)
+	if !ok {
+		slog.Warn("audit: unknown event from the worker", "user", us.User, "event", printable(ev.Event))
+		return
+	}
+	if dropped := budget.dropped + ev.Dropped; dropped > 0 {
+		r.Fields = append(r.Fields, [2]string{"DROPPED", strconv.Itoa(dropped)})
+		budget.dropped = 0
+	}
+	us.audit.record(r)
 }
 
 // notifyLocked wakes followLockedHint: the lock state of the user's

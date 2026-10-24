@@ -36,6 +36,9 @@ type TokenStore struct {
 	// changed is called, with mu held, when a user's tokens are added,
 	// locked or removed (logind's LockedHint follows, D41).
 	changed func(user string)
+	// idleLocked is called, with mu held, when a client locks after its
+	// user's idle delay (the audit log, D46).
+	idleLocked func(user string)
 }
 
 type tokenInfo struct {
@@ -165,6 +168,9 @@ func (s *TokenStore) lock(ti *tokenInfo, reason string) {
 	ti.locked = true
 	ti.cancel()
 	slog.Info("lock", "user", ti.user, "reason", reason)
+	if reason == "idle" && s.idleLocked != nil {
+		s.idleLocked(ti.user)
+	}
 	s.notify(ti.user)
 }
 

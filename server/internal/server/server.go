@@ -18,6 +18,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"tilde/internal/pamauth"
@@ -62,6 +63,12 @@ type Server struct {
 	login, verify func(ctx context.Context, user, password, remoteAddr string) (check, error)
 	// pending holds checks waiting for the answer to a PAM question (D43).
 	pending pendingStore
+	// audit is the audit log (D46); anonymous bounds the records anyone
+	// on the network can cause (failed logins), which the rate limit
+	// alone does not when they come from many addresses.
+	audit     *auditLog
+	anonMu    sync.Mutex
+	anonymous auditBudget
 }
 
 // New creates a Server.
@@ -93,10 +100,18 @@ func New(cfg Config) (*Server, error) {
 		return asCheck(s.sessions.Verify(ctx, user, password, addr))
 	}
 	s.pending.m = map[string]*pending{}
+	s.audit = &auditLog{}
+	s.sessions.audit = s.audit
+	s.tokens.idleLocked = func(user string) {
+		s.audit.record(auditRecord{Event: "lock", User: user, Text: "was locked after no input", Fields: [][2]string{{"REASON", "idle"}}})
+	}
 	s.tokens.lockAfter = s.lockAfter
 	// logind's view of the session (D41): its lock requests lock every
 	// browser, and its LockedHint follows whether all of them are locked.
-	s.sessions.lockRequested = func(user string) { s.tokens.LockUser(user, "logind") }
+	s.sessions.lockRequested = func(user string) {
+		s.tokens.LockUser(user, "logind")
+		s.audit.record(auditRecord{Event: "lock", User: user, Text: "was locked by logind", Fields: [][2]string{{"REASON", "logind"}}})
+	}
 	s.sessions.allLocked = s.tokens.AllLocked
 	s.tokens.changed = func(user string) {
 		if us := s.sessions.Get(user); us != nil {
@@ -175,11 +190,30 @@ func (s *Server) info(us *UserSession, locked bool) sessionInfo {
 	return sessionInfo{User: us.User, UID: us.UID, Home: us.Home, Locked: locked, lockTiming: s.timing(us.User)}
 }
 
+// auditFailure records what anyone on the network can cause, within a
+// budget shared by all of them.
+func (s *Server) auditFailure(r auditRecord) {
+	s.anonMu.Lock()
+	ok, dropped := s.anonymous.allow(time.Now()), 0
+	if ok {
+		dropped, s.anonymous.dropped = s.anonymous.dropped, 0
+	}
+	s.anonMu.Unlock()
+	if !ok {
+		return
+	}
+	if dropped > 0 {
+		r.Fields = append(r.Fields, [2]string{"DROPPED", strconv.Itoa(dropped)})
+	}
+	s.audit.record(r)
+}
+
 // beginAttempt counts a password attempt from addr before it is checked,
 // or answers 429 if addr has made too many.
 func (s *Server) beginAttempt(w http.ResponseWriter, addr, user string) bool {
 	ok, wait := s.limiter.Begin(addr, user)
 	if !ok {
+		s.auditFailure(auditRecord{Event: "rate_limited", User: user, Rhost: addr, Text: "was refused: too many attempts", Failed: true})
 		mins := int(wait.Minutes()) + 1
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeJSON(w, http.StatusTooManyRequests, apiError{
@@ -205,6 +239,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !usernameRe.MatchString(req.Username) || req.Password == "" {
+		s.auditFailure(auditRecord{Event: "login_failed", User: req.Username, Rhost: addr, Text: "failed to log in", Failed: true,
+			Fields: [][2]string{{"REASON", protocol.CodeAuthFailed}}})
 		writeJSON(w, http.StatusUnauthorized, apiError{Error: "Incorrect user name or password.", Code: protocol.CodeAuthFailed})
 		return
 	}
@@ -295,12 +331,14 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if t.Locked {
 		s.tokens.Revoke(tok)
 		slog.Info("left a locked screen", "user", t.User)
+		s.audit.record(auditRecord{Event: "leave", User: t.User, Rhost: clientAddr(r, s.cfg.TrustProxy), Text: "signed a locked browser out"})
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	s.tokens.RevokeUser(t.User)
 	s.sessions.End(t.User)
 	slog.Info("logout", "user", t.User)
+	s.audit.record(auditRecord{Event: "logout", User: t.User, Rhost: clientAddr(r, s.cfg.TrustProxy), Text: "logged out"})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -313,6 +351,7 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request) {
 	if tok, t, ok := s.cookieToken(r); ok {
 		s.tokens.Revoke(tok)
 		slog.Info("signed out one browser", "user", t.User)
+		s.audit.record(auditRecord{Event: "leave", User: t.User, Rhost: clientAddr(r, s.cfg.TrustProxy), Text: "signed a browser out"})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -358,6 +397,8 @@ func (s *Server) handleLock(w http.ResponseWriter, r *http.Request) {
 		writeLocked(w)
 	default:
 		s.tokens.LockUser(t.User, "locked by the user")
+		s.audit.record(auditRecord{Event: "lock", User: t.User, Rhost: clientAddr(r, s.cfg.TrustProxy), Text: "locked the screen",
+			Fields: [][2]string{{"REASON", "manual"}}})
 		clearCache(w)
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -389,6 +430,8 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.tokens.BeginUnlock(tok) {
 		slog.Warn("unlock: too many attempts, signed the browser out", "user", t.User, "rhost", addr)
+		s.audit.record(auditRecord{Event: "unlock_failed", User: t.User, Rhost: addr, Text: "was signed out after too many wrong passwords",
+			Failed: true, Fields: [][2]string{{"REASON", "too_many_attempts"}}})
 		s.clearCookie(w)
 		clearCache(w)
 		writeJSON(w, http.StatusUnauthorized, apiError{Error: "Too many wrong passwords. Log in again.", Code: "too_many_attempts"})
@@ -429,6 +472,9 @@ func (s *Server) handleWorkerAPI(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	stop := context.AfterFunc(t.Context, cancel)
 	defer stop()
+	// Where the request came from, for the worker's audit events (D46);
+	// whatever the browser sent in its place is replaced.
+	r.Header.Set(protocol.ClientHeader, clientAddr(r, s.cfg.TrustProxy))
 	us.ServeHTTP(w, r.WithContext(ctx))
 }
 

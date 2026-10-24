@@ -81,7 +81,7 @@ to; tick items off as they land.
 - [x] Remember the user name on the login screen (opt-in, `localStorage`); no device tokens that save or skip the password (D42)
 - [x] Multi-step PAM conversations for two-factor (D43): PAM's extra prompts go to the login and lock screens; documented, not enabled by default; tested in the VM with `pam_oath`
 - [x] Polkit authentication agent in the browser (D44): the worker registers for its web session and runs polkit's helper; the dialog shows in every browser. Files mounts drives through it
-- [ ] Audit log (logins, commands started, deletions)
+- [x] Audit log (D46): the system journal, tagged `tilde-audit` (also in `/var/log/auth.log`): logins, locks, sessions, terminals, deletions, mounts and polkit authentications, written by root
 - [ ] Tray indicator for connected clients
 - [x] Review: CSP, headers, cookie flags, error messages that leak information (D45): auth-stack refusals look like wrong passwords, `--trust-proxy` takes the proxy's own address, CORP and (with your own certificate) HSTS, worker responses cannot set cookies and are not cached by default
 
@@ -94,7 +94,7 @@ to; tick items off as they land.
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
 - [ ] Shared file chooser dialog for apps
-- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`
+- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`; recent logins and failed attempts from the audit log (D46), served by the server
 
 ## Phase 7 — Remote windows
 

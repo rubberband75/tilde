@@ -50,6 +50,7 @@ type Worker struct {
 	jobs       *jobManager
 	logind     *logindConn
 	polkit     *polkitAgent
+	auditQ     *auditQueue
 }
 
 // Options overrides locations, mainly for tests.
@@ -84,7 +85,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 	host, _ := os.Hostname()
 	trash := NewTrash(opt.DataHome)
 	events := newEventHub()
-	return &Worker{
+	w := &Worker{
 		info:       info,
 		hostname:   host,
 		configHome: opt.ConfigHome,
@@ -98,7 +99,11 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
 		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
+		auditQ:     newAuditQueue(),
 	}
+	w.terms.exited = func(id string) { w.audit(nil, protocol.AuditEvent{Event: "terminal_close", Terminal: id}) }
+	w.polkit.audit = w.auditQ.add
+	return w
 }
 
 func newLogindConn(opt Options) *logindConn {

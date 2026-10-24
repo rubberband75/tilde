@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"tilde/internal/protocol"
 	"tilde/internal/pty"
 )
 
@@ -25,6 +26,10 @@ type terminalManager struct {
 	shell string
 	home  string
 	env   []string
+
+	// exited is called when a terminal's shell ends, whoever ended it
+	// (the audit log, D46).
+	exited func(id string)
 
 	mu   sync.Mutex
 	next int
@@ -85,6 +90,9 @@ func (tm *terminalManager) create(cols, rows uint16, cwd string) (*pty.Terminal,
 		tm.mu.Lock()
 		delete(tm.m, id)
 		tm.mu.Unlock()
+		if tm.exited != nil {
+			tm.exited(id)
+		}
 	}()
 	return t, nil
 }
@@ -148,6 +156,7 @@ func (w *Worker) handleTerminalCreate(rw http.ResponseWriter, r *http.Request) {
 		writeErr(rw, err)
 		return
 	}
+	w.audit(r, protocol.AuditEvent{Event: "terminal_open", Terminal: t.ID})
 	writeJSON(rw, http.StatusCreated, info(t))
 }
 

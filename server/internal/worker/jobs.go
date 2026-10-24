@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"tilde/internal/protocol"
 )
 
 // File-operation jobs (D31): copy, move and delete whole trees in the
@@ -938,6 +940,10 @@ func (w *Worker) handleJobStart(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		dest = p
+	}
+	if req.Op == OpDelete {
+		paths, n := auditPaths(sources)
+		w.audit(r, protocol.AuditEvent{Event: "delete", Paths: paths, Count: n})
 	}
 	j := w.jobs.start(req.Op, sources, dest)
 	writeJSON(rw, http.StatusAccepted, j.snapshot())

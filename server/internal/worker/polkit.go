@@ -106,6 +106,9 @@ type polkitAgent struct {
 	helper  string // polkit-agent-helper-1
 	publish func()
 
+	// audit reports authentications to the audit log (D46).
+	audit func(protocol.AuditEvent)
+
 	mu      sync.Mutex
 	conn    *dbus.Conn // set once registered
 	session string
@@ -360,7 +363,7 @@ func (e authFailed) Error() string {
 // respond passes one answer to request id. With no question waiting, the
 // answer is identity's password and starts a check. It returns PAM's next
 // question, or nil once polkit has the user's authorization.
-func (a *polkitAgent) respond(id, identity, answer string) (*protocol.Prompt, error) {
+func (a *polkitAgent) respond(id, identity, answer, rhost string) (*protocol.Prompt, error) {
 	r := a.get(id)
 	if r == nil {
 		return nil, errNoAuthRequest
@@ -437,14 +440,22 @@ func (a *polkitAgent) respond(id, identity, answer string) (*protocol.Prompt, er
 			h.kill() // it lingers two seconds after the verdict
 			r.h = nil
 			slog.Info("worker: polkit authorized", "action", r.Action, "as", h.identity)
+			a.report(rhost, r.Action, h.identity, "granted")
 			a.finish(r, nil)
 			return nil, nil
 		case "FAILURE":
 			h.kill()
 			r.h = nil
 			slog.Warn("worker: polkit authentication failed", "action", r.Action, "as", h.identity)
+			a.report(rhost, r.Action, h.identity, "failed")
 			return nil, authFailed{h.info}
 		}
+	}
+}
+
+func (a *polkitAgent) report(rhost, action, identity, result string) {
+	if a.audit != nil {
+		a.audit(protocol.AuditEvent{Event: "polkit", Rhost: rhost, Action: action, Identity: identity, Result: result})
 	}
 }
 
@@ -669,7 +680,7 @@ func (w *Worker) handlePolkitRespond(rw http.ResponseWriter, r *http.Request) {
 		writeErr(rw, err)
 		return
 	}
-	p, err := w.polkit.respond(req.ID, req.Identity, req.Answer)
+	p, err := w.polkit.respond(req.ID, req.Identity, req.Answer, r.Header.Get(protocol.ClientHeader))
 	req.Answer = ""
 	var failed authFailed
 	switch {

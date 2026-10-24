@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -694,6 +695,63 @@ func volumeDevice(t *testing.T, e *env, id string) string {
 	}
 	t.Fatalf("volume %s gone", id)
 	return ""
+}
+
+// TestAuditLog checks the audit log in the real journal (D46): a failed and
+// a successful login, a terminal, and a file moved to the trash, each
+// under the test user with the browser's address, tagged tilde-audit.
+func TestAuditLog(t *testing.T) {
+	since := time.Now().Add(-time.Second).Format("2006-01-02 15:04:05")
+	bad := connect(t, os.Getenv("TILDE_USER"))
+	decode(t, bad.do(t, http.MethodPost, "/api/auth/login", map[string]string{"username": bad.user, "password": "wrong"}), http.StatusUnauthorized, nil)
+	e := setup(t)
+	var term struct{ ID string }
+	decode(t, e.do(t, http.MethodPost, "/api/v1/terminals", map[string]int{"cols": 80, "rows": 24}), http.StatusCreated, &term)
+	decode(t, e.do(t, http.MethodDelete, "/api/v1/terminals/"+term.ID, nil), http.StatusNoContent, nil)
+	var hello struct{ Home string }
+	decode(t, e.do(t, http.MethodGet, "/api/v1/hello", nil), http.StatusOK, &hello)
+	file := hello.Home + "/audit-e2e.txt"
+	req, _ := http.NewRequest(http.MethodPut, e.base.String()+"/api/v1/fs/content?overwrite=1&path="+url.QueryEscape(file), strings.NewReader("x"))
+	req.Header.Set("Origin", e.base.Scheme+"://"+e.base.Host)
+	resp, err := e.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode(t, resp, http.StatusCreated, nil)
+	decode(t, e.do(t, http.MethodPost, "/api/v1/fs/trash", map[string][]string{"paths": {file}}), http.StatusOK, nil)
+
+	want := map[string]bool{"login_failed": false, "login": false, "terminal_open": false, "terminal_close": false, "trash": false}
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		out, err := exec.Command("sudo", "journalctl", "--no-pager", "-o", "json", "-t", "tilde-audit",
+			"TILDE_USER="+e.user, "--since", since).Output()
+		if err != nil {
+			t.Fatalf("journalctl: %v", err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			var entry map[string]any
+			if json.Unmarshal([]byte(line), &entry) != nil {
+				continue
+			}
+			ev, _ := entry["TILDE_EVENT"].(string)
+			if _, ok := want[ev]; !ok {
+				continue
+			}
+			if entry["SYSLOG_FACILITY"] != "10" || entry["_UID"] != "0" {
+				t.Fatalf("%s: not root's authpriv record: %v", ev, entry)
+			}
+			if ev != "terminal_close" && entry["TILDE_RHOST"] != "127.0.0.1" {
+				t.Fatalf("%s: rhost %v", ev, entry["TILDE_RHOST"])
+			}
+			if ev == "trash" && entry["TILDE_PATH"] != file {
+				t.Fatalf("trash record: %v", entry)
+			}
+			want[ev] = true
+		}
+		if !slices.Contains(slices.Collect(maps.Values(want)), false) {
+			return
+		}
+	}
+	t.Fatalf("missing from the journal: %v", want)
 }
 
 // totp is RFC 6238's code for counter, with SHA-1 and 6 digits, as pam_oath

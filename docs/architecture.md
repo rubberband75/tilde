@@ -95,7 +95,9 @@ could already do.
   follows its logind session (`logind.go`, D41): sets `LockedHint` when the
   server says every browser is locked, and passes on logind's lock
   requests. These `/internal/` routes are the server's own and never
-  proxied (`server/worker_session.go`).
+  proxied (`server/worker_session.go`). The same stream carries the
+  worker's audit events (`audit.go`), which the server writes to the
+  journal (`server/audit.go`, D46).
 - Streams big listings and searches as NDJSON, sniffs MIME types of
   extensionless files (budgeted per listing), and makes thumbnails into the
   shared freedesktop cache with the host's thumbnailers (D33).

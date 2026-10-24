@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -261,6 +262,8 @@ func (s *Server) checkFailed(w http.ResponseWriter, p *pending, err error, wrong
 			s.limiter.Cancel(p.addr, p.user)
 		}
 		slog.Warn(what+" failed", "user", p.user, "rhost", p.addr, "code", ae.Code)
+		s.auditFailure(auditRecord{Event: what + "_failed", User: p.user, Rhost: p.addr, Text: "failed to " + strings.Replace(what, "login", "log in", 1),
+			Failed: true, Fields: [][2]string{{"REASON", ae.Code}}})
 		writeJSON(w, status, apiError{Error: msg, Code: ae.Code})
 		return
 	}
@@ -288,6 +291,7 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request, p *pending) {
 	}
 	http.SetCookie(w, s.sessionCookie(tok, int(s.cfg.SessionMaxAge.Seconds())))
 	slog.Info("login", "user", us.User, "rhost", p.addr)
+	s.audit.record(auditRecord{Event: "login", User: us.User, Rhost: p.addr, Text: "logged in"})
 	writeJSON(w, http.StatusOK, s.info(us, false))
 }
 
@@ -311,5 +315,6 @@ func (s *Server) completeUnlock(w http.ResponseWriter, r *http.Request, p *pendi
 	}
 	http.SetCookie(w, s.sessionCookie(fresh, int(s.cfg.SessionMaxAge.Seconds())))
 	slog.Info("unlock", "user", t.User, "rhost", p.addr)
+	s.audit.record(auditRecord{Event: "unlock", User: t.User, Rhost: p.addr, Text: "unlocked a browser"})
 	writeJSON(w, http.StatusOK, s.info(us, false))
 }

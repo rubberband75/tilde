@@ -98,6 +98,8 @@ var lockSettingsInterval = time.Minute
 type sessionEvent struct {
 	Type string `json:"type"`
 	LockSettings
+	// Audit is an audit event (D46), for type "audit".
+	Audit *protocol.AuditEvent `json:"audit,omitempty"`
 }
 
 // internalOnly answers 404 to requests the server did not make for itself
@@ -149,6 +151,11 @@ func (w *Worker) handleSession(rw http.ResponseWriter, r *http.Request) {
 			}
 		case <-locks:
 			if !send(sessionEvent{Type: "lock"}) {
+				return
+			}
+		case ev := <-w.auditQ.ch:
+			ev = w.auditQ.next(ev)
+			if !send(sessionEvent{Type: "audit", Audit: &ev}) {
 				return
 			}
 		case <-t.C:

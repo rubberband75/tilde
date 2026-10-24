@@ -110,6 +110,40 @@ type WorkerHello struct {
 // and its proxy deletes this header from everything it forwards.
 const InternalHeader = "X-Tilde-Internal"
 
+// ClientHeader carries the address of the browser behind a proxied
+// request, so the worker's audit events say where an action came from
+// (D46). The server sets it on every request it proxies, replacing what
+// the browser sent.
+const ClientHeader = "X-Tilde-Client"
+
+// AuditEvent is something the user did through the worker, for the audit
+// log (D46). The worker sends it on its session stream; the server, which
+// knows whose session it is, writes the record. The worker is the user's
+// process, so the server accepts only the events it knows and bounds how
+// many it takes.
+type AuditEvent struct {
+	// Event: terminal_open, terminal_close, trash, delete, empty_trash,
+	// mount, unmount, eject, polkit.
+	Event string `json:"event"`
+	// Rhost is the browser's address (ClientHeader); empty for what no
+	// request caused, such as a shell that exited.
+	Rhost string `json:"rhost,omitempty"`
+	// Paths are the first items concerned; Count is how many there were.
+	Paths []string `json:"paths,omitempty"`
+	Count int      `json:"count,omitempty"`
+	// Terminal is the terminal's id; Name and Device name a volume.
+	Terminal string `json:"terminal,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Device   string `json:"device,omitempty"`
+	// Action, Identity and Result describe a polkit request: what for,
+	// whose password, and granted, failed or cancelled.
+	Action   string `json:"action,omitempty"`
+	Identity string `json:"identity,omitempty"`
+	Result   string `json:"result,omitempty"`
+	// Dropped counts events lost before this one, while too many came.
+	Dropped int `json:"dropped,omitempty"`
+}
+
 // Error codes shared between helper, server and frontend.
 const (
 	CodeAuthFailed      = "auth_failed"

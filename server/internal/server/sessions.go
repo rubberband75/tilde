@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -58,6 +59,8 @@ type UserSession struct {
 	lockRequested func()
 	allLocked     func() bool
 	hint          chan struct{}
+	// audit writes the worker's audit events under this user (D46).
+	audit *auditLog
 }
 
 // Done is closed when the session has ended.
@@ -89,6 +92,9 @@ type Manager struct {
 	// (D41): logind's lock requests, and its LockedHint.
 	lockRequested func(user string)
 	allLocked     func(user string) bool
+	// audit receives sessions starting and ending, and what the worker
+	// reports (D46).
+	audit *auditLog
 
 	mu       sync.Mutex
 	sessions map[string]*UserSession
@@ -353,11 +359,13 @@ func (m *Manager) startSession(ctx context.Context, h *helperProc, req protocol.
 			}
 		},
 		allLocked: func() bool { return m.allLocked != nil && m.allLocked(req.User) },
+		audit:     m.audit,
 	}
 	m.mu.Lock()
 	m.sessions[req.User] = us
 	m.mu.Unlock()
 	slog.Info("session started", "user", us.User, "uid", us.UID)
+	m.audit.record(auditRecord{Event: "session_start", User: us.User, Text: "started a session", Fields: [][2]string{{"UID", strconv.Itoa(us.UID)}}})
 	go us.followSession()
 	go us.followLockedHint()
 
@@ -379,6 +387,7 @@ func (m *Manager) startSession(ctx context.Context, h *helperProc, req protocol.
 		m.mu.Unlock()
 		close(us.done)
 		slog.Info("session ended", "user", us.User, "err", err)
+		m.audit.record(auditRecord{Event: "session_end", User: us.User, Text: "ended a session"})
 		if m.onEnd != nil {
 			m.onEnd(req.User)
 		}

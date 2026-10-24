@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+
+	"tilde/internal/protocol"
 )
 
 // fakeAgentHelper writes a stand-in for polkit-agent-helper-1 that speaks
@@ -77,6 +79,8 @@ func authorized(t *testing.T, out string) string {
 // right one ends it, which answers polkit (D44).
 func TestAgentPassword(t *testing.T) {
 	a, events, out := testAgent(t)
+	var audited []protocol.AuditEvent
+	a.audit = func(ev protocol.AuditEvent) { audited = append(audited, ev) }
 	r, derr := a.begin("org.freedesktop.udisks2.filesystem-mount", "Authentication is required to mount STICK", "drive-removable-media", "cookie-1", []string{"me", "admin"})
 	if derr != nil {
 		t.Fatal(derr)
@@ -85,10 +89,10 @@ func TestAgentPassword(t *testing.T) {
 		t.Fatalf("list %+v, %d events", l, events.Load())
 	}
 
-	if _, err := a.respond(r.ID, "mallory", "secret"); !errors.As(err, new(badRequest)) {
+	if _, err := a.respond(r.ID, "mallory", "secret", ""); !errors.As(err, new(badRequest)) {
 		t.Fatalf("someone polkit did not list: %v", err)
 	}
-	_, err := a.respond(r.ID, "", "wrong")
+	_, err := a.respond(r.ID, "", "wrong", "")
 	var failed authFailed
 	if !errors.As(err, &failed) || failed.Error() != "Wrong password" {
 		t.Fatalf("wrong password: %v", err)
@@ -96,7 +100,7 @@ func TestAgentPassword(t *testing.T) {
 	if len(a.list()) != 1 {
 		t.Fatal("a wrong password ended the request")
 	}
-	if p, err := a.respond(r.ID, "", "secret"); p != nil || err != nil {
+	if p, err := a.respond(r.ID, "", "secret", ""); p != nil || err != nil {
 		t.Fatalf("right password: %v %v", p, err)
 	}
 	if res := wait(t, r); res != nil {
@@ -105,10 +109,17 @@ func TestAgentPassword(t *testing.T) {
 	if got := authorized(t, out); got != "me cookie-1\n" {
 		t.Fatalf("helper authorized %q", got)
 	}
+	mount := "org.freedesktop.udisks2.filesystem-mount"
+	if want := []protocol.AuditEvent{
+		{Event: "polkit", Action: mount, Identity: "me", Result: "failed"},
+		{Event: "polkit", Action: mount, Identity: "me", Result: "granted"},
+	}; !reflect.DeepEqual(audited, want) {
+		t.Fatalf("audited %+v", audited)
+	}
 	if len(a.list()) != 0 {
 		t.Fatal("the request is still listed")
 	}
-	if _, err := a.respond(r.ID, "", "secret"); !errors.Is(err, errNoAuthRequest) {
+	if _, err := a.respond(r.ID, "", "secret", ""); !errors.Is(err, errNoAuthRequest) {
 		t.Fatalf("after the end: %v", err)
 	}
 }
@@ -118,14 +129,14 @@ func TestAgentPassword(t *testing.T) {
 func TestAgentCode(t *testing.T) {
 	a, _, out := testAgent(t)
 	r, _ := a.begin("org.test", "Test", "", "cookie-2", []string{"me", "coded"})
-	p, err := a.respond(r.ID, "coded", "secret")
+	p, err := a.respond(r.ID, "coded", "secret", "")
 	if err != nil || p == nil || p.Text != "Verification code:" || p.Echo || !reflect.DeepEqual(p.Info, []string{"Code sent\tby SMS"}) {
 		t.Fatalf("prompt %+v, %v", p, err)
 	}
 	if l := a.list(); l[0].Prompt == nil || l[0].Prompt.Text != "Verification code:" {
 		t.Fatalf("list %+v", l)
 	}
-	if p, err := a.respond(r.ID, "", "123456"); p != nil || err != nil {
+	if p, err := a.respond(r.ID, "", "123456", ""); p != nil || err != nil {
 		t.Fatalf("code: %v %v", p, err)
 	}
 	if res := wait(t, r); res != nil {
@@ -141,7 +152,7 @@ func TestAgentCode(t *testing.T) {
 func TestAgentCancel(t *testing.T) {
 	a, _, _ := testAgent(t)
 	r, _ := a.begin("org.test", "Test", "", "cookie-3", []string{"coded"})
-	if _, err := a.respond(r.ID, "", "secret"); err != nil {
+	if _, err := a.respond(r.ID, "", "secret", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.cancelRequest(r.ID); err != nil {
@@ -150,7 +161,7 @@ func TestAgentCancel(t *testing.T) {
 	if res := wait(t, r); res == nil || res.Name != polkitCancelled {
 		t.Fatalf("result %v", res)
 	}
-	if _, err := a.respond(r.ID, "", "123456"); !errors.Is(err, errNoAuthRequest) {
+	if _, err := a.respond(r.ID, "", "123456", ""); !errors.Is(err, errNoAuthRequest) {
 		t.Fatalf("answer after cancel: %v", err)
 	}
 

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"tilde/internal/protocol"
 )
 
 // Trash implements the freedesktop.org Trash spec
@@ -514,6 +516,16 @@ func (w *Worker) handleTrashPut(rw http.ResponseWriter, r *http.Request) {
 		}
 		results = append(results, result{Path: p, Error: err.Error(), Code: code})
 	}
+	var trashed []string
+	for _, res := range results {
+		if res.Error == "" {
+			trashed = append(trashed, res.Path)
+		}
+	}
+	if len(trashed) > 0 {
+		paths, n := auditPaths(trashed)
+		w.audit(r, protocol.AuditEvent{Event: "trash", Paths: paths, Count: n})
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"results": results})
 }
 
@@ -547,9 +559,18 @@ func (w *Worker) handleTrashRestore(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *Worker) handleTrashEmpty(rw http.ResponseWriter, r *http.Request) {
+	// What was in the trash, for the audit log.
+	var originals []string
+	if items, err := w.trash.List(); err == nil {
+		for _, it := range items {
+			originals = append(originals, it.OriginalPath)
+		}
+	}
 	if err := w.trash.Empty(); err != nil {
 		writeErr(rw, err)
 		return
 	}
+	paths, n := auditPaths(originals)
+	w.audit(r, protocol.AuditEvent{Event: "empty_trash", Paths: paths, Count: n})
 	rw.WriteHeader(http.StatusNoContent)
 }

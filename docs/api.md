@@ -64,14 +64,19 @@ Proxied unchanged to the user's worker. Without a valid session:
 `401 not_logged_in`, or `401 session_ended` if the token was valid but the
 session is gone (the frontend returns to login). `423 locked` while this
 browser is locked. `502 worker_unavailable` if the worker stops responding.
+The server sets `X-Tilde-Client` to the browser's address on every request
+it proxies (replacing any the browser sent), for the audit log (D46).
 
 The worker also serves two routes to the server only: the server proxies
 nothing outside `/api/v1/`, and they need the `X-Tilde-Internal` header,
 which the proxy strips.
 
 - `GET /internal/session`: NDJSON, `{"type":"settings", source, lockAfter}`
-  on connect and when the lock settings change (D40), and `{"type":"lock"}`
-  when logind asks the session to lock (D41).
+  on connect and when the lock settings change (D40), `{"type":"lock"}`
+  when logind asks the session to lock (D41), and `{"type":"audit",
+  audit: {event, rhost?, paths?, count?, terminal?, name?, device?,
+  action?, identity?, result?, dropped?}}` for the audit log (D46).
+  Lines are at most 4 KiB.
 - `PUT /internal/session/locked` `{locked}` → `204`: sets the logind
   session's `LockedHint`; `502 logind` if logind refuses.
 

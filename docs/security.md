@@ -89,6 +89,22 @@ bug in Tilde can never give more than the account already has.
   name may start or cancel a request, so another user cannot put a
   password dialog in this user's browser. The browser may answer only as
   one of the users polkit named. Locked browsers cannot reach it (`423`).
+- Audit log (D46): root writes to the system journal, tagged
+  `tilde-audit` with the facility authpriv (so rsyslog also files it in
+  `/var/log/auth.log`): logins and failed logins, the rate limit, locks
+  (by the user, idle or logind), unlocks, signing out, sessions starting
+  and ending, terminals, deletions (move to trash, delete permanently,
+  empty trash; the first 20 paths and a count), mounts, unmounts, ejects
+  and polkit authentications. Fields: `TILDE_EVENT`, `TILDE_USER`,
+  `TILDE_RHOST`, and per event `TILDE_PATH`, `TILDE_COUNT`,
+  `TILDE_REASON`, `TILDE_ACTION`... Read it with `journalctl -t
+  tilde-audit` (`TILDE_USER=alice` to filter). The worker reports its
+  events to the server, which writes them under the session's user,
+  accepts only the event types it knows, and takes at most 200 at once
+  and 20 a second from each user; failed logins from the network share
+  one such budget. Messages escape control characters, so a file name
+  cannot forge a line in `auth.log`. Commands typed in a terminal are not
+  recorded: use auditd for that.
 - Origin check (`internal/server/middleware.go`): every non-GET/HEAD/OPTIONS
   request and every WebSocket upgrade must carry an `Origin` whose host equals
   the request's `Host` (or one passed with `--allowed-origins`).
@@ -128,10 +144,6 @@ bug in Tilde can never give more than the account already has.
 9. No systemd sandboxing options on the unit (user processes inherit them).
 10. Root login stays disabled.
 11. `script-src` stays `'self'`.
-
-## Not yet (see roadmap phase 5)
-
-- Audit log of logins, started commands and deletions.
 
 ## Two-factor
 
