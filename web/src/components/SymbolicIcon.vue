@@ -24,6 +24,7 @@ export type SymbolicName =
   | 'zoom-in'
   | 'zoom-out'
   | 'eject'
+  | 'devices'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -48,6 +49,7 @@ const paths: Record<SymbolicName, string> = {
   'zoom-in': 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.5 10.5 14 14M5 7h4M7 5v4',
   'zoom-out': 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.5 10.5 14 14M5 7h4',
   eject: 'M8 3.5 3.5 9h9zM3.5 12.5h9',
+  devices: 'M1.5 2.5h9v7h-9zM3.5 12.5h5M6 9.5v3M11.5 6.5h3v7h-3z',
 }
 
 const d = computed(() => paths[props.name])

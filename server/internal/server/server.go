@@ -18,6 +18,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,6 +150,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /api/auth/lock", s.handleLock)
 	m.HandleFunc("POST /api/auth/unlock", s.handleUnlock)
 	m.HandleFunc("POST /api/auth/answer", s.handleAnswer)
+	m.HandleFunc("GET /api/auth/clients", s.handleClients)
+	m.HandleFunc("POST /api/auth/clients/signout", s.handleClientSignOut)
 	m.HandleFunc("/api/v1/", s.handleWorkerAPI)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
@@ -455,11 +458,72 @@ func (s *Server) handleUnlock(w http.ResponseWriter, r *http.Request) {
 	s.carryOn(w, r, p)
 }
 
+// userAgent is the browser's own description, for the list of a user's
+// browsers (D47); it is only shown, never trusted.
+func userAgent(r *http.Request) string {
+	ua := r.UserAgent()
+	if len(ua) > 256 {
+		ua = strings.ToValidUTF8(ua[:256], "")
+	}
+	return ua
+}
+
+// handleClients lists the user's signed-in browsers, for the panel (D47).
+// A locked browser cannot: it would show where the user is.
+func (s *Server) handleClients(w http.ResponseWriter, r *http.Request) {
+	tok, t, ok := s.cookieToken(r)
+	switch us := s.session(w, t, ok); {
+	case us == nil:
+	case t.Locked:
+		writeLocked(w)
+	default:
+		writeJSON(w, http.StatusOK, map[string][]Client{"clients": s.tokens.Clients(t.User, tok)})
+	}
+}
+
+// handleClientSignOut signs out another of the user's browsers, one left
+// open elsewhere. This browser signs itself out with Log Out or the lock
+// screen's Switch User instead.
+func (s *Server) handleClientSignOut(w http.ResponseWriter, r *http.Request) {
+	tok, t, ok := s.cookieToken(r)
+	us := s.session(w, t, ok)
+	if us == nil {
+		return
+	}
+	if t.Locked {
+		writeLocked(w)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	if err := jsonDecode(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request", Code: "bad_request"})
+		return
+	}
+	for _, c := range s.tokens.Clients(t.User, tok) {
+		if c.ID == req.ID && c.Current {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "this is the browser you are using; log out instead", Code: "bad_request"})
+			return
+		}
+	}
+	addr, found := s.tokens.RevokeID(t.User, req.ID)
+	if !found {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "that browser is not signed in", Code: "not_found"})
+		return
+	}
+	slog.Info("signed out another browser", "user", t.User, "client", addr)
+	s.audit.record(auditRecord{Event: "signout_client", User: t.User, Rhost: clientAddr(r, s.cfg.TrustProxy),
+		Text: "signed out the browser at " + addr, Fields: [][2]string{{"CLIENT", addr}}})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleWorkerAPI authenticates the request and forwards it to the worker.
 // A locked client gets 423 "locked". The request ends when its token is
 // locked or revoked, which closes WebSockets (terminals, events) too.
 func (s *Server) handleWorkerAPI(w http.ResponseWriter, r *http.Request) {
-	_, t, ok := s.cookieToken(r)
+	tok, t, ok := s.cookieToken(r)
 	us := s.session(w, t, ok)
 	if us == nil {
 		return
@@ -475,6 +539,10 @@ func (s *Server) handleWorkerAPI(w http.ResponseWriter, r *http.Request) {
 	// Where the request came from, for the worker's audit events (D46);
 	// whatever the browser sent in its place is replaced.
 	r.Header.Set(protocol.ClientHeader, clientAddr(r, s.cfg.TrustProxy))
+	// A tab showing the desktop keeps the events socket open (D47).
+	if r.URL.Path == "/api/v1/events" && strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		defer s.tokens.Connect(tok)()
+	}
 	us.ServeHTTP(w, r.WithContext(ctx))
 }
 

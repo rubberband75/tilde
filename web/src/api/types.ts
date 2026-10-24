@@ -276,3 +276,21 @@ export interface PolkitState {
   agent: boolean
   requests: PolkitRequest[]
 }
+
+/** One of the user's signed-in browsers; GET /api/auth/clients (D47). */
+export interface ClientInfo {
+  id: string
+  /** Where it connects from. */
+  address: string
+  /** Its User-Agent header: shown, never trusted. */
+  agent: string
+  /** When it logged in. */
+  since: string
+  lastSeen: string
+  lastInput: string
+  locked: boolean
+  /** A tab shows the desktop now. */
+  connected: boolean
+  /** The browser asking. */
+  current: boolean
+}

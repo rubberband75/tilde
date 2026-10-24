@@ -170,7 +170,7 @@ App.vue ── LoginScreen (logged out)
             │    └── WindowFrame × n ── <app component :ctx>
             ├── Notices
             ├── JobsPanel ── ConflictDialog   file job progress and questions
-            ├── Panel ── StartMenu, launchers, WindowList, tray (user, clock)
+            ├── Panel ── StartMenu, launchers, WindowList, tray (browsers, user, clock)
             └── Dialogs                       ctx.confirm / ctx.prompt
 ```
 

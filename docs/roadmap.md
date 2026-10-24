@@ -82,7 +82,7 @@ to; tick items off as they land.
 - [x] Multi-step PAM conversations for two-factor (D43): PAM's extra prompts go to the login and lock screens; documented, not enabled by default; tested in the VM with `pam_oath`
 - [x] Polkit authentication agent in the browser (D44): the worker registers for its web session and runs polkit's helper; the dialog shows in every browser. Files mounts drives through it
 - [x] Audit log (D46): the system journal, tagged `tilde-audit` (also in `/var/log/auth.log`): logins, locks, sessions, terminals, deletions, mounts and polkit authentications, written by root
-- [ ] Tray indicator for connected clients
+- [x] Tray indicator for connected clients (D47): the panel lists the user's signed-in browsers (where from, which kind, open or locked) and signs one out
 - [x] Review: CSP, headers, cookie flags, error messages that leak information (D45): auth-stack refusals look like wrong passwords, `--trust-proxy` takes the proxy's own address, CORP and (with your own certificate) HSTS, worker responses cannot set cookies and are not cached by default
 
 ## Phase 6 — Apps

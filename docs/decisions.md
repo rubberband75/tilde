@@ -527,6 +527,26 @@ Tilde's own (rotation to maintain); the worker writing to the journal
 itself (records under the user's uid, of the user's making); recording
 every file operation (noise, and the user's own business).
 
+**D47 — The panel lists the user's browsers and signs one out** (2026-10-23, accepted)
+The tray indicator D16 planned shows the user's signed-in browsers: each
+session cookie is one browser (its tabs share it), listed with the
+address and `User-Agent` of its login or last unlock, when it logged in,
+whether a tab has the desktop open now (its events socket), and whether
+it is locked. The number shows once there is more than this browser.
+The list comes from the server (`GET /api/auth/clients`), which the
+panel asks every 30 seconds, when the page is shown again and when the
+list is opened; nothing is pushed, since the server has no channel of its
+own to the browser. Each browser has a random id that is not its token.
+"Sign Out" on another browser revokes its token, which ends its requests
+and sockets, so it shows the login screen; this browser signs out with
+Log Out or Switch User, as before. Locked browsers can neither list nor
+sign out: the list says where the user is. Signing a browser out is
+audited (D46). Why: several browsers may share the session (D12), and one
+left open at work should be closable from home without ending the
+session. Rejected: showing the count only (a number does not tell which
+browser to worry about); pushing changes over the worker's events socket
+(the worker does not know the server's tokens, and should not).
+
 ---
 
 ## Open decisions

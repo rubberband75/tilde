@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 )
@@ -43,6 +44,14 @@ type TokenStore struct {
 
 type tokenInfo struct {
 	user string
+	// id names the browser in the list of the user's browsers, without
+	// giving away the token; it, client and since survive unlocking.
+	id     string
+	client clientInfo
+	// since is when this browser logged in.
+	since time.Time
+	// conns counts its open events sockets: a tab showing the desktop.
+	conns int
 	// created is when the password was last typed (login or unlock); the
 	// absolute lifetime counts from there.
 	created   time.Time
@@ -85,23 +94,42 @@ func heartbeat(lockAfter time.Duration) time.Duration {
 	return min(15*time.Second, max(time.Second, lockAfter/10))
 }
 
-// New creates a token for user.
-func (s *TokenStore) New(user string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.newLocked(user)
+// clientInfo is what the server knows of a browser: where it connects
+// from and what it says it is.
+type clientInfo struct {
+	addr  string
+	agent string
 }
 
-func (s *TokenStore) newLocked(user string) (string, error) {
+// New creates a token for user.
+func (s *TokenStore) New(user string) (string, error) {
+	return s.NewFor(user, clientInfo{})
+}
+
+// NewFor creates a token for user on a new browser.
+func (s *TokenStore) NewFor(user string, c clientInfo) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := make([]byte, 8)
+	if _, err := rand.Read(id); err != nil {
+		return "", err
+	}
+	return s.newLocked(&tokenInfo{user: user, id: hex.EncodeToString(id), client: c, since: s.now()})
+}
+
+// newLocked stores a new token for the browser ti describes, filling in
+// the rest. s.mu must be held.
+func (s *TokenStore) newLocked(ti *tokenInfo) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	tok := base64.RawURLEncoding.EncodeToString(b)
 	now := s.now()
-	ctx, cancel := context.WithCancel(context.Background())
-	s.m[hashToken(tok)] = &tokenInfo{user: user, created: now, lastSeen: now, lastInput: now, ctx: ctx, cancel: cancel}
-	s.notify(user)
+	ti.created, ti.lastSeen, ti.lastInput = now, now, now
+	ti.ctx, ti.cancel = context.WithCancel(context.Background())
+	s.m[hashToken(tok)] = ti
+	s.notify(ti.user)
 	return tok, nil
 }
 
@@ -243,10 +271,10 @@ func (s *TokenStore) BeginUnlock(tok string) bool {
 	return true
 }
 
-// Rotate replaces tok with a new, unlocked token for the same user, after
-// the password was checked. The new token's lifetime starts now. It fails
-// if tok has gone in the meantime.
-func (s *TokenStore) Rotate(tok string) (string, bool) {
+// Rotate replaces tok with a new, unlocked token for the same user and
+// browser, after the password was checked, from addr. The new token's
+// lifetime starts now. It fails if tok has gone in the meantime.
+func (s *TokenStore) Rotate(tok, addr string) (string, bool) {
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -255,7 +283,11 @@ func (s *TokenStore) Rotate(tok string) (string, bool) {
 		return "", false
 	}
 	s.remove(h, ti)
-	fresh, err := s.newLocked(ti.user)
+	c := ti.client
+	if addr != "" {
+		c.addr = addr
+	}
+	fresh, err := s.newLocked(&tokenInfo{user: ti.user, id: ti.id, client: c, since: ti.since})
 	if err != nil {
 		return "", false
 	}
@@ -283,18 +315,81 @@ func (s *TokenStore) RevokeUser(user string) {
 	s.mu.Unlock()
 }
 
-// Count returns the number of live tokens for user (the tray's "clients
-// connected" indicator can use this later).
-func (s *TokenStore) Count(user string) int {
+// Client is one of a user's browsers, as the panel's list shows it.
+type Client struct {
+	ID      string    `json:"id"`
+	Address string    `json:"address"`
+	Agent   string    `json:"agent"`
+	Since   time.Time `json:"since"`
+	// LastSeen is the browser's last request; LastInput its last
+	// keyboard or pointer input.
+	LastSeen  time.Time `json:"lastSeen"`
+	LastInput time.Time `json:"lastInput"`
+	Locked    bool      `json:"locked"`
+	// Connected: a tab shows the desktop now (its events socket is open).
+	Connected bool `json:"connected"`
+	// Current is the browser asking.
+	Current bool `json:"current"`
+}
+
+// Clients lists user's browsers that are signed in: the one tok belongs
+// to first, then the most recently seen.
+func (s *TokenStore) Clients(user, tok string) []Client {
+	now := s.now()
+	mine := hashToken(tok)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := 0
-	for _, ti := range s.m {
-		if ti.user == user {
-			n++
+	out := []Client{}
+	for h, ti := range s.m {
+		if ti.user != user || now.Sub(ti.created) > s.maxAge {
+			continue
+		}
+		out = append(out, Client{
+			ID: ti.id, Address: ti.client.addr, Agent: ti.client.agent, Since: ti.since,
+			LastSeen: ti.lastSeen, LastInput: ti.lastInput,
+			Locked: ti.locked || s.idle(ti, now), Connected: ti.conns > 0, Current: h == mine,
+		})
+	}
+	slices.SortFunc(out, func(a, b Client) int {
+		if a.Current != b.Current {
+			if a.Current {
+				return -1
+			}
+			return 1
+		}
+		return b.LastSeen.Compare(a.LastSeen)
+	})
+	return out
+}
+
+// RevokeID signs out user's browser id, and returns where it was.
+func (s *TokenStore) RevokeID(user, id string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for h, ti := range s.m {
+		if ti.user == user && ti.id == id && id != "" {
+			s.remove(h, ti)
+			return ti.client.addr, true
 		}
 	}
-	return n
+	return "", false
+}
+
+// Connect counts an open events socket of tok's browser until release is
+// called: the panel shows which browsers have a tab open.
+func (s *TokenStore) Connect(tok string) (release func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ti, ok := s.m[hashToken(tok)]
+	if !ok {
+		return func() {}
+	}
+	ti.conns++
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		ti.conns--
+	}
 }
 
 // Sweep removes expired tokens and locks idle ones, so a client that has

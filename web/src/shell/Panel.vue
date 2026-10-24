@@ -7,6 +7,7 @@ import ThemeIcon from '@/components/ThemeIcon.vue'
 import StartMenu from './StartMenu.vue'
 import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
+import ClientsApplet from './ClientsApplet.vue'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
 
@@ -26,6 +27,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
     </div>
     <WindowList />
     <div class="tray">
+      <ClientsApplet />
       <div class="applet user" :title="`Logged in as ${session.info?.user}`">{{ session.info?.user }}</div>
       <PanelClock />
     </div>

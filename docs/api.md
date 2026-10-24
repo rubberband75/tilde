@@ -31,6 +31,8 @@ them in sync.
 | GET | `/api/auth/session` | — | `200 SessionInfo`, also while locked, or `401 not_logged_in` / `session_ended` |
 | POST | `/api/auth/activity` | — | `200 {lockAfter, heartbeat}`: there was keyboard or pointer input. `423 locked` if this browser is locked |
 | POST | `/api/auth/lock` | — | `204`. Locks every browser logged in as this user. `423 locked` from a locked browser |
+| GET | `/api/auth/clients` | — | `200 {clients: ClientInfo[]}`: the user's signed-in browsers (D47), this one first, then the most recently seen. `ClientInfo`: `{id, address, agent, since, lastSeen, lastInput, locked, connected, current}`; `address` and `agent` (its `User-Agent`) are from its login or last unlock; `connected`: a tab has the events socket open. `423 locked` from a locked browser |
+| POST | `/api/auth/clients/signout` | `{id}` | `204`: signs that browser out (its requests and sockets end). `400` for this browser (log out instead), `404 not_found`, `423 locked` |
 | POST | `/api/auth/unlock` | `{password}` | `200 SessionInfo` and a new session cookie (the old one stops working); only this browser unlocks. `401 auth_failed`, `403 account_expired` / `password_expired`, `429 rate_limited` (shared with login: 5 attempts per address in 15 minutes), `401 too_many_attempts` after 5 tries on this cookie, which is then signed out |
 
 `SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login

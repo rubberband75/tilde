@@ -280,7 +280,7 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request, p *pending) {
 		return
 	}
 	us := p.check.Session()
-	tok, err := s.tokens.New(us.User)
+	tok, err := s.tokens.NewFor(us.User, clientInfo{addr: p.addr, agent: userAgent(r)})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "could not create a session token", Code: protocol.CodeInternal})
 		return
@@ -306,7 +306,7 @@ func (s *Server) completeUnlock(w http.ResponseWriter, r *http.Request, p *pendi
 		writeJSON(w, http.StatusUnauthorized, apiError{Error: "not logged in", Code: "not_logged_in"})
 		return
 	}
-	fresh, ok := s.tokens.Rotate(tok)
+	fresh, ok := s.tokens.Rotate(tok, p.addr)
 	if !ok {
 		// Not clearing the cookie: another tab of this browser may have
 		// unlocked at the same moment and set a fresh one.

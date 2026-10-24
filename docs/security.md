@@ -73,6 +73,11 @@ bug in Tilde can never give more than the account already has.
   Not covered yet: files Tilde opened in their own browser tab (types with
   no viewer app) stay open, and the window layout in `localStorage` keeps
   window titles and folder paths.
+- The panel lists the user's signed-in browsers (address, `User-Agent`,
+  open or locked) and can sign one of the others out (D47), so a session
+  left open elsewhere can be closed without logging out everywhere;
+  signing one out is in the audit log. Locked browsers can do neither:
+  the list would show where the user is.
 - The server reads the worker's session stream in lines of at most 4 KiB:
   the worker is the user's process, and must not be able to make the root
   server buffer without limit.
