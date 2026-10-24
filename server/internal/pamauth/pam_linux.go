@@ -42,13 +42,28 @@ func Authenticate(user, remoteAddr string, conv Conversation) (Session, error) {
 	}
 	if err := tx.Authenticate(pam.DisallowNullAuthtok); err != nil {
 		tx.End()
-		return nil, classify(err)
+		return nil, authStageErr(err)
 	}
 	if err := tx.AcctMgmt(pam.DisallowNullAuthtok); err != nil {
 		tx.End()
 		return nil, classify(err)
 	}
 	return &session{tx: tx}, nil
+}
+
+// authStageErr classifies a failure of the auth stack. Until it passes,
+// the password is not known to be right, so a module that refuses with
+// "permission denied" or "expired" (pam_access, pam_sss) gets the same
+// answer as a wrong password: otherwise the login screen would tell
+// anyone that the account exists. The account stack, which runs only
+// after a right password, may say more.
+func authStageErr(err error) error {
+	switch c := classify(err); c {
+	case ErrPasswordExpired, ErrAccountExpired:
+		return ErrAuthFailed
+	default:
+		return c
+	}
 }
 
 func classify(err error) error {
