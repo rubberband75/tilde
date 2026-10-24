@@ -294,3 +294,28 @@ export interface ClientInfo {
   /** The browser asking. */
   current: boolean
 }
+
+/** GET /api/v1/text: a file opened in the text editor (D48). */
+export interface TextFile {
+  text: string
+  /** The contents' version; a save names it, to find changes on disk. */
+  version: string
+  /** The user may save it (the kernel's answer at the time). */
+  writable: boolean
+  entry: Entry
+}
+
+/** PUT /api/v1/text */
+export interface SavedText {
+  version: string
+  entry: Entry
+}
+
+/** The editor's unsaved changes, kept by the worker (D48). */
+export interface Draft {
+  key: string
+  text: string
+  /** The file's version the changes started from. */
+  base?: string
+  updated: string
+}

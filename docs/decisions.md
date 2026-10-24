@@ -547,6 +547,33 @@ session. Rejected: showing the count only (a number does not tell which
 browser to worry about); pushing changes over the worker's events socket
 (the worker does not know the server's tokens, and should not).
 
+**D48 — Text editor: CodeMirror 6, drafts in the worker, saves that keep the file** (2026-10-24, accepted)
+The editor is CodeMirror 6: it needs no eval and no web workers, so the
+CSP's `script-src 'self'` stays (Monaco wants workers and a looser
+policy), and its languages load as chunks of the build. One document per
+window, as xed; Files opens text types with it and offers Open With Text
+Editor for other files. As D40 requires, unsaved changes live in the
+worker: the editor sends a draft half a second after the user stops
+typing, and before Lock Screen, to `$XDG_STATE_HOME/tilde/drafts` (0700
+folder, 0600 files, named by a hash of the file's path or of an id for a
+new document); a window that comes back after a reload or a lock, in any
+browser, opens the draft over the file and says if the file changed on
+disk meanwhile. Saving and closing without saving delete it. The worker
+reads only UTF-8 text without NUL bytes, up to 10 MB. Each read returns a
+version (mtime, size, inode); a save names it, and a file changed on disk
+since is overwritten only after asking. Saving behaves as GIO's
+`g_file_replace` does for xed: a symlink's target is written; a new copy
+is renamed into place, with the old permissions and group, unless that
+would lose hard links, another user's ownership, a group the user is not
+in or an ACL, and then the file is rewritten in place. An unmodified
+document follows changes on disk through the folder's inotify events.
+Save As takes a typed path until the shared file chooser (phase 6). Not
+yet: an Open dialog, tabs, reopening an untitled draft whose window is
+gone. Rejected: Monaco (workers, CSP, size); keeping drafts in the
+browser (`localStorage` is per browser and stays readable after a lock);
+the upload endpoint for saving (its rename drops permissions and replaces
+symlinks).
+
 ---
 
 ## Open decisions

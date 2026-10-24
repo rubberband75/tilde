@@ -127,6 +127,27 @@
   --warning-fg: #000000;
   --progress-bg: #202023;
 
+  /* Text editor (D48), after xed's Mint-Y-Dark style scheme */
+  --editor-bg: #2a2a2e;
+  --editor-fg: #dadada;
+  --editor-gutter-bg: #26262a;
+  --editor-gutter-fg: #75757a;
+  --editor-active-line-bg: rgba(255, 255, 255, 0.04);
+  --editor-selection-bg: rgba(53, 168, 84, 0.4);
+  --editor-match-bg: rgba(242, 120, 53, 0.35);
+  --editor-cursor: #ffffff;
+  --editor-infobar-bg: #3a3a40;
+  --syntax-keyword: #c792ea;
+  --syntax-string: #a5d66f;
+  --syntax-number: #f78c6c;
+  --syntax-comment: #7c7c84;
+  --syntax-type: #ffcb6b;
+  --syntax-function: #82aaff;
+  --syntax-property: #89ddff;
+  --syntax-heading: #8fd19e;
+  --syntax-link: #82aaff;
+  --syntax-invalid: #f04a50;
+
   /* Terminal (gtk-dark.css: vte-terminal) */
   --terminal-bg: #222226;
   --terminal-fg: #ffffff;

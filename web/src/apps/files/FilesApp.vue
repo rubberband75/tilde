@@ -23,6 +23,7 @@ import {
 import { ApiError } from '@/api/client'
 import { baseName, dirName, fsApi, joinPath, searchStream, uniqueName } from '@/api/fs'
 import type { Bookmark, Entry, Place, TrashItem, Volume } from '@/api/types'
+import { appForMime } from '@/apps/registry'
 import type { AppContext } from '@/apps/types'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
@@ -465,6 +466,11 @@ async function unmountVolume(v: Volume, eject: boolean) {
   }
   if (eject) props.ctx.notify(`“${v.name}” can be safely removed.`)
   emitDrivesChanged()
+}
+
+/** Files that Open already shows in the text editor. */
+function opensAsText(entry: Entry): boolean {
+  return appForMime(entry.mime)?.id === 'text-editor'
 }
 
 function open(item: Item) {
@@ -1112,6 +1118,17 @@ onBeforeUnmount(() => {
                 @select="openTerminal(selectedItems[0]!.entry!.path)"
               >
                 Open in Terminal
+              </ContextMenuItem>
+              <ContextMenuItem
+                v-if="
+                  selectedItems.length === 1 &&
+                  selectedItems[0]!.entry?.type === 'file' &&
+                  !opensAsText(selectedItems[0]!.entry!)
+                "
+                class="item"
+                @select="props.ctx.launch('text-editor', { path: selectedItems[0]!.entry!.path })"
+              >
+                Open With Text Editor
               </ContextMenuItem>
               <ContextMenuSeparator class="separator" />
               <ContextMenuItem class="item" @select="copySelected('cut')">Cut</ContextMenuItem>

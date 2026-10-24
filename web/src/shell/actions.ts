@@ -2,6 +2,7 @@ import { appForMime } from '@/apps/registry'
 import type { AppContext } from '@/apps/types'
 import { fsApi } from '@/api/fs'
 import type { Entry } from '@/api/types'
+import { saveBeforeLock } from '@/lib/beforeLock'
 import { useClipboard } from '@/stores/clipboard'
 import { useDialogs } from '@/stores/dialogs'
 import { useNotices } from '@/stores/notices'
@@ -27,6 +28,7 @@ export function openEntry(entry: Entry): void {
 
 /** Locks every browser logged in as this user (menu button, Ctrl+Alt+L). */
 export async function lockScreen(): Promise<void> {
+  await saveBeforeLock()
   try {
     await useSession().lock()
   } catch {

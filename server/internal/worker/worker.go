@@ -40,17 +40,19 @@ type Worker struct {
 	info       *userinfo.Info
 	hostname   string
 	configHome string
-	cacheHome  string
-	umask      os.FileMode
-	trash      *Trash
-	terms      *terminalManager
-	events     *eventHub
-	watcher    *dirWatcher
-	drives     *driveService
-	jobs       *jobManager
-	logind     *logindConn
-	polkit     *polkitAgent
-	auditQ     *auditQueue
+	// drafts holds the text editor's unsaved changes (D48).
+	drafts    string
+	cacheHome string
+	umask     os.FileMode
+	trash     *Trash
+	terms     *terminalManager
+	events    *eventHub
+	watcher   *dirWatcher
+	drives    *driveService
+	jobs      *jobManager
+	logind    *logindConn
+	polkit    *polkitAgent
+	auditQ    *auditQueue
 }
 
 // Options overrides locations, mainly for tests.
@@ -58,6 +60,7 @@ type Options struct {
 	DataHome   string // $XDG_DATA_HOME, default ~/.local/share
 	ConfigHome string // $XDG_CONFIG_HOME, default ~/.config
 	CacheHome  string // $XDG_CACHE_HOME, default ~/.cache
+	StateHome  string // $XDG_STATE_HOME, default ~/.local/state
 	// ThumbnailerDirs overrides where *.thumbnailer files are looked up.
 	ThumbnailerDirs []string
 	// LogindSession is the id of the worker's logind session (D41), which
@@ -75,6 +78,9 @@ func New(info *userinfo.Info, opt Options) *Worker {
 	if opt.ConfigHome == "" {
 		opt.ConfigHome = xdgDir("XDG_CONFIG_HOME", filepath.Join(info.Home, ".config"))
 	}
+	if opt.StateHome == "" {
+		opt.StateHome = xdgDir("XDG_STATE_HOME", filepath.Join(info.Home, ".local", "state"))
+	}
 	if opt.CacheHome == "" {
 		opt.CacheHome = xdgDir("XDG_CACHE_HOME", filepath.Join(info.Home, ".cache"))
 	}
@@ -89,6 +95,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		info:       info,
 		hostname:   host,
 		configHome: opt.ConfigHome,
+		drafts:     filepath.Join(opt.StateHome, "tilde", "drafts"),
 		cacheHome:  opt.CacheHome,
 		umask:      readUmask(),
 		trash:      trash,
@@ -170,6 +177,12 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/fs/mkdir", w.handleMkdir)
 	m.HandleFunc("POST /api/v1/fs/rename", w.handleRename)
 	m.HandleFunc("POST /api/v1/fs/trash", w.handleTrashPut)
+
+	m.HandleFunc("GET /api/v1/text", w.handleTextGet)
+	m.HandleFunc("PUT /api/v1/text", w.handleTextPut)
+	m.HandleFunc("GET /api/v1/drafts", w.handleDraftGet)
+	m.HandleFunc("PUT /api/v1/drafts", w.handleDraftPut)
+	m.HandleFunc("DELETE /api/v1/drafts", w.handleDraftDelete)
 
 	m.HandleFunc("GET /api/v1/trash", w.handleTrashList)
 	m.HandleFunc("POST /api/v1/trash/restore", w.handleTrashRestore)

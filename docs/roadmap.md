@@ -87,7 +87,8 @@ to; tick items off as they land.
 
 ## Phase 6 — Apps
 
-- [ ] Text editor (CodeMirror or Monaco)
+- [x] Text editor (D48): CodeMirror 6, opened from Files (text types, and Open With Text Editor), syntax highlighting, find and replace; unsaved changes kept as drafts by the worker through reloads and locks; saves keep symlinks, permissions and hard links, and ask before overwriting a file changed on disk
+- [ ] Text editor: Open dialog and Save As with the shared file chooser (a typed path for now), reopening untitled drafts whose window is gone, tabs
 - [ ] Media player (uses `fs/content` Range requests)
 - [ ] Image viewer
 - [ ] Process manager (`/proc`, signals; systemd units over D-Bus)

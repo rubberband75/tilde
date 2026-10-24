@@ -30,7 +30,8 @@ server/                 Go module "tilde" (one binary, three roles)
   internal/helper/      per-login root helper: PAM auth + session, starts worker
   internal/worker/      per-user API: fs, jobs, events + inotify, search, thumbnails,
                         bookmarks, trash, places, drives (udisks), terminals,
-                        idle lock settings, logind, polkit agent
+                        idle lock settings, logind, polkit agent, audit events,
+                        text files and editor drafts
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages
@@ -44,7 +45,7 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/shell/            desktop, panel, start menu, window list, login
   src/wm/               window manager (frame, layer)
   src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
-                        properties/, system-info/, backgrounds/
+                        editor/, properties/, system-info/, backgrounds/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus
   src/styles/           base.css + themes/mint-y-dark.css (design tokens)
   e2e/                  Playwright UI tests (run by make e2e-vm)
