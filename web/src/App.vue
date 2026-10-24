@@ -10,6 +10,7 @@ import { createReporter, trackInput } from '@/lib/activity'
 import { useBackground } from '@/stores/background'
 import { useClipboard } from '@/stores/clipboard'
 import { useDialogs } from '@/stores/dialogs'
+import { useFileChooser } from '@/stores/fileChooser'
 import { useJobs } from '@/stores/jobs'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
@@ -19,6 +20,7 @@ const session = useSession()
 const wm = useWindows()
 const jobs = useJobs()
 const dialogs = useDialogs()
+const chooser = useFileChooser()
 const clipboard = useClipboard()
 const background = useBackground()
 
@@ -43,6 +45,7 @@ watch(
       wm.reset()
       jobs.disconnect()
       dialogs.reset()
+      chooser.reset()
       clipboard.clear()
       background.clear()
     }

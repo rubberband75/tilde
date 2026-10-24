@@ -1,6 +1,28 @@
 import { defineAsyncComponent, type Component } from 'vue'
 import type { AppManifest } from './types'
 
+// What the worker calls text: text/* and the common source and config
+// types that are not under text/ (mime.types, Go's own table).
+export const textMimeTypes = [
+  'text/*',
+  'application/json',
+  'application/xml',
+  'application/javascript',
+  'application/x-javascript',
+  'application/x-sh',
+  'application/x-shellscript',
+  'application/x-perl',
+  'application/x-ruby',
+  'application/x-php',
+  'application/x-python',
+  'application/yaml',
+  'application/x-yaml',
+  'application/toml',
+  'application/sql',
+  'application/x-desktop',
+  'application/x-zerosize',
+]
+
 export const apps: AppManifest[] = [
   {
     id: 'files',
@@ -29,27 +51,7 @@ export const apps: AppManifest[] = [
     comment: 'Edit text files',
     icon: 'accessories-text-editor',
     category: 'Accessories',
-    // What the worker calls text: text/* and the common source and
-    // config types that are not under text/ (mime.types, Go's own table).
-    mimeTypes: [
-      'text/*',
-      'application/json',
-      'application/xml',
-      'application/javascript',
-      'application/x-javascript',
-      'application/x-sh',
-      'application/x-shellscript',
-      'application/x-perl',
-      'application/x-ruby',
-      'application/x-php',
-      'application/x-python',
-      'application/yaml',
-      'application/x-yaml',
-      'application/toml',
-      'application/sql',
-      'application/x-desktop',
-      'application/x-zerosize',
-    ],
+    mimeTypes: textMimeTypes,
     defaultSize: { w: 760, h: 540 },
     minSize: { w: 360, h: 240 },
     component: () => import('./editor/EditorApp.vue'),
@@ -65,6 +67,18 @@ export const apps: AppManifest[] = [
     defaultSize: { w: 460, h: 440 },
     minSize: { w: 360, h: 320 },
     component: () => import('./properties/PropertiesApp.vue'),
+  },
+  {
+    id: 'file-chooser',
+    name: 'Choose a File',
+    comment: 'Open or save files for other apps',
+    icon: 'folder-open',
+    category: 'Accessories',
+    // Opened by ctx.chooseFile as a dialog of the app that asks (D49).
+    hidden: true,
+    defaultSize: { w: 780, h: 520 },
+    minSize: { w: 480, h: 320 },
+    component: () => import('./chooser/FileChooserApp.vue'),
   },
   {
     id: 'backgrounds',

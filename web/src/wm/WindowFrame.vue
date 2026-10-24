@@ -3,7 +3,7 @@
 // maximize and close. Geometry lives in the window store; during a drag the
 // frame moves with a CSS transform and commits the position on release,
 // which avoids relayout on every pointer move.
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { appComponent, getApp } from '@/apps/registry'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
@@ -20,7 +20,9 @@ const ctx = createContext(props.win.id)
 
 const focused = computed(() => wm.focusedId === props.win.id)
 const maximized = computed(() => props.win.state === 'maximized')
-const minimized = computed(() => props.win.state === 'minimized')
+const minimized = computed(() => wm.isHidden(props.win))
+/** A modal dialog of this window is open: the content takes no input. */
+const blocked = computed(() => !!wm.dialogOf(props.win.id))
 
 const content = ref<HTMLElement | null>(null)
 let lastFocus: HTMLElement | null = null
@@ -41,6 +43,15 @@ function keepFocus(e: MouseEvent) {
   if (content.value?.contains(document.activeElement)) return
   if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
 }
+
+// When its dialog closes, the window's focus goes back where it was.
+watch(blocked, (now, before) => {
+  if (before && !now && focused.value) {
+    void nextTick(() => {
+      if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
+    })
+  }
+})
 
 const drag = ref<{ dx: number; dy: number } | null>(null)
 const live = ref<Rect | null>(null)
@@ -206,7 +217,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
         </button>
       </div>
     </header>
-    <div ref="content" class="content" @focusin="onFocusIn">
+    <div ref="content" class="content" :inert="blocked" @focusin="onFocusIn">
       <component :is="comp" v-if="comp" :ctx="ctx" />
     </div>
     <template v-if="!maximized">

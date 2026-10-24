@@ -171,6 +171,7 @@ App.vue ── LoginScreen (logged out)
             ├── DesktopIcons      Computer, Home, Trash, ~/Desktop (grid layout: shell/desktopLayout.ts)
             ├── WindowLayer
             │    └── WindowFrame × n ── <app component :ctx>
+            │         (a modal dialog window, the file chooser, sits above its parent)
             ├── Notices
             ├── JobsPanel ── ConflictDialog   file job progress and questions
             ├── Panel ── StartMenu, launchers, WindowList, tray (browsers, user, clock)
@@ -183,7 +184,10 @@ App.vue ── LoginScreen (logged out)
   per-app minimum sizes. While dragging, a transparent shield covers
   everything so iframes cannot swallow pointer events. Double-clicking the
   title bar maximizes; dragging a maximized window restores it under the
-  pointer, like Cinnamon.
+  pointer, like Cinnamon. A window can open another as its modal dialog
+  (`openDialog`, D49): the dialog stays above it, hides and closes with it
+  and is left out of the window list and the saved layout, and the parent's
+  content is `inert` until it closes.
 - **Layout persistence**: the store saves windows to `localStorage` per user.
   Each window keeps launch args plus state the app saves (`ctx.saveState`), so
   a terminal window remembers its terminal id and Files remembers its folder.
@@ -192,7 +196,8 @@ App.vue ── LoginScreen (logged out)
   category, MIME types, sizes, lazy component) and receives the shell API as a
   `ctx` prop (`types.ts`): set title, close, save state, close guard, launch
   another app, open a file with its registered app, notify, confirm and
-  prompt dialogs, the shared file clipboard, home folder, focus and drag state.
+  prompt dialogs, the file chooser (`ctx.chooseFile`, `src/apps/chooser`,
+  D49), the shared file clipboard, home folder, focus and drag state.
 - **File jobs** (`src/stores/jobs.ts`, `src/shell/JobsPanel.vue`): the store
   mirrors the worker's jobs over the events WebSocket (`src/api/events.ts`);
   the panel shows progress and the conflict dialog, and folders a job touched

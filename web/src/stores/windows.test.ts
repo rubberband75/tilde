@@ -92,6 +92,61 @@ describe('close', () => {
   })
 })
 
+describe('modal dialogs', () => {
+  it('keep the focus while open, and give it back when they close', () => {
+    const wm = useWindows()
+    const parent = wm.open('text-editor')!
+    const other = wm.open('files')!
+    const dialog = wm.openDialog(parent, 'file-chooser')!
+    expect(wm.focusedId).toBe(dialog)
+    expect(wm.get(dialog)!.z).toBeGreaterThan(wm.get(parent)!.z)
+    expect(wm.get(parent)!.z).toBeGreaterThan(wm.get(other)!.z)
+    expect(wm.ordered.map((w) => w.id)).toEqual([parent, other])
+    expect(wm.openDialog(parent, 'file-chooser')).toBeUndefined()
+
+    // Raising the parent (a click, the taskbar) raises the dialog above it.
+    wm.focus(other)
+    wm.focus(parent)
+    expect(wm.focusedId).toBe(dialog)
+    expect(wm.get(dialog)!.z).toBeGreaterThan(wm.get(parent)!.z)
+
+    wm.close(dialog)
+    expect(wm.focusedId).toBe(parent)
+  })
+
+  it('hide with their parent, which waits for them before it closes', async () => {
+    const wm = useWindows()
+    const other = wm.open('files')!
+    const parent = wm.open('text-editor')!
+    const dialog = wm.openDialog(parent, 'file-chooser')!
+    wm.activate(parent)
+    expect(wm.get(parent)!.state).toBe('minimized')
+    expect(wm.isHidden(wm.get(dialog)!)).toBe(true)
+    expect(wm.focusedId).toBe(other)
+    wm.activate(parent)
+    expect(wm.isHidden(wm.get(dialog)!)).toBe(false)
+    expect(wm.focusedId).toBe(dialog)
+
+    await wm.requestClose(parent)
+    expect(wm.get(parent)).toBeDefined()
+    wm.close(parent)
+    expect(wm.get(dialog)).toBeUndefined()
+  })
+
+  it('are not saved with the layout', async () => {
+    vi.useFakeTimers()
+    const wm = useWindows()
+    wm.load('alice')
+    const parent = wm.open('text-editor')!
+    wm.openDialog(parent, 'file-chooser')
+    await nextTick()
+    vi.advanceTimersByTime(1000)
+    const saved = JSON.parse(localStorage.getItem('tilde:layout:alice')!) as { windows: unknown[]; focusedId: string }
+    expect(saved.windows).toHaveLength(1)
+    expect(saved.focusedId).toBe(parent)
+  })
+})
+
 describe('setRect', () => {
   it('keeps the title bar reachable', () => {
     const wm = useWindows()

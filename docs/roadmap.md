@@ -88,13 +88,13 @@ to; tick items off as they land.
 ## Phase 6 — Apps
 
 - [x] Text editor (D48): CodeMirror 6, opened from Files (text types, and Open With Text Editor), syntax highlighting, find and replace; unsaved changes kept as drafts by the worker through reloads and locks; saves keep symlinks, permissions and hard links, and ask before overwriting a file changed on disk
-- [ ] Text editor: Open dialog and Save As with the shared file chooser (a typed path for now), reopening untitled drafts whose window is gone, tabs
+- [x] Shared file chooser for apps (D49): `ctx.chooseFile` opens a GTK-style chooser as a modal dialog window (open, save, select folder; filters, several files, typed locations); the text editor's Open and Save As use it
+- [ ] Text editor: reopening untitled drafts whose window is gone, tabs
 - [ ] Media player (uses `fs/content` Range requests)
 - [ ] Image viewer
 - [ ] Process manager (`/proc`, signals; systemd units over D-Bus)
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
-- [ ] Shared file chooser dialog for apps
 - [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`; recent logins and failed attempts from the audit log (D46), served by the server
 
 ## Phase 7 — Remote windows

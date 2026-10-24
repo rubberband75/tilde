@@ -5,6 +5,7 @@ import type { Entry } from '@/api/types'
 import { saveBeforeLock } from '@/lib/beforeLock'
 import { useClipboard } from '@/stores/clipboard'
 import { useDialogs } from '@/stores/dialogs'
+import { useFileChooser } from '@/stores/fileChooser'
 import { useNotices } from '@/stores/notices'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
@@ -43,6 +44,7 @@ export function createContext(windowId: string): AppContext {
   const session = useSession()
   const dialogs = useDialogs()
   const clipboard = useClipboard()
+  const chooser = useFileChooser()
   return {
     windowId,
     get args() {
@@ -64,6 +66,7 @@ export function createContext(windowId: string): AppContext {
     notify: (message, kind) => notices.push(message, kind),
     confirm: (opts) => dialogs.confirm(opts),
     prompt: (opts) => dialogs.prompt(opts),
+    chooseFile: (opts) => chooser.choose(windowId, opts),
     clipboard: {
       get op() {
         return clipboard.op

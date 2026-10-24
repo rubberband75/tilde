@@ -567,12 +567,39 @@ is renamed into place, with the old permissions and group, unless that
 would lose hard links, another user's ownership, a group the user is not
 in or an ACL, and then the file is rewritten in place. An unmodified
 document follows changes on disk through the folder's inotify events.
-Save As takes a typed path until the shared file chooser (phase 6). Not
-yet: an Open dialog, tabs, reopening an untitled draft whose window is
-gone. Rejected: Monaco (workers, CSP, size); keeping drafts in the
+Save As took a typed path until the shared file chooser (D49). Not yet:
+tabs, reopening an untitled draft whose window is gone. Rejected: Monaco (workers, CSP, size); keeping drafts in the
 browser (`localStorage` is per browser and stays readable after a lock);
 the upload endpoint for saving (its rename drops permissions and replaces
 symlinks).
+
+**D49 — One file chooser for every app, a modal dialog window** (2026-10-24, accepted)
+Apps ask for files with `ctx.chooseFile({ mode: 'open' | 'save' |
+'folder', filters, multiple, name, folder })`, which resolves to the
+chosen paths or null. The chooser follows GTK's, as Cinnamon apps show
+it: places, drives and bookmarks on the left, the folder as a path bar,
+a sortable list (Files' list view), a filter menu, a name entry when
+saving, a location entry for typed paths (Ctrl+L, or just typing), Ctrl+H
+for hidden files, Create Folder when saving or picking a folder. It asks
+before replacing a file and says so in its answer, so the app saves with
+force; a file created after it looked still comes back as a conflict. It
+opens as a real window, a modal dialog of the app that asked
+(`openDialog` in the window store), not as a page-wide overlay: the rest
+of the desktop stays usable, as with GTK's transient dialogs. The parent's
+content is `inert`, raising the parent raises the dialog, minimizing or
+closing it takes the dialog along, and closing the parent waits for the
+dialog. Dialogs are left out of the window list and the saved layout: the
+promise behind one does not survive a reload, so it closes then (the
+editor's text is safe in its draft). The chooser starts in the folder the
+app names, else where the last one was answered, else home. It lists only
+what the worker lists, as the user. The text editor uses it for Open
+(Ctrl+O, several files, each in a window; an untouched new document gives
+its place to the first) and Save As. Its Ctrl+S, Ctrl+Shift+S and Ctrl+O
+are handled on the window, not as a CodeMirror keymap, which can take
+Ctrl+Shift+S for Ctrl+S. Rejected: the browser's own `<input
+type=file>` and download prompts (they see the browser's machine, not the
+host); a page-wide modal like `ctx.confirm` (it would block every other
+window while a user browses folders).
 
 ---
 

@@ -2,8 +2,9 @@ import type { Component } from 'vue'
 import type { Entry } from '@/api/types'
 import type { ClipboardOp } from '@/stores/clipboard'
 import type { ConfirmOptions, PromptOptions } from '@/stores/dialogs'
+import type { ChooseFileOptions, ChosenFiles, FileFilter } from '@/stores/fileChooser'
 
-export type { ClipboardOp, ConfirmOptions, PromptOptions }
+export type { ChooseFileOptions, ChosenFiles, ClipboardOp, ConfirmOptions, FileFilter, PromptOptions }
 
 /** The file clipboard shared by Files windows and the desktop. */
 export interface FileClipboard {
@@ -81,6 +82,12 @@ export interface AppContext {
   confirm(opts: ConfirmOptions): Promise<boolean>
   /** Ask for a line of text in a modal dialog; resolves null if cancelled. */
   prompt(opts: PromptOptions): Promise<string | null>
+  /**
+   * Asks for files to open, a file name to save as, or a folder, in the
+   * shared file chooser, a modal dialog of this window (D49). Resolves
+   * null if cancelled.
+   */
+  chooseFile(opts: ChooseFileOptions): Promise<ChosenFiles | null>
   /** The shared file clipboard (cut, copy, paste). Reactive. */
   readonly clipboard: FileClipboard
 }

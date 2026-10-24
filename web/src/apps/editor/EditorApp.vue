@@ -5,11 +5,12 @@
 // another browser finds them; the file is only written on Save.
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Compartment, EditorState } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView } from '@codemirror/view'
 import { redo, undo } from '@codemirror/commands'
 import { openSearchPanel } from '@codemirror/search'
 import { ApiError } from '@/api/client'
-import { dirName, joinPath } from '@/api/fs'
+import { dirName } from '@/api/fs'
+import { textMimeTypes } from '@/apps/registry'
 import type { AppContext } from '@/apps/types'
 import { onBeforeLock } from '@/lib/beforeLock'
 import { onFsChanged } from '@/lib/bus'
@@ -93,22 +94,27 @@ async function save(): Promise<boolean> {
   }
 }
 
+const filters = [{ name: 'All Text Files', mimeTypes: textMimeTypes }, { name: 'All Files' }]
+
+/** The folder the choosers start in: the document's, else the last one used. */
+function chooserFolder(): string | undefined {
+  return state.path ? dirName(state.path) : undefined
+}
+
 async function saveAs(): Promise<boolean> {
-  const suggested = state.path || joinPath(ctx.home, 'Untitled Document.txt')
-  const answer = await ctx.prompt({
+  if (saving.value) return false
+  const chosen = await ctx.chooseFile({
+    mode: 'save',
     title: 'Save As',
-    message: 'The full path of the file; its folder must exist.',
-    label: 'File path',
-    value: suggested,
-    confirm: 'Save',
+    folder: chooserFolder(),
+    name: state.path ? doc.name : 'Untitled Document.txt',
   })
-  if (!answer?.trim()) return false
-  let path = answer.trim()
-  if (path === '~' || path.startsWith('~/')) path = ctx.home + path.slice(1)
-  else if (!path.startsWith('/')) path = joinPath(ctx.home, path)
+  const path = chosen?.paths[0]
+  if (!path) return false
   saving.value = true
   try {
-    let result = await doc.saveAs(path, text())
+    let result = await doc.saveAs(path, text(), chosen.replace)
+    // Created meanwhile, after the chooser looked.
     if (result === 'exists') {
       const ok = await ctx.confirm({
         title: `Replace “${path.split('/').pop()}”?`,
@@ -128,6 +134,20 @@ async function saveAs(): Promise<boolean> {
     return false
   } finally {
     saving.value = false
+  }
+}
+
+/**
+ * Opens files in new windows, as xed opens them in tabs; an empty new
+ * document that was never touched gives its place to the first one.
+ */
+async function openFiles() {
+  const chosen = await ctx.chooseFile({ mode: 'open', multiple: true, folder: chooserFolder(), filters })
+  if (!chosen) return
+  for (const path of chosen.paths) ctx.launch('text-editor', { path })
+  if (!state.path && !state.dirty && !text()) {
+    ctx.setCloseGuard(null)
+    ctx.close()
   }
 }
 
@@ -191,10 +211,6 @@ onMounted(async () => {
     state: EditorState.create({
       doc: initial,
       extensions: [
-        keymap.of([
-          { key: 'Mod-s', preventDefault: true, run: () => (void save(), true) },
-          { key: 'Shift-Mod-s', preventDefault: true, run: () => (void saveAs(), true) },
-        ]),
         ...baseExtensions(),
         language.of([]),
         wrapping.of(wrap.value ? EditorView.lineWrapping : []),
@@ -214,6 +230,22 @@ onMounted(async () => {
   await setLanguage()
 })
 
+/**
+ * The window's own shortcuts, anywhere in it. Not a CodeMirror keymap:
+ * that reads Shift+S as a typed "S" and can take Ctrl+Shift+S for Ctrl+S.
+ */
+function onKey(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !ready.value) return
+  const key = e.key.toLowerCase()
+  if (key === 's') {
+    e.preventDefault()
+    void (e.shiftKey ? saveAs() : save())
+  } else if (key === 'o' && !e.shiftKey) {
+    e.preventDefault()
+    void openFiles()
+  }
+}
+
 onBeforeUnmount(() => {
   offFs()
   offLock()
@@ -224,9 +256,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="editor-app">
+  <div class="editor-app" @keydown="onKey">
     <header class="toolbar">
       <button class="btn" title="New document" @click="ctx.launch('text-editor')">New</button>
+      <button class="btn" title="Open (Ctrl+O)" @click="openFiles">Open…</button>
       <button class="btn" title="Save (Ctrl+S)" :disabled="!ready || saving" @click="save">Save</button>
       <button class="btn" title="Save As (Ctrl+Shift+S)" :disabled="!ready || saving" @click="saveAs">Save As…</button>
       <span class="sep" />

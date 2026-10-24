@@ -24,6 +24,13 @@ export interface AppWindow {
   z: number
   /** Launch args plus state saved by the app; persisted with the layout. */
   args: Record<string, unknown>
+  /**
+   * The window this one is a modal dialog of (the file chooser). Dialogs
+   * stay above their parent, hide and close with it, are left out of the
+   * window list and are not saved with the layout: whoever asked is gone
+   * after a reload.
+   */
+  parentId?: string
 }
 
 const LAYOUT_VERSION = 1
@@ -49,10 +56,23 @@ export const useWindows = defineStore('windows', () => {
   const closeGuards = new Map<string, () => boolean | Promise<boolean>>()
   const closeHandlers = new Map<string, Array<() => void>>()
 
-  const ordered = computed(() => windows.value) // taskbar order: open order
+  /** Taskbar order: open order, without dialogs. */
+  const ordered = computed(() => windows.value.filter((w) => !w.parentId))
 
   function get(id: string) {
     return windows.value.find((w) => w.id === id)
+  }
+
+  /** The open modal dialog of a window, if any. */
+  function dialogOf(id: string) {
+    return windows.value.find((w) => w.parentId === id)
+  }
+
+  /** Hidden: minimized itself, or a dialog of a hidden window. */
+  function isHidden(w: AppWindow): boolean {
+    if (w.state === 'minimized') return true
+    const parent = w.parentId ? get(w.parentId) : undefined
+    return !!parent && isHidden(parent)
   }
 
   function clampSize(size: { w: number; h: number }) {
@@ -98,27 +118,74 @@ export const useWindows = defineStore('windows', () => {
     return id
   }
 
+  /**
+   * Opens appId as a modal dialog of parentId, centered over it. The parent
+   * stays put but takes no input until the dialog closes.
+   */
+  function openDialog(parentId: string, appId: string, args: Record<string, unknown> = {}): string | undefined {
+    const parent = get(parentId)
+    const app = getApp(appId)
+    if (!parent || !app || dialogOf(parentId)) return undefined
+    const id = `w${Date.now().toString(36)}${(seq++).toString(36)}`
+    const size = clampSize(app.defaultSize)
+    const p = parent.state === 'maximized' ? { x: 0, y: 0, w: area.w, h: area.h } : parent.rect
+    const rect = clampRect({ x: p.x + (p.w - size.w) / 2, y: p.y + Math.max(0, (p.h - size.h) / 3), ...size })
+    windows.value.push({
+      id,
+      appId,
+      title: app.name,
+      icon: app.icon,
+      rect,
+      state: 'normal',
+      z: 0,
+      args: { ...args },
+      parentId,
+    })
+    focus(parentId)
+    return id
+  }
+
+  /**
+   * Raises a window and gives it the focus; a window with a dialog open
+   * passes the focus on to the dialog, which comes up just above it.
+   */
   function focus(id: string) {
     const w = get(id)
     if (!w) return
+    const parent = w.parentId ? get(w.parentId) : undefined
+    if (parent && isHidden(parent)) {
+      focus(parent.id)
+      return
+    }
     if (w.state === 'minimized') w.state = w.wasMaximized ? 'maximized' : 'normal'
     if (focusedId.value !== id || w.z !== zTop) w.z = ++zTop
     focusedId.value = id
+    const dialog = dialogOf(id)
+    if (dialog) focus(dialog.id)
   }
 
   function focusTopmost(exceptId?: string) {
-    const visible = windows.value.filter((w) => w.state !== 'minimized' && w.id !== exceptId)
+    const visible = windows.value.filter(
+      (w) => !isHidden(w) && !(exceptId && (w.id === exceptId || w.parentId === exceptId)),
+    )
     visible.sort((a, b) => b.z - a.z)
     focusedId.value = visible[0]?.id ?? null
   }
 
   async function requestClose(id: string) {
+    // A window waits for its dialog's answer, as GTK's modal dialogs make it.
+    if (dialogOf(id)) {
+      focus(id)
+      return
+    }
     const guard = closeGuards.get(id)
     if (guard && !(await guard())) return
     close(id)
   }
 
   function close(id: string) {
+    const dialog = dialogOf(id)
+    if (dialog) close(dialog.id)
     const i = windows.value.findIndex((w) => w.id === id)
     if (i < 0) return
     for (const fn of closeHandlers.get(id) ?? []) {
@@ -130,16 +197,24 @@ export const useWindows = defineStore('windows', () => {
     }
     closeHandlers.delete(id)
     closeGuards.delete(id)
+    const parentId = windows.value[i]!.parentId
     windows.value.splice(i, 1)
-    if (focusedId.value === id) focusTopmost()
+    if (focusedId.value === id) {
+      if (parentId && get(parentId) && !isHidden(get(parentId)!)) focusedId.value = parentId
+      else focusTopmost()
+    }
   }
 
   function minimize(id: string) {
     const w = get(id)
     if (!w) return
+    if (w.parentId) {
+      minimize(w.parentId)
+      return
+    }
     w.wasMaximized = w.state === 'maximized'
     w.state = 'minimized'
-    if (focusedId.value === id) focusTopmost(id)
+    if (focusedId.value === id || get(focusedId.value ?? '')?.parentId === id) focusTopmost(id)
   }
 
   function toggleMaximize(id: string) {
@@ -153,7 +228,8 @@ export const useWindows = defineStore('windows', () => {
   function activate(id: string) {
     const w = get(id)
     if (!w) return
-    if (focusedId.value === id && w.state !== 'minimized') minimize(id)
+    const active = focusedId.value === id || (!!focusedId.value && get(focusedId.value)?.parentId === id)
+    if (active && w.state !== 'minimized') minimize(id)
     else focus(id)
   }
 
@@ -203,7 +279,7 @@ export const useWindows = defineStore('windows', () => {
       if (!raw) return
       const saved = JSON.parse(raw) as { version: number; windows: AppWindow[]; focusedId?: string }
       if (saved.version !== LAYOUT_VERSION || !Array.isArray(saved.windows)) return
-      windows.value = saved.windows.filter((w) => getApp(w.appId))
+      windows.value = saved.windows.filter((w) => getApp(w.appId) && !w.parentId)
       zTop = Math.max(10, ...windows.value.map((w) => w.z))
       focusedId.value = saved.focusedId && get(saved.focusedId) ? saved.focusedId : null
     } catch {
@@ -235,7 +311,11 @@ export const useWindows = defineStore('windows', () => {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ version: LAYOUT_VERSION, windows: windows.value, focusedId: focusedId.value }),
+        JSON.stringify({
+          version: LAYOUT_VERSION,
+          windows: windows.value.filter((w) => !w.parentId),
+          focusedId: get(focusedId.value ?? '')?.parentId ?? focusedId.value,
+        }),
       )
     } catch {
       // ignore quota and privacy-mode errors
@@ -258,7 +338,10 @@ export const useWindows = defineStore('windows', () => {
     area,
     interacting,
     get,
+    dialogOf,
+    isHidden,
     open,
+    openDialog,
     focus,
     requestClose,
     close,
