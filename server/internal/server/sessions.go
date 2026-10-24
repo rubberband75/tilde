@@ -451,6 +451,17 @@ func newWorkerProxy(transport http.RoundTripper) http.Handler {
 			pr.Out.Header.Del("Authorization")
 			pr.Out.Header.Del(protocol.InternalHeader)
 		},
+		// Cookies are the server's: the worker is the user's process, and
+		// must not set or replace them. Worker responses are not cached
+		// unless the worker says so (thumbnails, file contents), so a
+		// listing never outlives a lock in the browser's cache.
+		ModifyResponse: func(resp *http.Response) error {
+			resp.Header.Del("Set-Cookie")
+			if resp.Header.Get("Cache-Control") == "" {
+				resp.Header.Set("Cache-Control", "no-store")
+			}
+			return nil
+		},
 		Transport:     transport,
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

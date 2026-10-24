@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -135,5 +136,89 @@ func TestAPIRequiresLogin(t *testing.T) {
 	}
 	if w.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("missing CSP")
+	}
+}
+
+// handlerTransport answers proxied requests with a handler, standing in
+// for the yamux stream to a worker.
+type handlerTransport struct{ h http.Handler }
+
+func (t handlerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	w := httptest.NewRecorder()
+	t.h.ServeHTTP(w, r)
+	return w.Result(), nil
+}
+
+// TestWorkerResponses: the worker is the user's process, so its responses
+// cannot set the server's cookies, and are not cached unless it says so.
+func TestWorkerResponses(t *testing.T) {
+	worker := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "__Host-tilde", Value: "planted", Path: "/"})
+		if r.URL.Path == "/api/v1/fs/thumbnail" {
+			w.Header().Set("Cache-Control", "private, max-age=86400")
+		}
+		w.Write([]byte("{}"))
+	})
+	lt := newLockTest(t, newWorkerProxy(handlerTransport{worker}))
+	tok := lt.login("alice")
+	for path, cache := range map[string]string{"/api/v1/fs/list": "no-store", "/api/v1/fs/thumbnail": "private, max-age=86400"} {
+		w := lt.do(http.MethodGet, path, tok, "")
+		if w.Code != http.StatusOK || len(w.Result().Cookies()) != 0 || w.Header().Get("Cache-Control") != cache {
+			t.Errorf("%s: %d, cookies %v, Cache-Control %q", path, w.Code, w.Result().Cookies(), w.Header().Get("Cache-Control"))
+		}
+	}
+}
+
+// TestSecurityHeaders: HSTS only with the administrator's own certificate,
+// where a browser can never be locked out by a self-signed one changing.
+func TestSecurityHeaders(t *testing.T) {
+	for _, c := range []struct {
+		cfg  Config
+		hsts bool
+	}{
+		{Config{Listen: "127.0.0.1:0"}, false},
+		{Config{Listen: "127.0.0.1:0", TLSCert: "/etc/tilde/cert.pem"}, true},
+		{Config{Listen: "127.0.0.1:0", TLSCert: "/etc/tilde/cert.pem", Dev: true}, false},
+	} {
+		s, err := New(c.cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/session", nil))
+		h := w.Header()
+		if h.Get("Cross-Origin-Resource-Policy") != "same-origin" || h.Get("X-Content-Type-Options") != "nosniff" ||
+			!strings.Contains(h.Get("Content-Security-Policy"), "script-src 'self';") {
+			t.Errorf("%+v: headers %v", c.cfg, h)
+		}
+		if got := h.Get("Strict-Transport-Security") != ""; got != c.hsts {
+			t.Errorf("%+v: HSTS %v, want %v", c.cfg, got, c.hsts)
+		}
+	}
+}
+
+// TestClientAddr: behind a trusted proxy, the address the proxy appended
+// counts, not the ones the client wrote itself.
+func TestClientAddr(t *testing.T) {
+	for _, c := range []struct {
+		xff   []string
+		trust bool
+		want  string
+	}{
+		{nil, true, "198.51.100.1"},
+		{[]string{"203.0.113.9"}, false, "198.51.100.1"},
+		{[]string{"203.0.113.9"}, true, "203.0.113.9"},
+		{[]string{"10.9.9.9, 203.0.113.9"}, true, "203.0.113.9"},
+		{[]string{"10.9.9.9", "203.0.113.9"}, true, "203.0.113.9"},
+		{[]string{"10.9.9.9, "}, true, "198.51.100.1"},
+	} {
+		r := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+		r.RemoteAddr = "198.51.100.1:4000"
+		for _, v := range c.xff {
+			r.Header.Add("X-Forwarded-For", v)
+		}
+		if got := clientAddr(r, c.trust); got != c.want {
+			t.Errorf("%q trust=%v: %s, want %s", c.xff, c.trust, got, c.want)
+		}
 	}
 }

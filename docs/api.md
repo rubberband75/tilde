@@ -13,6 +13,10 @@ Common codes: `bad_request`, `not_found`, `permission_denied`, `exists`,
 `read_only`, `internal_error`, `not_logged_in`, `session_ended`, `bad_origin`,
 `stale`, `busy`, `locked`.
 
+Worker responses are `Cache-Control: no-store` unless the endpoint says
+otherwise (thumbnails, file contents), and never set cookies: the server's
+proxy enforces both.
+
 TypeScript types for these responses live in `web/src/api/types.ts`; keep
 them in sync.
 

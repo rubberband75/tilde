@@ -476,6 +476,31 @@ helper, as root); a polkit rule letting web sessions mount without a
 password (D39); `pkttyagent` per request (a terminal agent, no way to
 show its questions in the browser).
 
+**D45 — Security review: headers, proxy, error messages** (2026-10-23, accepted)
+A review of the CSP, headers, cookies and error messages (roadmap phase 5)
+kept the CSP as it is (`script-src 'self'`; `'unsafe-inline'` only for
+styles, which xterm.js and Vue transitions need) and the cookies as they
+are (`__Host-` prefix, `HttpOnly`, `Secure`, `SameSite=Strict`, server-side
+tokens). It changed: (1) refusals from PAM's auth stack read as a wrong
+password, because modules such as `pam_access` answer "permission denied"
+before the password is known to be right, which told anyone the account
+exists; the account stack, after a right password, still says what
+expired. (2) With `--trust-proxy`, the rate limit uses the last
+`X-Forwarded-For` address, the one the proxy appended: the first one is
+the client's to write, and a new one with every guess escaped the limit.
+(3) `Cross-Origin-Resource-Policy: same-origin` on every response.
+(4) `Strict-Transport-Security` only with a certificate from `--tls-cert`:
+with Tilde's self-signed one it would turn the certificate warning into an
+error nobody can click through once the certificate is replaced. (5) The proxy drops
+`Set-Cookie` from worker responses and marks them `no-store` unless the
+worker chose its own caching, so a listing never outlives a lock in the
+browser's cache. Not changed: the Origin check compares `Origin` with
+`Host`, which DNS rebinding controls, but the session cookie is bound to
+the real host name, so a rebound page can only guess passwords under the
+rate limit; a `Host` allowlist would break reaching Tilde by any name the
+administrator did not list. The code question of two-factor (D43) shows
+that the password was right, as every password-then-code login does.
+
 ---
 
 ## Open decisions

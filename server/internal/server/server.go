@@ -141,7 +141,8 @@ func (s *Server) Handler() http.Handler {
 	if s.cfg.Web != nil {
 		m.Handle("/", spaHandler(s.cfg.Web))
 	}
-	return securityHeaders(originCheck(s.cfg.AllowedOrigins)(m))
+	hsts := !s.cfg.Dev && s.cfg.TLSCert != ""
+	return securityHeaders(hsts)(originCheck(s.cfg.AllowedOrigins)(m))
 }
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}\$?$`)

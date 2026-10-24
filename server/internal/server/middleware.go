@@ -44,17 +44,29 @@ const contentSecurityPolicy = "default-src 'self'; " +
 // securityHeaders sets headers on every response. Responses proxied from
 // the worker may add a stricter CSP of their own (file downloads add
 // "sandbox"); browsers enforce both.
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Security-Policy", contentSecurityPolicy)
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "SAMEORIGIN")
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		next.ServeHTTP(w, r)
-	})
+//
+// hsts is set only with a certificate the administrator configured (D45):
+// on a self-signed one it would turn the browser's warning into an error
+// nobody can click through once the certificate changes.
+func securityHeaders(hsts bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Content-Security-Policy", contentSecurityPolicy)
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "SAMEORIGIN")
+			h.Set("Referrer-Policy", "no-referrer")
+			h.Set("Cross-Origin-Opener-Policy", "same-origin")
+			// Other sites cannot load Tilde's responses (file contents,
+			// thumbnails) into their pages, even without a cookie.
+			h.Set("Cross-Origin-Resource-Policy", "same-origin")
+			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			if hsts {
+				h.Set("Strict-Transport-Security", "max-age=31536000")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // originCheck rejects cross-site requests that could act with the user's
@@ -102,12 +114,20 @@ func originAllowed(r *http.Request, allowed map[string]bool) bool {
 }
 
 // clientAddr returns the remote IP. Tilde is meant to be reached directly or
-// over a VPN, so X-Forwarded-For is ignored unless trustProxy is set.
+// over a VPN, so X-Forwarded-For is ignored unless trustProxy is set. Then
+// the last address counts: the proxy appends the one it saw, and anything
+// before it came from the client, which could otherwise send a new
+// address with every guess to escape the rate limit.
 func clientAddr(r *http.Request, trustProxy bool) string {
 	if trustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			return strings.TrimSpace(first)
+		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
+			last := xff[len(xff)-1]
+			if i := strings.LastIndexByte(last, ','); i >= 0 {
+				last = last[i+1:]
+			}
+			if last = strings.TrimSpace(last); last != "" {
+				return last
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

@@ -44,12 +44,17 @@ bug in Tilde can never give more than the account already has.
 - The worker's hello (user and uid) must match the account that logged in
   and the uid the root helper started: the worker is the user's process,
   and tokens are issued for the user it names.
-- Unknown users and wrong passwords get the same error.
+- Unknown users and wrong passwords get the same error. So does any other
+  refusal from PAM's auth stack (`pam_access`, `pam_sss` saying "permission
+  denied" or "expired"), since the password is not known to be right yet;
+  only the account stack, after a right password, may say an account or
+  password has expired.
 - Rate limit for logins and unlocks together: 5 attempts per address in 15
   minutes, then `429`. An attempt counts when it starts, before PAM
   answers, so parallel requests get no more; a right password takes back
   only that user's attempts. `X-Forwarded-For` is ignored unless
-  `--trust-proxy`.
+  `--trust-proxy`, and then only its last address counts: the one the
+  proxy appended, not those the client wrote.
 - Session tokens: 32 random bytes, stored by SHA-256 hash in memory, cookie
   `__Host-tilde` with `HttpOnly; Secure; SameSite=Strict; Path=/`, 12-hour
   absolute lifetime from the last time the password was typed (login or
@@ -89,7 +94,15 @@ bug in Tilde can never give more than the account already has.
   the request's `Host` (or one passed with `--allowed-origins`).
 - Security headers on every response: strict CSP (`script-src 'self'`),
   `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`,
-  `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`.
+  `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Resource-Policy: same-origin`, and a `Permissions-Policy`
+  without camera, microphone or location. `Strict-Transport-Security`
+  (one year) only with a certificate passed with `--tls-cert` (D45).
+- Worker responses pass through the server's proxy, which drops any
+  `Set-Cookie` (cookies are the server's; the worker is the user's
+  process) and marks them `Cache-Control: no-store` unless the worker set
+  its own caching (thumbnails, file contents). Server JSON is always
+  `no-store`.
 - File downloads (`GET /api/v1/fs/content`): `Content-Security-Policy:
   sandbox` (except PDF, whose viewer needs to run), `nosniff`, and
   `Content-Disposition: attachment` for anything that is not an image,
@@ -139,7 +152,9 @@ Tilde asks whatever PAM asks, so two-factor is a PAM module in
 
 Put the module after `@include common-auth`: Tilde answers PAM's first
 hidden prompt with the password, and a wrong password then fails before the
-code is asked. Unlocking a locked screen asks for a code too. `pam_oath`
+code is asked. That order means the code question itself tells whoever
+typed the password that it was right, as with any password-then-code
+login; the rate limit still applies to both steps. Unlocking a locked screen asks for a code too. `pam_oath`
 works the same way (the e2e VM tests with it).
 
 ## Deployment advice
@@ -151,4 +166,12 @@ works the same way (the e2e VM tests with it).
 - Do not put it on the public internet without two-factor (above), and even
   then prefer a VPN.
 - Behind a reverse proxy, pass `--allowed-origins https://your.host` and
-  `--trust-proxy`.
+  `--trust-proxy`. The proxy must append the client's address to
+  `X-Forwarded-For` (nginx `$proxy_add_x_forwarded_for`, Caddy and
+  Traefik by default); with more than one proxy, the rate limit sees the
+  last one's client.
+- The Origin check compares the `Origin` header with `Host`, which a DNS
+  rebinding attack controls too. Such a page still never gets the session
+  cookie (it is bound to the real host name), so all it can do is guess
+  passwords, under the rate limit; a certificate from `--tls-cert` makes
+  the browser refuse the rebound name as well.

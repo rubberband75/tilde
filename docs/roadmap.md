@@ -83,7 +83,7 @@ to; tick items off as they land.
 - [x] Polkit authentication agent in the browser (D44): the worker registers for its web session and runs polkit's helper; the dialog shows in every browser. Files mounts drives through it
 - [ ] Audit log (logins, commands started, deletions)
 - [ ] Tray indicator for connected clients
-- [ ] Review: CSP, headers, cookie flags, error messages that leak information
+- [x] Review: CSP, headers, cookie flags, error messages that leak information (D45): auth-stack refusals look like wrong passwords, `--trust-proxy` takes the proxy's own address, CORP and (with your own certificate) HSTS, worker responses cannot set cookies and are not cached by default
 
 ## Phase 6 — Apps
 
