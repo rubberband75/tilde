@@ -169,6 +169,28 @@ export function png(w: number, h: number, rgb: [number, number, number] = [200, 
   ])
 }
 
+/** A WAV file: a tone of seconds length, 8 kHz mono, for media tests. */
+export function wav(seconds: number, hz = 440): Buffer {
+  const rate = 8000
+  const samples = Math.round(seconds * rate)
+  const buf = Buffer.alloc(44 + samples * 2)
+  buf.write('RIFF', 0, 'ascii')
+  buf.writeUInt32LE(36 + samples * 2, 4)
+  buf.write('WAVEfmt ', 8, 'ascii')
+  buf.writeUInt32LE(16, 16) // fmt chunk size
+  buf.writeUInt16LE(1, 20) // PCM
+  buf.writeUInt16LE(1, 22) // mono
+  buf.writeUInt32LE(rate, 24)
+  buf.writeUInt32LE(rate * 2, 28)
+  buf.writeUInt16LE(2, 32)
+  buf.writeUInt16LE(16, 34)
+  buf.write('data', 36, 'ascii')
+  buf.writeUInt32LE(samples * 2, 40)
+  for (let i = 0; i < samples; i++)
+    buf.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * hz * i) / rate)), 44 + i * 2)
+  return buf
+}
+
 /** A window frame by its title. */
 export function windowNamed(page: Page, title: string | RegExp): Locator {
   return page.getByRole('dialog', { name: title })

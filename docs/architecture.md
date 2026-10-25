@@ -222,7 +222,12 @@ App.vue ── LoginScreen (logged out)
   `fs/content` (the mtime in the URL), the folder's images in name order
   (`viewer.ts`: types, order, zoom steps, Best Fit), zoom by scaling and
   scrolling a canvas, rotation as a CSS transform, fullscreen with the
-  browser's Fullscreen API.
+  browser's Fullscreen API. The folder's files come from
+  `src/lib/folderSiblings.ts`, which the media player shares.
+- **Media player** (`src/apps/media-player`, D51): one `<video>` element for
+  sound and video on `fs/content`, the folder as the playlist, the position
+  saved with the window (`ctx.saveState`), the Media Session API for media
+  keys.
 - **Two-factor** (D43): a login or unlock answer may be `{prompt}` instead of
   the session; the session store keeps it, and the login and lock screens
   show it (`shell/AuthQuestion.vue`) until `POST /api/auth/answer` finishes.

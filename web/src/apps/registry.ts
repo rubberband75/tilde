@@ -22,6 +22,10 @@ export const textMimeTypes = [
   'application/sql',
   'application/x-desktop',
   'application/x-zerosize',
+  // Playlists are text; listed so they do not match the media player's audio/*.
+  'audio/x-mpegurl',
+  'audio/mpegurl',
+  'audio/x-scpls',
 ]
 
 export const apps: AppManifest[] = [
@@ -67,6 +71,17 @@ export const apps: AppManifest[] = [
     defaultSize: { w: 820, h: 600 },
     minSize: { w: 360, h: 260 },
     component: () => import('./image-viewer/ImageViewerApp.vue'),
+  },
+  {
+    id: 'media-player',
+    name: 'Media Player',
+    comment: 'Play music and videos',
+    icon: 'multimedia-video-player',
+    category: 'Sound & Video',
+    mimeTypes: ['audio/*', 'video/*'],
+    defaultSize: { w: 800, h: 520 },
+    minSize: { w: 420, h: 220 },
+    component: () => import('./media-player/MediaPlayerApp.vue'),
   },
   {
     id: 'file-properties',

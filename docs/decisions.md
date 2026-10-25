@@ -628,6 +628,29 @@ for formats few people view in a browser); a canvas renderer (the
 browser's `<img>` already handles EXIF orientation, animation and
 scaling).
 
+**D51 — Media player: one `<video>` element, the folder as the playlist** (2026-10-25, accepted)
+One Media Player plays sound and video, as Celluloid does on Mint; Files
+opens `audio/*` and `video/*` with it, except playlist types (`.m3u`,
+`.pls`), which are text and open in the editor. A single `<video>`
+element plays both; with no picture it shows the file's icon and name.
+It loads `fs/content`, whose Range support lets it seek; nothing is
+transcoded, so what plays is what the browser decodes (MP4/H.264, WebM,
+Ogg, MP3, FLAC, WAV in Chrome and Firefox), and anything else gets a
+plain "this browser cannot play" message. The playlist is the folder's
+media files in name order (the folder code is now shared with the image
+viewer, `lib/folderSiblings.ts`); at the end of a file the next one
+plays, and the list stops at its end. The position is saved with the
+window every few seconds and on pause, so a reload or a lock (which
+clears the page, D40) brings it back where it was, paused: only a
+window opened from Files starts playing by itself. Media keys and the
+browser's media controls work through the Media Session API, for the
+window that played last. The volume is kept per browser in
+`localStorage`. Not yet: subtitles, choosing audio tracks, playback
+speed. Rejected: transcoding in the worker (CPU, and a decoder for
+untrusted files in the user's session for formats most browsers play);
+the browser's built-in controls (they cannot follow the theme or show
+the playlist).
+
 ---
 
 ## Open decisions

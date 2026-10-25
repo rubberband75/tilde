@@ -152,6 +152,11 @@
   --image-viewer-bg: #222226;
   --image-viewer-fullscreen-bg: #000000;
 
+  /* Media player: a black screen, controls over it in fullscreen */
+  --media-screen-bg: #000000;
+  --media-screen-fg: #dadada;
+  --media-osd-bg: rgba(20, 20, 23, 0.85);
+
   /* Terminal (gtk-dark.css: vte-terminal) */
   --terminal-bg: #222226;
   --terminal-fg: #ffffff;

@@ -32,6 +32,11 @@ export type SymbolicName =
   | 'fullscreen'
   | 'trash'
   | 'play'
+  | 'pause'
+  | 'previous'
+  | 'next'
+  | 'volume'
+  | 'volume-muted'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -64,6 +69,11 @@ const paths: Record<SymbolicName, string> = {
   fullscreen: 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10',
   trash: 'M2.5 4.5h11M6 4.5V2.5h4v2M4 4.5l.8 9h6.4l.8-9M6.8 7v4M9.2 7v4',
   play: 'M5 3l8 5-8 5z',
+  pause: 'M5 3.5v9M11 3.5v9',
+  previous: 'M4 3.5v9M12.5 3.5 6 8l6.5 4.5z',
+  next: 'M12 3.5v9M3.5 3.5 10 8l-6.5 4.5z',
+  volume: 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9',
+  'volume-muted': 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 6l3.5 4M14.5 6 11 10',
 }
 
 const d = computed(() => paths[props.name])

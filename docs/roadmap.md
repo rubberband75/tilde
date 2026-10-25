@@ -90,7 +90,7 @@ to; tick items off as they land.
 - [x] Text editor (D48): CodeMirror 6, opened from Files (text types, and Open With Text Editor), syntax highlighting, find and replace; unsaved changes kept as drafts by the worker through reloads and locks; saves keep symlinks, permissions and hard links, and ask before overwriting a file changed on disk
 - [x] Shared file chooser for apps (D49): `ctx.chooseFile` opens a GTK-style chooser as a modal dialog window (open, save, select folder; filters, several files, typed locations); the text editor's Open and Save As use it
 - [ ] Text editor: reopening untitled drafts whose window is gone, tabs
-- [ ] Media player (uses `fs/content` Range requests)
+- [x] Media player (D51): sound and video from Files in one `<video>` element over `fs/content` Range requests; the folder as the playlist, the position kept through reloads and locks, media keys, fullscreen
 - [x] Image viewer (D50): opened from Files for the image types browsers draw; the folder's images in order, Best Fit, zoom and drag, turning the view, Move to Trash, fullscreen and a slideshow
 - [ ] Process manager (`/proc`, signals; systemd units over D-Bus)
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
