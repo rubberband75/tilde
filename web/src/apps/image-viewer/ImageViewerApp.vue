@@ -7,15 +7,14 @@
 // from the worker's fs/content, which serves it with a sandbox CSP.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { ApiError } from '@/api/client'
-import { baseName, dirName, fsApi } from '@/api/fs'
+import { baseName, fsApi } from '@/api/fs'
 import type { Entry } from '@/api/types'
 import type { AppContext } from '@/apps/types'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import ThemeIcon from '@/components/ThemeIcon.vue'
-import { onFsChanged } from '@/lib/bus'
 import { formatSize } from '@/lib/format'
-import { useWatchedDirs } from '@/lib/fswatch'
-import { clampZoom, fitZoom, folderImages, neighbour, stepZoom, viewableImageTypes } from './viewer'
+import { useFolderSiblings } from '@/lib/folderSiblings'
+import { clampZoom, fitZoom, isViewable, neighbour, stepZoom, viewableImageTypes } from './viewer'
 
 const props = defineProps<{ ctx: AppContext }>()
 const ctx = props.ctx
@@ -24,7 +23,6 @@ const SLIDE_MS = 5000
 
 const path = ref(typeof ctx.args.path === 'string' ? ctx.args.path : '')
 const entry = shallowRef<Entry | null>(null)
-const images = shallowRef<Entry[]>([])
 const natural = ref({ w: 0, h: 0 })
 const loaded = ref(false)
 const error = ref('')
@@ -86,24 +84,8 @@ async function show(p: string) {
   }
 }
 
-let listAbort: AbortController | undefined
-
-/** Lists the folder's images; follows the shown one if it was replaced or removed. */
-async function loadFolder() {
-  const dir = path.value ? dirName(path.value) : ''
-  if (!dir) return
-  listAbort?.abort()
-  const ac = new AbortController()
-  listAbort = ac
-  const acc: Entry[] = []
-  try {
-    await fsApi.listStream(dir, (batch) => acc.push(...batch), ac.signal)
-  } catch {
-    return // The viewer still shows the one image.
-  }
-  if (ac.signal.aborted || dirName(path.value) !== dir) return
-  const before = images.value
-  images.value = folderImages(acc, path.value)
+/** Follows the shown image if it was replaced or removed. */
+function followFolder(before: Entry[]) {
   const now = images.value.find((e) => e.path === path.value)
   if (now) {
     if (now.mtime !== entry.value?.mtime || now.size !== entry.value?.size) entry.value = now
@@ -119,12 +101,7 @@ async function loadFolder() {
   }
 }
 
-const folder = computed(() => (path.value ? dirName(path.value) : ''))
-watch(folder, () => void loadFolder())
-useWatchedDirs(() => [folder.value])
-const offFs = onFsChanged((dir) => {
-  if (dir === folder.value) void loadFolder()
-})
+const { items: images, folder, reload: loadFolder } = useFolderSiblings(path, isViewable, followFolder)
 
 function go(dir: 1 | -1) {
   const next = neighbour(images.value, path.value, dir)
@@ -341,8 +318,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   ro?.disconnect()
-  listAbort?.abort()
-  offFs()
   stopSlideshow()
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   if (document.fullscreenElement === root.value) void document.exitFullscreen().catch(() => {})

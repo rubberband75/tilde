@@ -1,6 +1,9 @@
 // What the image viewer works out without the DOM: which files it can
 // show, their order in the folder, and the zoom steps (after xviewer's).
 import type { Entry } from '@/api/types'
+import { folderSiblings } from '@/lib/folderSiblings'
+
+export { neighbour } from '@/lib/folderSiblings'
 
 /** Image types every supported browser draws in an <img>. */
 export const viewableImageTypes = [
@@ -23,17 +26,9 @@ export function isViewable(entry: Pick<Entry, 'type' | 'mime'>): boolean {
   return entry.type === 'file' && viewableImageTypes.includes(entry.mime)
 }
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-
-/**
- * The images of a folder in Files' name order ("img2" before "img10").
- * Hidden files count only when the image shown is hidden itself.
- */
+/** The images of a folder the viewer steps through, in Files' name order. */
 export function folderImages(entries: readonly Entry[], current: string): Entry[] {
-  const showHidden = entries.some((e) => e.path === current && e.hidden)
-  return entries
-    .filter((e) => isViewable(e) && (showHidden || !e.hidden || e.path === current))
-    .sort((a, b) => collator.compare(a.name, b.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  return folderSiblings(entries, current, isViewable)
 }
 
 /** Zoom steps, as xviewer offers them. */
@@ -62,12 +57,4 @@ export function fitZoom(image: { w: number; h: number }, view: { w: number; h: n
   const w = turned ? image.h : image.w
   const h = turned ? image.w : image.h
   return clampZoom(Math.min(1, view.w / w, view.h / h))
-}
-
-/** The neighbour of current in the list, wrapping around as xviewer does. */
-export function neighbour(list: readonly Entry[], current: string, dir: 1 | -1): Entry | undefined {
-  if (!list.length) return undefined
-  const i = list.findIndex((e) => e.path === current)
-  if (i < 0) return list[0]
-  return list[(i + dir + list.length) % list.length]
 }
