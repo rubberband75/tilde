@@ -19,6 +19,19 @@ export function isPathDrag(e: DragEvent): boolean {
   return !!e.dataTransfer?.types.includes(TYPE)
 }
 
+/** Files dragged in from the user's computer, to upload: browsers type them "Files". */
+export function isUploadDrag(e: DragEvent): boolean {
+  return !!e.dataTransfer?.types.includes('Files')
+}
+
+/**
+ * What a folder takes: Tilde paths, or files to upload. Anything else (an
+ * editor tab, text) is not for it, and it must not light up.
+ */
+export function isFolderDrag(e: DragEvent): boolean {
+  return isPathDrag(e) || isUploadDrag(e)
+}
+
 export function dragPaths(e: DragEvent): string[] {
   try {
     const v: unknown = JSON.parse(e.dataTransfer?.getData(TYPE) || '[]')

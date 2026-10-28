@@ -19,7 +19,7 @@ import FileIcon from '@/components/FileIcon.vue'
 import { iconsForEntry } from '@/icons/theme'
 import { emitFsChanged, onFsChanged } from '@/lib/bus'
 import { useWatchedDirs } from '@/lib/fswatch'
-import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
+import { dragPaths, dropOp, isFolderDrag, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob, type FileOpsHost } from '@/lib/fileops'
 import { openEntry } from '@/shell/actions'
 import { cellsFromNemo, moveIcons, placeIcons, positionsToSave, type Grid } from '@/shell/desktopLayout'
@@ -327,11 +327,14 @@ function onIconDrop(item: Item, e: DragEvent) {
 }
 
 function onBackgroundDragOver(e: DragEvent) {
-  e.preventDefault()
   if (iconDrag) {
+    e.preventDefault()
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
     return
   }
+  // Not an editor tab or text: those are not for the desktop (D63).
+  if (!isFolderDrag(e)) return
+  e.preventDefault()
   if (isPathDrag(e)) setDropEffect(e)
   dropActive.value = true
 }

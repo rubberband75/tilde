@@ -37,7 +37,7 @@ import {
   onFsChanged,
 } from '@/lib/bus'
 import { useWatchedDirs } from '@/lib/fswatch'
-import { dragPaths, dropOp, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
+import { dragPaths, dropOp, isFolderDrag, isNoopDrop, isPathDrag, setDragPaths, setDropEffect } from '@/lib/dnd'
 import { deletePermanently, moveToTrash, paste, startJob } from '@/lib/fileops'
 import { formatSize, mimeLabel } from '@/lib/format'
 import ItemsView from './ItemsView.vue'
@@ -732,6 +732,8 @@ function onTargetDrop(dest: string, e: DragEvent) {
 
 function onViewDragOver(e: DragEvent) {
   const paths = isPathDrag(e)
+  // Paths, or files to upload: not an editor tab or text (D63).
+  if (!isFolderDrag(e)) return
   if (!(isPath.value || (paths && isTrash.value))) return
   e.preventDefault()
   if (paths) setDropEffect(e)
