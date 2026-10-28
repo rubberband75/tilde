@@ -246,11 +246,7 @@ func (b *busNM) settings(ctx context.Context, conn dbus.ObjectPath) (connSetting
 }
 
 func (b *busNM) call(ctx context.Context, path dbus.ObjectPath, method string, interactive bool, args ...any) ([]any, error) {
-	var flags dbus.Flags
-	if interactive {
-		flags = dbus.FlagAllowInteractiveAuthorization
-	}
-	c := b.conn.Object(nmName, path).CallWithContext(ctx, method, flags, args...)
+	c := callWith(ctx, b.conn, nmName, path, method, interactive, args...)
 	return c.Body, c.Err
 }
 

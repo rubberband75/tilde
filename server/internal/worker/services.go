@@ -89,11 +89,7 @@ func (b *busSystemd) unitFiles(ctx context.Context) ([]unitFile, error) {
 }
 
 func (b *busSystemd) call(ctx context.Context, method string, interactive bool, args ...any) error {
-	var flags dbus.Flags
-	if interactive {
-		flags = dbus.FlagAllowInteractiveAuthorization
-	}
-	return b.manager().CallWithContext(ctx, systemdManager+"."+method, flags, args...).Err
+	return callWith(ctx, b.conn, systemdName, systemdPath, systemdManager+"."+method, interactive, args...).Err
 }
 
 func (b *busSystemd) state(ctx context.Context, name string) (string, string, error) {

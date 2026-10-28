@@ -766,9 +766,10 @@ when the browser may be using that connection: the device holding the
 address in the URL, or, for a host name, the one with the default route;
 nothing for a browser on the host itself. polkit decides every change
 and, from a web session, usually asks for an administrator's password
-through Tilde's agent (D44): NetworkManager only lets polkit ask when the
-call carries D-Bus's interactive-authorization flag, which the worker
-sets while its agent runs. Without NetworkManager (servers on
+through Tilde's agent (D44): the worker sets D-Bus's
+interactive-authorization flag on its calls while its agent runs.
+(Correction, D62: godbus dropped that flag until D62, so NetworkManager
+was letting polkit ask by itself.) Without NetworkManager (servers on
 systemd-networkd) the applet is hidden. Connections, disconnections and
 the switch go to the audit log (D46). Only WPA/WPA2 and WPA3 Personal and
 open networks are set up here: enterprise, WEP and Enhanced Open need a
