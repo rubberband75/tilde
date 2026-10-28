@@ -39,6 +39,12 @@ export interface AppManifest {
   mimeTypes?: string[]
   /** Only one window; launching again focuses it. */
   singleInstance?: boolean
+  /**
+   * Documents open as tabs (D63): launching the app with a `path` hands
+   * it to its most recently used window (ctx.onLaunch) rather than
+   * opening another; launched without one, it opens a window.
+   */
+  reuseWindow?: boolean
   /** Hide from the menu (helpers launched by other apps). */
   hidden?: boolean
   defaultSize: { w: number; h: number }
@@ -81,6 +87,11 @@ export interface AppContext {
    * recover (D58). Not other apps' windows.
    */
   appWindows(): ReadonlyArray<Readonly<Record<string, unknown>>>
+  /**
+   * For apps with `reuseWindow`: takes the launches meant for this window
+   * (a file to open as a tab), while the window is open.
+   */
+  onLaunch(handler: (args: Record<string, unknown>) => void): void
   /** Open a file or folder with the app registered for its type. */
   openEntry(entry: Entry): void
   notify(message: string, kind?: 'info' | 'error'): void

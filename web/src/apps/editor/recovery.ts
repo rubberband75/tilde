@@ -3,13 +3,16 @@
 // opening the file; one of a document never saved has no other way back.
 import { dirName } from '@/api/fs'
 import type { DraftInfo } from '@/api/types'
+import { tabKey, tabsFromArgs } from './tabs'
 
-/** The draft keys editor windows show, from their saved state. */
+/** The draft keys editor windows show, from their saved state: every tab (D63). */
 export function shownDraftKeys(windows: ReadonlyArray<Readonly<Record<string, unknown>>>): Set<string> {
   const keys = new Set<string>()
   for (const args of windows) {
-    if (typeof args.path === 'string' && args.path) keys.add(`file:${args.path}`)
-    else if (typeof args.draft === 'string' && args.draft) keys.add(`new:${args.draft}`)
+    for (const t of tabsFromArgs(args).tabs) {
+      // A window without saved tabs gets a fresh one: nothing it shows yet.
+      if (t.path || Array.isArray(args.tabs) || typeof args.draft === 'string') keys.add(tabKey(t))
+    }
   }
   return keys
 }

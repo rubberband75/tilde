@@ -80,6 +80,8 @@ export const useWindows = defineStore('windows', () => {
   let seq = 0
   let storageKey = ''
   const closeGuards = new Map<string, () => boolean | Promise<boolean>>()
+  /** Windows that open documents as tabs take their app's launches (D63). */
+  const launchHandlers = new Map<string, (args: Record<string, unknown>) => void>()
   const closeHandlers = new Map<string, Array<() => void>>()
 
   /** Taskbar order: open order, without dialogs. */
@@ -134,6 +136,18 @@ export const useWindows = defineStore('windows', () => {
   function open(appId: string, args: Record<string, unknown> = {}): string | undefined {
     const app = getApp(appId)
     if (!app) return undefined
+    // A document for an app with tabs goes to its most recently used window.
+    // (`newWindow`: a tab moving out into a window of its own.)
+    if (app.reuseWindow && typeof args.path === 'string' && args.newWindow !== true) {
+      const recent = windows.value
+        .filter((w) => w.appId === appId && !w.parentId && launchHandlers.has(w.id))
+        .sort((a, b) => b.z - a.z)[0]
+      if (recent) {
+        focus(recent.id)
+        launchHandlers.get(recent.id)!({ ...args })
+        return recent.id
+      }
+    }
     if (app.singleInstance) {
       const existing = windows.value.find((w) => w.appId === appId)
       if (existing) {
@@ -248,6 +262,7 @@ export const useWindows = defineStore('windows', () => {
     }
     closeHandlers.delete(id)
     closeGuards.delete(id)
+    launchHandlers.delete(id)
     const parentId = windows.value[i]!.parentId
     effects.set(id, 'close')
     windows.value.splice(i, 1)
@@ -385,6 +400,11 @@ export const useWindows = defineStore('windows', () => {
     else closeGuards.delete(id)
   }
 
+  function setLaunchHandler(id: string, fn: ((args: Record<string, unknown>) => void) | null) {
+    if (fn) launchHandlers.set(id, fn)
+    else launchHandlers.delete(id)
+  }
+
   function onClose(id: string, fn: () => void) {
     const list = closeHandlers.get(id) ?? []
     list.push(fn)
@@ -433,6 +453,7 @@ export const useWindows = defineStore('windows', () => {
     effects.clear()
     closeGuards.clear()
     closeHandlers.clear()
+    launchHandlers.clear()
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -504,6 +525,7 @@ export const useWindows = defineStore('windows', () => {
     setIcon,
     saveState,
     setCloseGuard,
+    setLaunchHandler,
     onClose,
     setArea,
     load,

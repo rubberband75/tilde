@@ -57,6 +57,7 @@ export const apps: AppManifest[] = [
     icon: 'accessories-text-editor',
     category: 'Accessories',
     mimeTypes: textMimeTypes,
+    reuseWindow: true,
     defaultSize: { w: 760, h: 540 },
     minSize: { w: 360, h: 240 },
     component: () => import('./editor/EditorApp.vue'),
@@ -149,6 +150,11 @@ export function getApp(id: string): AppManifest | undefined {
 }
 
 /** The app that opens mime, by exact match first, then "type/*". */
+/** Types the text editor opens: its own list, `text/*` among them. */
+export function isTextMime(mime: string): boolean {
+  return textMimeTypes.includes(mime) || (mime.startsWith('text/') && textMimeTypes.includes('text/*'))
+}
+
 export function appForMime(mime: string): AppManifest | undefined {
   const major = mime.split('/')[0]
   return apps.find((a) => a.mimeTypes?.includes(mime)) ?? apps.find((a) => a.mimeTypes?.includes(`${major}/*`))

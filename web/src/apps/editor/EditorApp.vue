@@ -1,168 +1,175 @@
 <script setup lang="ts">
-// The text editor (D48), after xed: one document per window, opened from
-// Files or started empty from the menu. Unsaved changes go to the worker
-// as a draft while the user types (document.ts), so a lock, a reload or
-// another browser finds them; the file is only written on Save.
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { Compartment, EditorState } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
-import { redo, undo } from '@codemirror/commands'
-import { openSearchPanel } from '@codemirror/search'
-import { ApiError } from '@/api/client'
-import { dirName } from '@/api/fs'
-import { textMimeTypes } from '@/apps/registry'
-import type { AppContext } from '@/apps/types'
-import { onBeforeLock } from '@/lib/beforeLock'
+// The text editor (D48, D63), after xed: a window of tabs, one document
+// each (EditorTab). Files opened from Files, the desktop or Open… come in
+// as tabs of the most recently used window (ctx.onLaunch); an empty tab
+// nobody touched gives its place. Tabs drag between windows; the tab bar
+// shows for a single document too, so it can be dragged into another.
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from 'reka-ui'
 import { draftsApi } from '@/api/text'
-import { onFsChanged } from '@/lib/bus'
-import { useWatchedDirs } from '@/lib/fswatch'
-import { EditorDocument } from './document'
+import { dirName, fsApi } from '@/api/fs'
+import { isTextMime, textMimeTypes } from '@/apps/registry'
+import { dragPaths, isPathDrag, isUploadDrag } from '@/lib/dnd'
+import type { AppContext } from '@/apps/types'
+import EditorTab, { type TabStatus } from './EditorTab.vue'
 import RecoverPanel from './RecoverPanel.vue'
 import { recoverable, shownDraftKeys, type Recoverable } from './recovery'
-import { baseExtensions, languageFor } from './setup'
+import { afterClose, moveTab, newTab, openPath, tabsFromArgs, type TabSpec, type Tabs } from './tabs'
+import { endMove, moveFromElsewhere, startMove, TAB_DRAG, takeMove } from './transfer'
 
 const props = defineProps<{ ctx: AppContext }>()
 const ctx = props.ctx
 
-const host = ref<HTMLElement | null>(null)
-const view = shallowRef<EditorView | null>(null)
-const ready = ref(false)
-const saving = ref(false)
-const languageName = ref('Plain Text')
-const cursor = ref({ line: 1, col: 1 })
-const wrap = ref(ctx.args.wrap === true)
+const model = ref<Tabs>(tabsFromArgs(ctx.args))
+const status = reactive<Record<string, TabStatus>>({})
+const refs = new Map<string, InstanceType<typeof EditorTab>>()
+const root = ref<HTMLElement | null>(null)
 
-let draftId = typeof ctx.args.draft === 'string' ? ctx.args.draft : ''
-if (!draftId) {
-  draftId = crypto.randomUUID()
-  ctx.saveState({ draft: draftId })
+const tabs = computed(() => model.value.tabs)
+const current = computed(() => tabs.value[model.value.active])
+const now = computed(() => (current.value ? status[current.value.id] : undefined))
+const active = () => (current.value ? refs.get(current.value.id) : undefined)
+
+function nameOf(t: TabSpec) {
+  return status[t.id]?.name ?? (t.path ? t.path.split('/').pop()! : 'Untitled Document')
 }
-const doc = new EditorDocument(typeof ctx.args.path === 'string' ? ctx.args.path : '', draftId)
-const state = doc.state
 
-const language = new Compartment()
-const wrapping = new Compartment()
-
-const title = computed(() => `${state.dirty ? '*' : ''}${doc.name} — Text Editor`)
+const title = computed(() => {
+  const s = now.value
+  return `${s?.dirty ? '*' : ''}${s?.name ?? 'Untitled Document'} — Text Editor`
+})
 watch(title, (t) => ctx.setTitle(t), { immediate: true })
 
-function text(): string {
-  return view.value?.state.doc.toString() ?? ''
+// The window keeps its tabs: a reload or a lock brings them back. Windows
+// from before tabs kept one document as path, draft and wrap.
+watch(
+  model,
+  (m) => ctx.saveState({ tabs: m.tabs, active: m.active, path: undefined, draft: undefined, wrap: undefined }),
+  { deep: true, immediate: true },
+)
+
+function setModel(m: Tabs) {
+  model.value = m
 }
 
-// Set while the text is replaced from disk, which is not the user's edit.
-let replacing = false
+function update(t: TabSpec, patch: Partial<TabSpec>) {
+  setModel({ ...model.value, tabs: tabs.value.map((x) => (x.id === t.id ? { ...x, ...patch } : x)) })
+}
 
-function setText(value: string) {
-  const v = view.value
-  if (!v) return
-  const head = Math.min(v.state.selection.main.head, value.length)
-  replacing = true
-  try {
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value }, selection: { anchor: head } })
-  } finally {
-    replacing = false
+function select(i: number) {
+  if (i >= 0 && i < tabs.value.length) setModel({ ...model.value, active: i })
+}
+
+function addTab() {
+  const tabsNow = [...tabs.value]
+  tabsNow.splice(model.value.active + 1, 0, newTab())
+  setModel({ tabs: tabsNow, active: model.value.active + 1 })
+}
+
+const untouched = (t: TabSpec) => status[t.id]?.untouched ?? (!t.path && !status[t.id])
+
+function open(path: string) {
+  setModel(openPath(model.value, path, untouched))
+}
+
+/** An untitled draft brought back: in the active tab if untouched, else a new one. */
+function openDraft(draft: string) {
+  const spec: TabSpec = { id: crypto.randomUUID(), draft }
+  const tabsNow = [...tabs.value]
+  const replace = !!current.value && untouched(current.value)
+  const at = replace ? model.value.active : model.value.active + 1
+  tabsNow.splice(at, replace ? 1 : 0, spec)
+  setModel({ tabs: tabsNow, active: at })
+}
+
+// Files opened elsewhere (Files, the desktop) come here when this window
+// was the last one used.
+ctx.onLaunch((args) => {
+  if (typeof args.path === 'string') open(args.path)
+})
+
+function closeWindow() {
+  ctx.setCloseGuard(null)
+  ctx.close()
+}
+
+function remove(id: string) {
+  delete status[id]
+  refs.delete(id)
+  const next = afterClose(model.value, id)
+  if (next.tabs.length === 0) closeWindow()
+  else setModel(next)
+}
+
+/** Closes a tab, asking first if it has unsaved changes, as xed does. */
+async function closeTab(t: TabSpec) {
+  if (status[t.id]?.dirty) {
+    const ok = await ctx.confirm({
+      title: `Close “${nameOf(t)}” without saving?`,
+      message: 'Your changes will be lost.',
+      confirm: 'Close Without Saving',
+      danger: true,
+    })
+    if (!ok) return
+    await refs.get(t.id)?.discard()
   }
+  remove(t.id)
 }
 
-async function setLanguage() {
-  const desc = state.path ? languageFor(state.path.split('/').pop()!) : null
-  languageName.value = desc?.name ?? 'Plain Text'
-  const support = desc ? await desc.load().catch(() => null) : null
-  view.value?.dispatch({ effects: language.reconfigure(support ?? []) })
+async function closeOthers(t: TabSpec) {
+  for (const o of [...tabs.value]) if (o.id !== t.id) await closeTab(o)
 }
 
-async function save(): Promise<boolean> {
-  if (saving.value) return false
-  if (!state.path) return saveAs()
-  saving.value = true
-  try {
-    let result = await doc.save(text())
-    if (result === 'changed') {
-      const ok = await ctx.confirm({
-        title: state.missing ? `“${doc.name}” was deleted or moved` : `“${doc.name}” changed on disk`,
-        message: state.missing ? 'Save it again where it was?' : 'Saving replaces the changes made on disk.',
-        confirm: 'Save Anyway',
-        danger: !state.missing,
-      })
-      if (!ok) return false
-      result = await doc.save(text(), true)
-    }
-    return result === 'saved'
-  } catch (e) {
-    ctx.notify(`Could not save “${doc.name}”: ${(e as Error).message}`, 'error')
-    return false
-  } finally {
-    saving.value = false
-  }
+/** A tab into a window of its own, unsaved changes and all (in its draft). */
+async function moveToNewWindow(t: TabSpec) {
+  await refs.get(t.id)?.flush()
+  const args: Record<string, unknown> = t.path ? { path: t.path } : { draft: t.draft }
+  if (t.wrap) args.wrap = true
+  ctx.launch('text-editor', { ...args, newWindow: true })
+  remove(t.id)
 }
+
+ctx.setCloseGuard(async () => {
+  const dirty = tabs.value.filter((t) => status[t.id]?.dirty)
+  if (dirty.length === 0) return true
+  const ok = await ctx.confirm({
+    title:
+      dirty.length === 1
+        ? `Close “${nameOf(dirty[0]!)}” without saving?`
+        : `Close ${dirty.length} documents without saving?`,
+    message:
+      dirty.length === 1
+        ? 'Your changes will be lost.'
+        : `Changes to ${dirty.map((t) => `“${nameOf(t)}”`).join(', ')} will be lost.`,
+    confirm: 'Close Without Saving',
+    danger: true,
+  })
+  if (ok) for (const t of dirty) await refs.get(t.id)?.discard()
+  return ok
+})
 
 const filters = [{ name: 'All Text Files', mimeTypes: textMimeTypes }, { name: 'All Files' }]
 
-/** The folder the choosers start in: the document's, else the last one used. */
-function chooserFolder(): string | undefined {
-  return state.path ? dirName(state.path) : undefined
-}
-
-async function saveAs(): Promise<boolean> {
-  if (saving.value) return false
-  const chosen = await ctx.chooseFile({
-    mode: 'save',
-    title: 'Save As',
-    folder: chooserFolder(),
-    name: state.path ? doc.name : 'Untitled Document.txt',
-  })
-  const path = chosen?.paths[0]
-  if (!path) return false
-  saving.value = true
-  try {
-    let result = await doc.saveAs(path, text(), chosen.replace)
-    // Created meanwhile, after the chooser looked.
-    if (result === 'exists') {
-      const ok = await ctx.confirm({
-        title: `Replace “${path.split('/').pop()}”?`,
-        message: `A file with this name already exists in ${dirName(path)}.`,
-        confirm: 'Replace',
-        danger: true,
-      })
-      if (!ok) return false
-      result = await doc.saveAs(path, text(), true)
-    }
-    if (result !== 'saved') return false
-    ctx.saveState({ path })
-    await setLanguage()
-    return true
-  } catch (e) {
-    ctx.notify(`Could not save “${path}”: ${(e as Error).message}`, 'error')
-    return false
-  } finally {
-    saving.value = false
-  }
-}
-
-/**
- * Opens files in new windows, as xed opens them in tabs; an empty new
- * document that was never touched gives its place to the first one.
- */
+/** Opens files as tabs here; the last one chosen is shown. */
 async function openFiles() {
-  const chosen = await ctx.chooseFile({ mode: 'open', multiple: true, folder: chooserFolder(), filters })
-  if (!chosen) return
-  for (const path of chosen.paths) ctx.launch('text-editor', { path })
-  if (!state.path && !state.dirty && !text()) {
-    ctx.setCloseGuard(null)
-    ctx.close()
-  }
+  const folder = current.value?.path ? dirName(current.value.path) : undefined
+  const chosen = await ctx.chooseFile({ mode: 'open', multiple: true, folder, filters })
+  for (const path of chosen?.paths ?? []) open(path)
 }
 
-// Unsaved documents whose windows are gone (D58), offered in a new empty
-// window, and listed on request.
+// Unsaved documents whose windows are gone (D58), offered while the window
+// is one empty tab, and listed on request; they open as tabs here.
 const recover = ref<Recoverable[]>([])
 const recoverOpen = ref(false)
 const recoverDismissed = ref(false)
-let recovered = false
-
-/** An empty new document nobody has typed in: it can give its place away. */
-const untouched = () => !state.path && !state.dirty && !text()
+const offerRecovery = computed(() => tabs.value.length === 1 && !!current.value && untouched(current.value))
 
 async function loadRecoverable() {
   try {
@@ -172,11 +179,18 @@ async function loadRecoverable() {
     recover.value = []
   }
 }
+watch(
+  () => offerRecovery.value && !!now.value?.ready,
+  (offer) => {
+    if (offer) void loadRecoverable()
+  },
+  { immediate: true },
+)
 
 function openRecovered(item: Recoverable) {
-  ctx.launch('text-editor', item.args)
+  if ('path' in item.args) open(item.args.path)
+  else openDraft(item.args.draft)
   recover.value = recover.value.filter((r) => r.key !== item.key)
-  recovered = true
   if (recover.value.length === 0) closeRecover()
 }
 
@@ -196,161 +210,288 @@ async function discardRecovered(item: Recoverable) {
   await loadRecoverable()
 }
 
-/** Closes the list; an untouched window that recovered something goes too. */
 function closeRecover() {
   recoverOpen.value = false
-  if (recovered && untouched()) {
-    ctx.setCloseGuard(null)
-    ctx.close()
-    return
-  }
-  view.value?.focus()
+  void nextTick(() => active()?.focus())
 }
-
-async function reload() {
-  try {
-    setText(await doc.reload())
-  } catch (e) {
-    ctx.notify(`Could not reload “${doc.name}”: ${(e as Error).message}`, 'error')
-  }
-}
-
-function toggleWrap() {
-  wrap.value = !wrap.value
-  ctx.saveState({ wrap: wrap.value })
-  view.value?.dispatch({ effects: wrapping.reconfigure(wrap.value ? EditorView.lineWrapping : []) })
-}
-
-function command(fn: (v: EditorView) => boolean) {
-  const v = view.value
-  if (!v) return
-  fn(v)
-  v.focus()
-}
-
-// The file's folder: changes on disk reach an unmodified document at once,
-// and a modified one is told. Not during a save, which changes it too.
-useWatchedDirs(() => (state.path ? [dirName(state.path)] : []))
-const offFs = onFsChanged((dir) => {
-  if (!ready.value || saving.value || !state.path || dir !== dirName(state.path)) return
-  void doc.checkDisk().then((fresh) => {
-    if (fresh !== null && !saving.value) setText(fresh)
-  })
-})
-const offLock = onBeforeLock(() => doc.flush())
-
-ctx.setCloseGuard(async () => {
-  if (!state.dirty) return true
-  const ok = await ctx.confirm({
-    title: `Close “${doc.name}” without saving?`,
-    message: 'Your changes will be lost.',
-    confirm: 'Close Without Saving',
-    danger: true,
-  })
-  if (ok) await doc.discard()
-  return ok
-})
-
-onMounted(async () => {
-  let initial: string
-  try {
-    initial = await doc.open()
-  } catch (e) {
-    const reason = e instanceof ApiError ? e.message : 'Could not reach the session.'
-    ctx.notify(`Could not open “${doc.name}”: ${reason}`, 'error')
-    ctx.setCloseGuard(null)
-    ctx.close()
-    return
-  }
-  view.value = new EditorView({
-    parent: host.value!,
-    state: EditorState.create({
-      doc: initial,
-      extensions: [
-        ...baseExtensions(),
-        language.of([]),
-        wrapping.of(wrap.value ? EditorView.lineWrapping : []),
-        EditorView.updateListener.of((u) => {
-          if (u.docChanged && !replacing) doc.edited(() => view.value!.state.doc.toString())
-          if (u.docChanged || u.selectionSet) {
-            const head = u.state.selection.main.head
-            const line = u.state.doc.lineAt(head)
-            cursor.value = { line: line.number, col: head - line.from + 1 }
-          }
-        }),
-      ],
-    }),
-  })
-  ready.value = true
-  view.value.focus()
-  await setLanguage()
-  if (untouched()) await loadRecoverable()
-})
 
 /**
- * The window's own shortcuts, anywhere in it. Not a CodeMirror keymap:
- * that reads Shift+S as a typed "S" and can take Ctrl+Shift+S for Ctrl+S.
+ * The window's own keys, anywhere in it. Not a CodeMirror keymap: that
+ * reads Shift+S as a typed "S" and can take Ctrl+Shift+S for Ctrl+S. The
+ * browser keeps Ctrl+N, Ctrl+W and Ctrl+Tab outside fullscreen (D53), so
+ * Ctrl+Alt+N and Ctrl+Alt+W stand in for them.
  */
 function onKey(e: KeyboardEvent) {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || !ready.value) return
+  const ctrl = e.ctrlKey || e.metaKey
   const key = e.key.toLowerCase()
-  if (key === 's') {
-    e.preventDefault()
-    void (e.shiftKey ? saveAs() : save())
+  const step = (d: number) => select((model.value.active + d + tabs.value.length) % tabs.value.length)
+  const handled = () => e.preventDefault()
+  if (e.altKey && !ctrl && !e.shiftKey && /^[1-9]$/.test(e.key)) {
+    handled()
+    select(Number(e.key) - 1)
+    return
+  }
+  if (!ctrl) return
+  // Windows reports AltGr as Ctrl+Alt: AltGr+N or AltGr+W can type letters.
+  if (e.altKey && e.getModifierState('AltGraph')) return
+  if (e.code === 'PageDown' || e.code === 'PageUp') {
+    handled()
+    step(e.code === 'PageDown' ? 1 : -1)
+  } else if (e.code === 'Tab') {
+    handled()
+    step(e.shiftKey ? -1 : 1)
+  } else if (key === 'n' && !e.shiftKey) {
+    handled()
+    addTab()
+  } else if (key === 'w' && !e.shiftKey) {
+    handled()
+    if (current.value) void closeTab(current.value)
+  } else if (e.altKey) {
+    return
+  } else if (key === 's') {
+    handled()
+    void (e.shiftKey ? active()?.saveAs() : active()?.save())
   } else if (key === 'o' && !e.shiftKey) {
-    e.preventDefault()
+    handled()
     void openFiles()
   }
 }
 
-onBeforeUnmount(() => {
-  offFs()
-  offLock()
-  // A reload or a lock: keep what was typed since the last draft.
-  void doc.flush().catch(() => {})
-  view.value?.destroy()
-})
+// Files dragged from Files or the desktop open as tabs, rather than
+// CodeMirror pasting their paths: caught before it sees them.
+const fileDrop = ref(false)
+
+function onFileDragOver(e: DragEvent) {
+  // A tab from another editor window: it would join this one (D63).
+  if (e.dataTransfer?.types.includes(TAB_DRAG)) {
+    if (!moveFromElsewhere(ctx.windowId)) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    fileDrop.value = true
+    // Over a tab: before or after it; elsewhere, at the end.
+    const over = e.target instanceof Element ? e.target.closest<HTMLElement>('.tab') : null
+    const all = [...(root.value?.querySelectorAll<HTMLElement>('.tab') ?? [])]
+    const i = over ? all.indexOf(over) : -1
+    if (over && i >= 0) {
+      const box = over.getBoundingClientRect()
+      dropAt.value = e.clientX < box.left + box.width / 2 ? i : i + 1
+    } else dropAt.value = null
+    return
+  }
+  if (!isPathDrag(e) && !isUploadDrag(e)) return
+  e.preventDefault()
+  e.stopPropagation()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = isPathDrag(e) ? 'copy' : 'none'
+  fileDrop.value = isPathDrag(e)
+}
+
+function onFileDragLeave(e: DragEvent) {
+  if (!root.value?.contains(e.relatedTarget as Node | null)) fileDrop.value = false
+}
+
+async function onFileDrop(e: DragEvent) {
+  if (e.dataTransfer?.types.includes(TAB_DRAG)) {
+    if (!moveFromElsewhere(ctx.windowId)) return
+    e.preventDefault()
+    e.stopPropagation()
+    fileDrop.value = false
+    const at = dropAt.value ?? tabs.value.length
+    dropAt.value = null
+    const spec = await takeMove(ctx.windowId)
+    if (!spec) return
+    // Here it is a document like any other: a new id, the same draft.
+    const tabsNow = [...tabs.value]
+    const existing = spec.path ? tabsNow.findIndex((t) => t.path === spec.path) : -1
+    if (existing >= 0) {
+      select(existing)
+      return
+    }
+    tabsNow.splice(Math.min(at, tabsNow.length), 0, { ...spec, id: crypto.randomUUID() })
+    setModel({ tabs: tabsNow, active: Math.min(at, tabsNow.length - 1) })
+    return
+  }
+  if (!isPathDrag(e) && !isUploadDrag(e)) return
+  e.preventDefault()
+  e.stopPropagation()
+  fileDrop.value = false
+  if (!isPathDrag(e)) {
+    // Not on this computer yet: a folder uploads them.
+    ctx.notify('Files from your computer open once uploaded: drop them on a folder first.')
+    return
+  }
+  const notText: string[] = []
+  for (const path of dragPaths(e)) {
+    const name = path.split('/').pop() || path
+    try {
+      const entry = await fsApi.stat(path)
+      if (entry.type !== 'dir' && isTextMime(entry.mime)) open(path)
+      else notText.push(name)
+    } catch (err) {
+      ctx.notify(`Could not open “${name}”: ${(err as Error).message}`, 'error')
+    }
+  }
+  if (notText.length === 1) ctx.notify(`“${notText[0]}” is not a text file.`)
+  else if (notText.length > 1) ctx.notify(`${notText.length} of the dropped items are not text files.`)
+}
+
+// Tabs reorder by dragging within the bar, and go to a window of their own
+// when dropped outside this one.
+const dragging = ref<string | null>(null)
+const dropAt = ref<number | null>(null)
+
+function onDragStart(t: TabSpec, e: DragEvent) {
+  dragging.value = t.id
+  e.dataTransfer?.setData(TAB_DRAG, t.id)
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+  // Another window may take it: its unsaved changes go to the draft now.
+  startMove(ctx.windowId, t, refs.get(t.id)?.flush() ?? Promise.resolve())
+}
+
+/** Over a tab: where a dragged tab would go, from this window or another. */
+function onDragOver(i: number, e: DragEvent) {
+  if (!e.dataTransfer?.types.includes(TAB_DRAG)) return
+  if (!dragging.value && !moveFromElsewhere(ctx.windowId)) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropAt.value = e.clientX < box.left + box.width / 2 ? i : i + 1
+}
+
+function onDrop(e: DragEvent) {
+  // From another window: the window's own drop handler takes it.
+  if (!dragging.value) return
+  const from = tabs.value.findIndex((t) => t.id === dragging.value)
+  if (from >= 0 && dropAt.value !== null) {
+    e.preventDefault()
+    setModel(moveTab(model.value, from, dropAt.value))
+  }
+  dragging.value = null
+  dropAt.value = null
+}
+
+function onDragEnd(t: TabSpec, e: DragEvent) {
+  const box = root.value?.getBoundingClientRect()
+  const outside =
+    !!box && (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom)
+  const mine = dragging.value === t.id
+  dragging.value = null
+  dropAt.value = null
+  if (endMove()) {
+    // Another editor window took it, unsaved changes and all (its draft).
+    remove(t.id)
+  } else if (mine && e.dataTransfer?.dropEffect === 'none' && outside && tabs.value.length > 1) {
+    void moveToNewWindow(t)
+  }
+}
 </script>
 
 <template>
-  <div class="editor-app" @keydown="onKey">
+  <div
+    ref="root"
+    class="editor-app"
+    :class="{ fileDrop }"
+    @keydown="onKey"
+    @dragover.capture="onFileDragOver"
+    @dragleave="onFileDragLeave"
+    @drop.capture="onFileDrop"
+  >
     <header class="toolbar">
-      <button class="btn" title="New document" @click="ctx.launch('text-editor')">New</button>
+      <button class="btn" title="New document (Ctrl+Alt+N)" @click="addTab">New</button>
       <button class="btn" title="Open (Ctrl+O)" @click="openFiles">Open…</button>
-      <button class="btn" title="Save (Ctrl+S)" :disabled="!ready || saving" @click="save">Save</button>
-      <button class="btn" title="Save As (Ctrl+Shift+S)" :disabled="!ready || saving" @click="saveAs">Save As…</button>
+      <button class="btn" title="Save (Ctrl+S)" :disabled="!now?.ready || now?.saving" @click="active()?.save()">
+        Save
+      </button>
+      <button
+        class="btn"
+        title="Save As (Ctrl+Shift+S)"
+        :disabled="!now?.ready || now?.saving"
+        @click="active()?.saveAs()"
+      >
+        Save As…
+      </button>
       <span class="sep" />
-      <button class="btn" title="Undo (Ctrl+Z)" :disabled="!ready" @click="command(undo)">Undo</button>
-      <button class="btn" title="Redo (Ctrl+Shift+Z)" :disabled="!ready" @click="command(redo)">Redo</button>
+      <button class="btn" title="Undo (Ctrl+Z)" :disabled="!now?.ready" @click="active()?.command('undo')">Undo</button>
+      <button class="btn" title="Redo (Ctrl+Shift+Z)" :disabled="!now?.ready" @click="active()?.command('redo')">
+        Redo
+      </button>
       <span class="sep" />
-      <button class="btn" title="Find and replace (Ctrl+F)" :disabled="!ready" @click="command(openSearchPanel)">
+      <button class="btn" title="Find and replace (Ctrl+F)" :disabled="!now?.ready" @click="active()?.command('find')">
         Find
       </button>
-      <button class="btn" :class="{ on: wrap }" :aria-pressed="wrap" title="Wrap long lines" @click="toggleWrap">
+      <button
+        class="btn"
+        :class="{ on: now?.wrap }"
+        :aria-pressed="!!now?.wrap"
+        title="Wrap long lines"
+        @click="active()?.toggleWrap()"
+      >
         Wrap Lines
       </button>
     </header>
-    <div v-if="recover.length && !recoverOpen && !recoverDismissed && untouched()" class="infobar" role="status">
+    <nav class="tabbar" role="tablist" aria-label="Documents" @drop="onDrop" @dragover.prevent>
+      <ContextMenuRoot v-for="(t, i) in tabs" :key="t.id" :modal="false">
+        <ContextMenuTrigger as-child>
+          <div
+            class="tab"
+            role="tab"
+            :aria-selected="i === model.active"
+            :class="{
+              on: i === model.active,
+              dropBefore: dropAt === i,
+              dropAfter: dropAt === i + 1 && i === tabs.length - 1,
+            }"
+            :title="t.path ?? 'Never saved'"
+            draggable="true"
+            @click="select(i)"
+            @auxclick.middle="closeTab(t)"
+            @dragstart="onDragStart(t, $event)"
+            @dragover="onDragOver(i, $event)"
+            @dragend="onDragEnd(t, $event)"
+          >
+            <span class="name">{{ nameOf(t) }}</span>
+            <span v-if="status[t.id]?.dirty" class="dirty" aria-label="unsaved">●</span>
+            <button
+              class="close"
+              :aria-label="`Close ${nameOf(t)}`"
+              title="Close (Ctrl+Alt+W)"
+              @click.stop="closeTab(t)"
+            >
+              ×
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuPortal>
+          <ContextMenuContent class="popup-menu">
+            <ContextMenuItem class="item" @select="moveToNewWindow(t)">Move to New Window</ContextMenuItem>
+            <ContextMenuSeparator class="separator" />
+            <ContextMenuItem class="item" @select="closeOthers(t)">Close Other Tabs</ContextMenuItem>
+            <ContextMenuItem class="item" @select="closeTab(t)">Close</ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenuPortal>
+      </ContextMenuRoot>
+    </nav>
+    <div v-if="offerRecovery && recover.length && !recoverOpen && !recoverDismissed" class="infobar" role="status">
       <span>
         {{ recover.length === 1 ? '1 unsaved document' : `${recover.length} unsaved documents` }} can be recovered.
       </span>
       <button class="btn" @click="recoverOpen = true">Show</button>
       <button class="btn" @click="recoverDismissed = true">Not Now</button>
     </div>
-    <div v-else-if="state.changedOnDisk" class="infobar" role="status">
-      <span>“{{ doc.name }}” changed on disk after your unsaved changes.</span>
-      <button class="btn" @click="reload">Reload</button>
-      <button class="btn" @click="state.changedOnDisk = false">Keep My Changes</button>
-    </div>
-    <div v-else-if="state.missing" class="infobar" role="status">
-      <span>“{{ doc.name }}” was deleted or moved. Save to write it again.</span>
-    </div>
-    <div v-else-if="ready && !state.writable" class="infobar" role="status">
-      <span>You do not have permission to change “{{ doc.name }}”.</span>
-      <button class="btn" @click="saveAs">Save As…</button>
-    </div>
     <div class="body">
-      <div ref="host" class="host" />
+      <EditorTab
+        v-for="(t, i) in tabs"
+        v-show="i === model.active"
+        :key="t.id"
+        :ref="(el) => (el ? refs.set(t.id, el as InstanceType<typeof EditorTab>) : refs.delete(t.id))"
+        class="pane"
+        :ctx="ctx"
+        :tab="t"
+        :active="i === model.active"
+        @update="(patch) => update(t, patch)"
+        @status="(s) => (status[t.id] = s)"
+        @failed="remove(t.id)"
+      />
       <RecoverPanel
         v-if="recoverOpen"
         :items="recover"
@@ -359,11 +500,6 @@ onBeforeUnmount(() => {
         @close="closeRecover"
       />
     </div>
-    <footer class="status">
-      <span>{{ languageName }}</span>
-      <span>Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
-      <span>UTF-8</span>
-    </footer>
   </div>
 </template>
 
@@ -396,6 +532,63 @@ onBeforeUnmount(() => {
   margin: 0 4px;
   background: var(--border);
 }
+.tabbar {
+  display: flex;
+  overflow-x: auto;
+  background: var(--headerbar-bg);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  display: flex;
+  flex: 0 1 200px;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+  padding: 4px 4px 4px 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 2px solid transparent;
+  color: var(--view-dim-fg);
+  cursor: default;
+}
+.tab:hover {
+  background: var(--hover-bg);
+}
+.tab.on {
+  border-bottom-color: var(--accent);
+  background: var(--window-bg);
+  color: var(--window-fg);
+}
+.tab.dropBefore {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tab.dropAfter {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dirty {
+  font-size: 0.7em;
+}
+.close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+}
+.close:hover {
+  background: var(--button-hover-bg);
+}
 .infobar {
   display: flex;
   align-items: center;
@@ -412,18 +605,20 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
 }
-.host {
-  height: 100%;
-  overflow: hidden;
+/* Files or a tab dragged over: they would open here. Drawn above the
+   editor and its status bar, which would cover an outline of their own. */
+.editor-app {
+  position: relative;
 }
-.status {
-  display: flex;
-  justify-content: flex-end;
-  gap: 24px;
-  padding: 3px 12px;
-  background: var(--headerbar-bg);
-  color: var(--view-dim-fg);
-  border-top: 1px solid var(--border);
-  font-size: 0.9em;
+.editor-app.fileDrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+.pane {
+  height: 100%;
 }
 </style>

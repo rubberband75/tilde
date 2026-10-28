@@ -91,7 +91,7 @@ to; tick items off as they land.
 - [x] Text editor (D48): CodeMirror 6, opened from Files (text types, and Open With Text Editor), syntax highlighting, find and replace; unsaved changes kept as drafts by the worker through reloads and locks; saves keep symlinks, permissions and hard links, and ask before overwriting a file changed on disk
 - [x] Shared file chooser for apps (D49): `ctx.chooseFile` opens a GTK-style chooser as a modal dialog window (open, save, select folder; filters, several files, typed locations); the text editor's Open and Save As use it
 - [x] Text editor: recover unsaved documents whose window is gone (D58): an empty editor window offers them, a list to open or discard
-- [ ] Text editor: tabs
+- [x] Text editor: tabs (D63): files open as tabs of the last editor window, as xed; switch, reorder, drag between windows or out into a new one; xed's keys and Ctrl+Alt+N, Ctrl+Alt+W
 - [x] Media player (D51): sound and video from Files in one `<video>` element over `fs/content` Range requests; the folder as the playlist, the position kept through reloads and locks, media keys, fullscreen
 - [x] Image viewer (D50): opened from Files for the image types browsers draw; the folder's images in order, Best Fit, zoom and drag, turning the view, Move to Trash, fullscreen and a slideshow
 - [x] Process manager (D59): System Monitor's Processes tab: every user's processes from `/proc`, views, search, sorting; Stop, Continue, End, Kill as the user, named by PID and start time

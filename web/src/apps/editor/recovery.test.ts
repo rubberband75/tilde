@@ -16,8 +16,22 @@ describe('recoverable drafts', () => {
       { draft: 'abc' },
       { draft: 'saved-since', path: '' },
       {},
+      // A window with tabs (D63).
+      {
+        tabs: [
+          { id: '1', path: '/home/me/tab.txt', draft: 't' },
+          { id: '2', draft: 'untitled-tab' },
+        ],
+        active: 0,
+      },
     ])
-    expect([...shown]).toEqual(['file:/home/me/open.txt', 'new:abc', 'new:saved-since'])
+    expect([...shown]).toEqual([
+      'file:/home/me/open.txt',
+      'new:abc',
+      'new:saved-since',
+      'file:/home/me/tab.txt',
+      'new:untitled-tab',
+    ])
 
     const list = recoverable(
       [

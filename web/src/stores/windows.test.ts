@@ -289,6 +289,34 @@ describe('open and close effects', () => {
   })
 })
 
+describe('apps with tabs (reuseWindow)', () => {
+  it('send a file to their most recently used window, which opens it as a tab', () => {
+    const wm = useWindows()
+    const a = wm.open('text-editor')!
+    const b = wm.open('text-editor')!
+    const got: Record<string, unknown[]> = { [a]: [], [b]: [] }
+    wm.setLaunchHandler(a, (args) => got[a]!.push(args.path))
+    wm.setLaunchHandler(b, (args) => got[b]!.push(args.path))
+    wm.focus(a)
+    expect(wm.open('text-editor', { path: '/x.txt' })).toBe(a)
+    expect(got).toEqual({ [a]: ['/x.txt'], [b]: [] })
+    expect(wm.windows).toHaveLength(2)
+
+    // Without a file, or moving a tab out: a window of its own.
+    expect(wm.open('text-editor')).not.toBe(a)
+    const moved = wm.open('text-editor', { path: '/y.txt', newWindow: true })!
+    expect([a, b]).not.toContain(moved)
+    expect(wm.windows).toHaveLength(4)
+
+    // A closed window takes nothing; other apps are not affected.
+    wm.close(a)
+    wm.focus(b)
+    expect(wm.open('text-editor', { path: '/z.txt' })).toBe(b)
+    expect(got[b]).toEqual(['/z.txt'])
+    expect(wm.open('image-viewer', { path: '/p.png' })).not.toBe(b)
+  })
+})
+
 describe('always on top', () => {
   it('stacks above other windows, which keep their order below it', () => {
     const wm = useWindows()

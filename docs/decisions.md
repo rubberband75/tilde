@@ -959,6 +959,39 @@ calls itself (`dbuscall.go`) for systemd and NetworkManager, and uses
 live, timers. Rejected: reading the journal files directly (journalctl
 already applies journald's access rules and formats).
 
+**D63 — Editor tabs, as xed: files open in the last editor window** (2026-10-28, accepted)
+The text editor's windows hold tabs, one document each with its own
+draft (D48). A file opened from Files, the desktop or Open… becomes a tab
+of the most recently used editor window, as in xed, switching to it if
+it is open already; an empty tab nobody touched gives its place. The
+shell routes it: an app whose manifest sets `reuseWindow` gets launches
+with a `path` in its last window's `ctx.onLaunch` handler instead of a
+new window (`newWindow: true` asks for one anyway); launched without a
+path (the menu, New Window), it opens a window. The tab bar always
+shows, as in xed, so a single document's tab can be dragged too; tabs
+show an unsaved dot and a close button, close with the middle button,
+reorder by dragging, move into another editor window when dropped on it
+(its tab bar, or anywhere in it; a window left without tabs closes; the
+tab travels in the page, its unsaved changes written to its draft as the
+drag starts, and the new window waits for that before opening it), and
+move to a window of their own from their menu or when dropped outside
+any editor window; the desktop and Files take only paths
+and files to upload, so a tab dropped on them goes to its own window
+too, and they do not light up for it. Text files dragged from Files or
+the desktop into the editor open as tabs (what CodeMirror would paste is
+their path); other files are named as not text, and files dragged in
+from the user's computer must be uploaded to a folder first. Each tab keeps its own CodeMirror
+while hidden, so undo survives switching. Closing a tab with unsaved
+changes asks; closing the window asks once for all of them. The window
+keeps its tabs and the active one in its saved state; windows from
+before tabs (one document as path and draft) come back as one tab. The
+browser keeps Ctrl+N, Ctrl+W and Ctrl+Tab outside fullscreen (D53), so
+the keys are xed's where they arrive (Ctrl+PgUp and Ctrl+PgDn always;
+Ctrl+N, Ctrl+W, Ctrl+Tab in Keyboard Lock fullscreen) plus Ctrl+Alt+N and
+Ctrl+Alt+W, and Alt+1 to Alt+9 pick a tab. Rejected: hiding the tab bar's
+reorder and move behind menus only (xed drags them); keeping one window
+per file (the user chose xed's way).
+
 ---
 
 ## Open decisions

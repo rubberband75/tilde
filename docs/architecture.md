@@ -241,9 +241,11 @@ App.vue ── LoginScreen (logged out)
 - **Files views** (`src/apps/files/ItemsView.vue`): a virtualized grid and
   list with fixed cell sizes per zoom level, so huge folders render only what
   is visible; sorting in `files/types.ts`; thumbnails via `FileIcon.vue`.
-- **Text editor** (`src/apps/editor`, D48): CodeMirror 6 (`setup.ts`), one
-  document per window (`document.ts`): it drafts unsaved changes to the
-  worker as the user types and before Lock Screen (`src/lib/beforeLock.ts`),
+- **Text editor** (`src/apps/editor`, D48, D63): CodeMirror 6 (`setup.ts`),
+  a window of tabs (`EditorApp.vue`, `tabs.ts`), one document each
+  (`EditorTab.vue`, `document.ts`); files opened elsewhere reach the last
+  editor window through `ctx.onLaunch` (manifest `reuseWindow`). Each
+  document drafts unsaved changes to the worker as the user types and before Lock Screen (`src/lib/beforeLock.ts`),
   reopens them after a reload or lock, and saves against the version it
   opened. Drafts no window here shows are offered in an empty window
   (`recovery.ts`, `RecoverPanel.vue`, D58).
