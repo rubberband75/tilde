@@ -992,6 +992,62 @@ Ctrl+Alt+W, and Alt+1 to Alt+9 pick a tab. Rejected: hiding the tab bar's
 reorder and move behind menus only (xed drags them); keeping one window
 per file (the user chose xed's way).
 
+**D64 — Hosts: systemd Linux, the Debian family first, Raspberry Pi included** (2026-10-28, accepted)
+Tilde needs Linux with systemd and logind (pam_systemd makes the web
+session, its runtime folder and session bus; the Services tab is
+systemd's), PAM, and a D-Bus system bus; polkit, udisks2 and
+NetworkManager are used when present and not needed. Nothing needs
+Cinnamon or Mint: every desktop setting Tilde reads (the lock delay, the
+background, Nemo's icon layout) has a fallback, and the theme, icons and
+font are bundled. The targets are the Debian family first: Ubuntu
+(desktop and headless server, which the e2e VM is), Raspberry Pi OS,
+Linux Mint and Pop!_OS; then other systemd distributions such as Arch
+(CachyOS) and Fedora, whose differences are packaging's (D65): the PAM
+file (`@include common-auth` is Debian's; Arch includes `system-login`,
+Fedora `system-auth`) and build dependencies. Distributions without
+systemd (Alpine, Void, Devuan) are out of scope. The code has nothing
+tied to a CPU; the cgo build for PAM must be native or use an ARM C
+toolchain and ARM libpam. The requirements are written down in
+docs/development.md ("Host requirements"). Raspberry Pi OS gets an e2e
+run of its own (arm64, under QEMU), small and only on request, so the
+usual run stays as fast as it is: `make e2e-pi`, not part of
+`make e2e-vm`.
+
+**D65 — Packages with nfpm, released on GitHub** (2026-10-28, accepted)
+Tilde is packaged with nfpm, from one configuration: `.deb` first, for
+amd64 and arm64 (armhf if older Raspberry Pis turn out to matter), then
+`.rpm` and Arch packages, each with its family's PAM file and the
+systemd unit and `/etc/default/tilde` as `make install` puts them. A
+release workflow builds them (natively on ARM runners, as the PAM build
+needs cgo) and attaches them to a GitHub release; an apt repository, and
+the AUR, can follow once people use it. Rejected: debhelper (Debian
+packages only, where the targets span families, D64).
+
+**D66 — Local web apps on a second port** (2026-10-28, accepted)
+Local web apps (code-server, Jupyter) are served from a separate origin,
+as rule 8 requires, by a second port on the same host, which the main
+server listens on and proxies to the app, with the same TLS
+certificate. Wildcard subdomains were the other way, but they need DNS
+and a wildcard certificate, which a Raspberry Pi or a VM on a home
+network rarely has (D64); a port works by IP address or `.local` name
+alike. Browsers keep cookies per host, not per port, and SameSite counts
+both ports as one site, so: the app port strips Tilde's cookies before
+proxying, its own authentication uses a cookie of its own name, set by a
+one-time handoff from the desktop, and every state-changing request and
+WebSocket upgrade on the main port keeps its Origin check (rule 6),
+which turns away the app's pages, whose origin has the other port.
+
+**D67 — Tilde's settings live in `~/.config/tilde`** (2026-10-28, accepted)
+The Settings app saves Tilde's settings under `~/.config/tilde/`,
+written by the worker as the user, as the desktop layout and background
+already are (D36, D37). A desktop's own settings (Cinnamon's, GNOME's)
+are read as defaults where they exist and never written: most hosts
+have neither (D64), and changing a setting in a browser should not
+change the desktop at the machine. The idle lock delay follows the
+desktop's when it has one and is 15 minutes otherwise, unless set in
+Tilde (D40). Rejected: writing Cinnamon's gsettings (nothing to write to
+on most hosts, and a surprise on the others).
+
 ---
 
 ## Open decisions
@@ -999,5 +1055,4 @@ per file (the user chose xed's way).
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
 | Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |
-| Packaging | `.deb` with systemd unit (depends on libpam0g); update method | nfpm or debhelper | Before first release |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |

@@ -98,8 +98,8 @@ to; tick items off as they land.
 - [x] System Monitor: Services tab (D60): the system's and the user's systemd services, Start, Stop, Restart (polkit for system ones), audited
 - [x] System Monitor: enable and disable services at boot, a service's journal (D62): a details pane under the Services list
 - [x] System monitor tray applet (D61): CPU and memory graphs in the panel, System Monitor's Resources tab (CPU, memory and swap, network, disk); whole snapshots once a second while watched
-- [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
-- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`; recent logins and failed attempts from the audit log (D46), served by the server
+- [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**: a second port (D66)
+- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/` (D67), the desktop's own settings read as defaults, never written; recent logins and failed attempts from the audit log (D46), served by the server
 
 ## Phase 7 — Remote windows
 
@@ -115,4 +115,5 @@ to; tick items off as they land.
 
 - [x] systemd unit without sandboxing, `/etc/default/tilde`, PAM file, `make install`
 - [x] CI on GitHub Actions: format checks, Go and frontend tests, builds (D30)
-- [ ] `.deb` package (depends on libpam0g), release workflow
+- [ ] Packages with nfpm (D65): `.deb` for amd64 and arm64, a release workflow attaching them to GitHub releases; then `.rpm` and Arch, each with its family's PAM file
+- [ ] Raspberry Pi OS e2e run (D64): arm64 under QEMU, a small part of the suite, only on request (`make e2e-pi`)

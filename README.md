@@ -34,7 +34,9 @@ permissions.
 
 ## Requirements
 
-- Linux with PAM and systemd (developed for Linux Mint 22 / Ubuntu 24.04)
+- Linux with PAM and systemd (developed for Linux Mint 22 / Ubuntu 24.04;
+  runs headless, without Cinnamon or any desktop: see
+  [Host requirements](docs/development.md#host-requirements))
 - Go 1.24+ (`go.mod` will fetch a newer toolchain automatically if needed)
 - Node.js 22+ (the Mint/Ubuntu `nodejs` package is too old; use nvm or NodeSource)
 - `build-essential` and `libpam0g-dev` (PAM needs cgo)

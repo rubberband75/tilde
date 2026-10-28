@@ -21,6 +21,8 @@ Bundled font ("Ubuntu derivative Tilde"): Ubuntu Font Licence 1.0.
 - `docs/roadmap.md` — phases and what is done. Pick work from here.
 - `docs/security.md` — threat model and the rules below in more detail.
 - `docs/api.md` — the HTTP API the browser and worker share.
+- `docs/development.md` — setup, tests, the e2e VM, and host requirements
+  (what Tilde needs from a machine, and what it only uses when there).
 
 ## Layout
 

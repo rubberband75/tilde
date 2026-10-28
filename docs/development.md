@@ -9,6 +9,47 @@ sudo apt install build-essential libpam0g-dev git
 make deps
 ```
 
+## Host requirements
+
+What a machine needs to run Tilde (D64). The e2e VM is a headless Ubuntu
+24.04 server, so that much is tested on every run.
+
+Needed:
+
+- Linux with **systemd and logind**: `pam_systemd` registers the web
+  session and gives it `XDG_RUNTIME_DIR` and a session D-Bus bus; the
+  Services tab talks to systemd. Distributions without systemd are not
+  supported.
+- **PAM** (`libpam`; Tilde is built with cgo for it) and a PAM file for
+  the service `tilde`. The one in `packaging/pam.d` is the Debian
+  family's (`@include common-auth`); Arch and Fedora need their own
+  (D65).
+- A **D-Bus system bus**.
+
+Used when present, with a fallback otherwise:
+
+| What | Used for | Without it |
+| --- | --- | --- |
+| polkit (`polkit-agent-helper-1`) | password dialogs for mounting, network and service changes | those changes are refused |
+| udisks2 | listing, mounting and ejecting drives | drives come from the mount table, without mounting |
+| NetworkManager | the panel's network applet | the applet is hidden (Ubuntu server uses systemd-networkd) |
+| Cinnamon's or GNOME's settings (`gsettings`) | the idle lock delay, the desktop background | 15 minutes; the theme's background, or one picked in Tilde |
+| Nemo's desktop metadata (`gio`) | the first desktop icon layout | Tilde's own grid |
+| `~/.config/user-dirs.dirs` (xdg-user-dirs) | Documents, Downloads, Music and the other places in Files | Home and `~/Desktop` only |
+| freedesktop thumbnailers | thumbnails of other types | PNG, JPEG and GIF only, with the built-in scaler |
+| `journalctl` | a service's log lines | an error in their place |
+
+Not needed: a desktop at the machine, Cinnamon, Mint, X or Wayland. The
+theme, icons and font are bundled.
+
+Architectures: anything Go and cgo build for; the build must be native
+or use a C cross-compiler with that architecture's `libpam`. Raspberry
+Pi OS (arm64) is a target; its e2e run is still to come (`make e2e-pi`,
+on request).
+
+Tested so far: Linux Mint 22 (development) and Ubuntu 24.04 server, on
+x86-64.
+
 ## Day to day
 
 Two terminals:
