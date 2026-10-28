@@ -46,7 +46,11 @@ const shown = computed(() => {
 
 const hovered = ref<AppManifest | null>(null)
 
+/** Set when the menu closes for an app it launched: the app keeps the focus. */
+let launched = false
+
 function launch(app: AppManifest) {
+  launched = true
   wm.open(app.id)
   open.value = false
 }
@@ -71,6 +75,16 @@ async function lock() {
   await lockScreen()
 }
 
+/**
+ * Closing gives the focus back to the menu button, unless an app was just
+ * launched: that would take it from the new window, and an Enter from the
+ * search would reach the button too and open the menu again.
+ */
+function onCloseFocus(e: Event) {
+  if (launched) e.preventDefault()
+  launched = false
+}
+
 watch(open, async (v) => {
   if (v) {
     query.value = ''
@@ -87,7 +101,14 @@ watch(open, async (v) => {
       <span class="tilde-mark" aria-hidden="true">~</span>
     </PopoverTrigger>
     <PopoverPortal>
-      <PopoverContent class="start-menu" side="top" align="start" :side-offset="0" :avoid-collisions="false">
+      <PopoverContent
+        class="start-menu"
+        side="top"
+        align="start"
+        :side-offset="0"
+        :avoid-collisions="false"
+        @close-auto-focus="onCloseFocus"
+      >
         <div class="side">
           <div class="favorites">
             <button v-for="a in favoriteApps" :key="a.id" class="fav" :title="a.name" @click="launch(a)">
@@ -129,7 +150,7 @@ watch(open, async (v) => {
                 :key="a.id"
                 tabindex="0"
                 @click="launch(a)"
-                @keydown.enter="launch(a)"
+                @keydown.enter.prevent="launch(a)"
                 @pointerenter="hovered = a"
                 @pointerleave="hovered = null"
               >
@@ -157,7 +178,7 @@ watch(open, async (v) => {
               type="search"
               placeholder="Search"
               aria-label="Search applications"
-              @keydown.enter="onEnter"
+              @keydown.enter.prevent="onEnter"
             />
           </div>
         </div>
