@@ -3,7 +3,7 @@
 // geometry is pure so it can be tested on its own.
 import type { Rect } from '@/stores/windows'
 
-export const tiles = ['left', 'right', 'top', 'top-left', 'top-right', 'bottom-left', 'bottom-right'] as const
+export const tiles = ['left', 'right', 'top', 'bottom', 'top-left', 'top-right', 'bottom-left', 'bottom-right'] as const
 export type Tile = (typeof tiles)[number]
 
 /** How close to an edge the pointer must come, in pixels. */
@@ -48,4 +48,47 @@ export function snapTarget(x: number, y: number, area: { w: number; h: number })
     return 'top'
   }
   return null
+}
+
+export type Direction = 'left' | 'right' | 'up' | 'down'
+
+/** A tile as a cell in a 3 × 3 grid: column and row each -1, 0 (spanning) or 1. */
+function cell(tile: Tile | undefined): [number, number] {
+  if (!tile) return [0, 0]
+  const col = tile.endsWith('left') ? -1 : tile.endsWith('right') ? 1 : 0
+  const row = tile.startsWith('top') ? -1 : tile.startsWith('bottom') ? 1 : 0
+  return [col, row]
+}
+
+function tileAt(col: number, row: number): Tile | undefined {
+  const v = row === -1 ? 'top' : row === 1 ? 'bottom' : ''
+  const h = col === -1 ? 'left' : col === 1 ? 'right' : ''
+  const name = v && h ? `${v}-${h}` : v || h
+  return isTile(name) ? name : undefined
+}
+
+/**
+ * Keyboard tiling (Super+arrows, D53), as Muffin pushes tiles: a key moves
+ * the window one step that way in a grid of halves and quarters, so Left
+ * then Up gives the top-left quarter and Right from the left half gives a
+ * plain window again. Up from a plain window or the top half maximizes;
+ * Down from maximized goes back to what it was. undefined means untiled.
+ */
+export function pushTile(
+  tile: Tile | undefined,
+  maximized: boolean,
+  dir: Direction,
+): { tile: Tile | undefined; maximized: boolean } {
+  if (maximized) {
+    if (dir === 'left' || dir === 'right') return { tile: dir, maximized: false }
+    return { tile, maximized: dir === 'up' }
+  }
+  let [col, row] = cell(tile)
+  if (dir === 'left') col = col === 1 ? 0 : -1
+  else if (dir === 'right') col = col === -1 ? 0 : 1
+  else if (dir === 'up') {
+    if (col === 0 && row <= 0) return { tile, maximized: true }
+    row = row === 1 ? 0 : -1
+  } else row = row === -1 ? 0 : 1
+  return { tile: tileAt(col, row), maximized: false }
 }

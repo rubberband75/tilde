@@ -248,7 +248,8 @@ async function openImages() {
 // Fullscreen is the browser's, for this window's content.
 async function toggleFullscreen() {
   try {
-    if (document.fullscreenElement) await document.exitFullscreen()
+    // The desktop may be fullscreen underneath (D53): leave only this one.
+    if (document.fullscreenElement === root.value) await document.exitFullscreen()
     else await root.value?.requestFullscreen()
   } catch {
     ctx.notify('This browser did not allow fullscreen.', 'error')

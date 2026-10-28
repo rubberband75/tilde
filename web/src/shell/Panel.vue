@@ -4,6 +4,9 @@ import { computed } from 'vue'
 import { getApp } from '@/apps/registry'
 import type { AppManifest } from '@/apps/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
+import SymbolicIcon from '@/components/SymbolicIcon.vue'
+import { desktopFullscreen, toggleDesktopFullscreen } from '@/lib/fullscreen'
+import { useNotices } from '@/stores/notices'
 import StartMenu from './StartMenu.vue'
 import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
@@ -13,6 +16,11 @@ import { useWindows } from '@/stores/windows'
 
 const wm = useWindows()
 const session = useSession()
+const notices = useNotices()
+
+async function fullscreen() {
+  if (!(await toggleDesktopFullscreen())) notices.push('This browser did not allow fullscreen.', 'error')
+}
 
 const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a is AppManifest => !!a))
 </script>
@@ -27,6 +35,14 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
     </div>
     <WindowList />
     <div class="tray">
+      <button
+        class="applet fullscreen"
+        :class="{ active: desktopFullscreen }"
+        :title="desktopFullscreen ? 'Leave Fullscreen' : 'Fullscreen (all keys go to Tilde)'"
+        @click="fullscreen"
+      >
+        <SymbolicIcon name="fullscreen" :size="16" />
+      </button>
       <ClientsApplet />
       <div class="applet user" :title="`Logged in as ${session.info?.user}`">{{ session.info?.user }}</div>
       <PanelClock />
@@ -71,6 +87,19 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
   display: flex;
   align-items: stretch;
   padding-right: 2px;
+}
+.applet.fullscreen {
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--panel-item-fg);
+}
+.applet.fullscreen:hover,
+.applet.fullscreen.active {
+  background: var(--panel-item-hover-bg);
+  color: var(--panel-item-hover-fg);
 }
 .applet.user {
   display: flex;

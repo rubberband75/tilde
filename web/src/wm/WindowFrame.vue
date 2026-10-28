@@ -275,6 +275,28 @@ function startKeyboardMode(mode: 'move' | 'resize') {
 
 onBeforeUnmount(() => endKeyboardMode?.(false))
 
+const titlebar = ref<HTMLElement | null>(null)
+
+/** Opens the window menu under the title bar's left end, as Alt+Space does in Cinnamon. */
+function openMenu() {
+  const r = titlebar.value?.getBoundingClientRect()
+  if (!r) return
+  titlebar.value!.dispatchEvent(
+    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 8, clientY: r.bottom }),
+  )
+}
+
+// Keyboard shortcuts for this window (D53) come through the store.
+watch(
+  () => wm.frameRequest,
+  (req) => {
+    if (req?.id !== props.win.id) return
+    wm.frameRequest = null
+    if (req.action === 'menu') openMenu()
+    else startKeyboardMode(req.action)
+  },
+)
+
 /** The menu gives focus to the title bar when it closes; the window's widget should have it. */
 function onMenuClosed(e: Event) {
   e.preventDefault()
@@ -306,7 +328,13 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
   >
     <ContextMenuRoot :modal="false">
       <ContextMenuTrigger as-child>
-        <header class="titlebar" @pointerdown="startDrag" @mousedown="keepFocus" @dblclick="wm.toggleMaximize(win.id)">
+        <header
+          ref="titlebar"
+          class="titlebar"
+          @pointerdown="startDrag"
+          @mousedown="keepFocus"
+          @dblclick="wm.toggleMaximize(win.id)"
+        >
           <div class="buttons left">
             <button
               v-for="b in currentStyle.buttons.left"

@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 import { getApp } from '@/apps/registry'
-import { isTile, tileRect, type Tile } from '@/wm/snap'
+import { isTile, pushTile as pushTileState, tileRect, type Direction, type Tile } from '@/wm/snap'
 
 export type WindowState = 'normal' | 'minimized' | 'maximized'
+
+/** Things the shell asks of one window's frame (keyboard shortcuts, D53). */
+export type FrameAction = 'menu' | 'move' | 'resize'
 
 export interface Rect {
   x: number
@@ -63,6 +66,10 @@ export const useWindows = defineStore('windows', () => {
   const cursor = ref('')
   /** Where a window being dragged to an edge would go, shown under it. */
   const snapPreview = ref<{ rect: Rect; z: number } | null>(null)
+  /** The latest request to a frame; each frame watches for its own id. */
+  const frameRequest = ref<{ id: string; action: FrameAction } | null>(null)
+  /** Windows Show Desktop minimized, to bring back on the next press. */
+  let desktopShown: string[] | null = null
 
   let zTop = 10
   let seq = 0
@@ -129,6 +136,7 @@ export const useWindows = defineStore('windows', () => {
         return existing.id
       }
     }
+    desktopShown = null
     const id = `w${Date.now().toString(36)}${(seq++).toString(36)}`
     const size = clampSize(app.defaultSize)
     const cascade = (windows.value.filter((w) => w.state !== 'minimized').length % 8) * 28
@@ -190,7 +198,10 @@ export const useWindows = defineStore('windows', () => {
       focus(parent.id)
       return
     }
-    if (w.state === 'minimized') w.state = w.wasMaximized ? 'maximized' : 'normal'
+    if (w.state === 'minimized') {
+      w.state = w.wasMaximized ? 'maximized' : 'normal'
+      desktopShown = null
+    }
     if (focusedId.value !== id || w.z !== zTop) w.z = ++zTop
     focusedId.value = id
     const dialog = dialogOf(id)
@@ -293,6 +304,38 @@ export const useWindows = defineStore('windows', () => {
     focus(id)
   }
 
+  /** Super+arrows: one step through the halves and quarters (D53). */
+  function pushTile(id: string, dir: Direction) {
+    const w = get(id)
+    if (!w || w.state === 'minimized') return
+    const next = pushTileState(w.tile, w.state === 'maximized', dir)
+    w.tile = next.tile
+    w.state = next.maximized ? 'maximized' : 'normal'
+    focus(id)
+  }
+
+  /**
+   * Super+D, as in Cinnamon: minimizes every window, and the next press
+   * brings back those that are still minimized, in their stacking order.
+   * Opening or bringing up a window in between starts afresh.
+   */
+  function toggleShowDesktop() {
+    if (desktopShown) {
+      const ids = desktopShown
+      desktopShown = null
+      for (const id of ids) if (get(id)?.state === 'minimized') focus(id)
+      return
+    }
+    const shown = ordered.value.filter((w) => w.state !== 'minimized').sort((a, b) => stackZ(a) - stackZ(b))
+    if (shown.length === 0) return
+    for (const w of shown) minimize(w.id)
+    desktopShown = shown.map((w) => w.id)
+  }
+
+  function requestFrame(id: string, action: FrameAction) {
+    if (get(id)) frameRequest.value = { id, action }
+  }
+
   /** Taskbar click: minimize the focused window, otherwise bring it up. */
   function activate(id: string) {
     const w = get(id)
@@ -343,6 +386,7 @@ export const useWindows = defineStore('windows', () => {
     storageKey = `tilde:layout:${user}`
     windows.value = []
     focusedId.value = null
+    desktopShown = null
     try {
       const raw = localStorage.getItem(storageKey)
       if (!raw) return
@@ -370,6 +414,7 @@ export const useWindows = defineStore('windows', () => {
     storageKey = ''
     windows.value = []
     focusedId.value = null
+    desktopShown = null
     closeGuards.clear()
     closeHandlers.clear()
   }
@@ -416,6 +461,7 @@ export const useWindows = defineStore('windows', () => {
     interacting,
     cursor,
     snapPreview,
+    frameRequest,
     get,
     dialogOf,
     isHidden,
@@ -432,6 +478,9 @@ export const useWindows = defineStore('windows', () => {
     restore,
     untile,
     setAbove,
+    pushTile,
+    toggleShowDesktop,
+    requestFrame,
     activate,
     setRect,
     setTitle,

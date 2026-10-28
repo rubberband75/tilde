@@ -685,6 +685,53 @@ math (D6 kept it as an option; the zones are a few lines and testable on
 their own in `wm/snap.ts`); moving the window under the pointer as
 Cinnamon's Move does by warping it.
 
+**D53 — Keyboard shortcuts: Cinnamon's keys in fullscreen, Alt+Shift for Super elsewhere** (2026-10-27, accepted)
+Most of Cinnamon's shortcuts never reach a web page: the operating system
+the browser runs on takes Alt+Tab, Alt+F4 and Super (and a Mint client's
+own Cinnamon takes Ctrl+Alt+T and Super+arrows), and the browser keeps
+Ctrl+W, Ctrl+T and Ctrl+Tab. So Tilde has both. A Fullscreen button (the
+panel and the start menu) puts the whole desktop in fullscreen and, in
+Chromium, turns on Keyboard Lock: every key then comes to Tilde, Cinnamon's
+own shortcuts work, terminals get Ctrl+W, and holding Escape leaves. In
+any browser window, and in Firefox and Safari, which have no Keyboard
+Lock, alternates work, with Alt+Shift standing in for Super:
+
+| Action | Cinnamon | Alternate |
+| --- | --- | --- |
+| Menu | Super (fullscreen only) | Alt+F1 |
+| Switch windows | Alt+Tab, Alt+Shift+Tab | Alt+\`, Alt+Shift+\` |
+| Tile, maximize, restore | Super+arrows | Alt+Shift+arrows |
+| Show desktop | Super+D | Alt+Shift+D |
+| Close window | Alt+F4 | Alt+Shift+F4 |
+| Window menu | Alt+Space | Alt+Shift+Space |
+| Move, resize, maximize | Alt+F7, Alt+F8, Alt+F10 | the window menu |
+| Terminal, lock | Ctrl+Alt+T, Ctrl+Alt+L | |
+
+Cinnamon's keys work outside fullscreen too whenever they get through.
+Super alone opens the menu only in Keyboard Lock fullscreen: elsewhere the
+client's own menu would open as well. Keys are matched by physical key
+(`code`), so they sit in the same place on every layout, and AltGr (which
+Windows reports as Ctrl+Alt) never counts as Ctrl+Alt. On a Mac the Meta
+key is Command, which apps use (Cmd+arrows move the cursor), so Super
+combinations are off there and the alternates remain. The shortcuts are
+caught on the window before any app sees them, as Cinnamon grabs them
+before an X client does: the text editor loses CodeMirror's Alt+Shift+Up
+and Down (copy line), and a Mac's Option+Shift+arrows (select by word)
+and Option+\` (a dead key) are taken too. Super+arrows push the window
+through a grid of halves and quarters as Muffin does (Left then Up is the
+top-left quarter, Right from the left half is a plain window again); Up
+from a plain window or the top half maximizes and Down from maximized
+goes back, so the bottom half is Down from a plain window. Alt+Tab lists
+the windows by last use, minimized ones included, and picks one when Alt
+is let go. Show Desktop minimizes every window and the next press brings
+back those it hid, unless a window came back in between. A window
+showing its own content fullscreen (the image viewer, the media player)
+now leaves only its own fullscreen, not the desktop's. Not yet: changing
+the shortcuts, workspaces (Ctrl+Alt+arrows). Rejected: a leader key (every
+shortcut two steps); Ctrl+Alt for Super (a Mint client takes Ctrl+Alt+
+arrows for its workspaces and Ctrl+Alt+T); Keyboard Lock without
+fullscreen (browsers allow it only in fullscreen).
+
 ---
 
 ## Open decisions

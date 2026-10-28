@@ -1,20 +1,29 @@
 <script setup lang="ts">
 // The Cinnamon-style application menu: favorites and session buttons on the
 // left, search, categories and apps on the right.
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { apps } from '@/apps/registry'
 import type { AppManifest } from '@/apps/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
+import { desktopFullscreen, toggleDesktopFullscreen } from '@/lib/fullscreen'
+import { useNotices } from '@/stores/notices'
 import { useSession } from '@/stores/session'
+import { useShell } from '@/stores/shell'
 import { useWindows } from '@/stores/windows'
 import { lockScreen } from './actions'
 
 const wm = useWindows()
 const session = useSession()
+const notices = useNotices()
 
-const open = ref(false)
+// In the shell store: the keyboard opens the menu too (Alt+F1, Super; D53).
+const { menuOpen: open } = storeToRefs(useShell())
+onBeforeUnmount(() => {
+  open.value = false
+})
 const query = ref('')
 const category = ref<string>('All Applications')
 const search = ref<HTMLInputElement | null>(null)
@@ -52,6 +61,11 @@ async function logOut() {
   await session.logout()
 }
 
+async function fullscreen() {
+  open.value = false
+  if (!(await toggleDesktopFullscreen())) notices.push('This browser did not allow fullscreen.', 'error')
+}
+
 async function lock() {
   open.value = false
   await lockScreen()
@@ -81,6 +95,13 @@ watch(open, async (v) => {
             </button>
           </div>
           <div class="session">
+            <button
+              class="fav"
+              :title="desktopFullscreen ? 'Leave Fullscreen' : 'Fullscreen (all keys go to Tilde)'"
+              @click="fullscreen"
+            >
+              <SymbolicIcon name="fullscreen" :size="18" />
+            </button>
             <button class="fav" title="Lock Screen" @click="lock">
               <SymbolicIcon name="lock" :size="18" />
             </button>

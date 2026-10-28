@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isTile, snapTarget, tileRect, tiles } from './snap'
+import { isTile, pushTile, snapTarget, tileRect, tiles, type Direction, type Tile } from './snap'
 
 const area = { w: 1281, h: 760 }
 
@@ -57,5 +57,41 @@ describe('isTile', () => {
     expect(isTile('maximize')).toBe(false)
     expect(isTile(3)).toBe(false)
     expect(isTile(undefined)).toBe(false)
+  })
+})
+
+describe('pushTile', () => {
+  const push = (tile: Tile | undefined, ...dirs: Direction[]) => {
+    let state = { tile, maximized: false }
+    for (const d of dirs) state = pushTile(state.tile, state.maximized, d)
+    return state.maximized ? 'maximized' : (state.tile ?? 'none')
+  }
+
+  it.each<[Tile | undefined, Direction[], string]>([
+    [undefined, ['left'], 'left'],
+    [undefined, ['right'], 'right'],
+    [undefined, ['down'], 'bottom'],
+    [undefined, ['up'], 'maximized'],
+    ['top', ['up'], 'maximized'],
+    ['left', ['left'], 'left'],
+    ['left', ['right'], 'none'],
+    ['left', ['up'], 'top-left'],
+    ['left', ['down'], 'bottom-left'],
+    ['top-left', ['right'], 'top'],
+    ['top-left', ['down'], 'left'],
+    ['bottom-right', ['up'], 'right'],
+    ['bottom-right', ['left'], 'bottom'],
+    ['top', ['down'], 'none'],
+    ['bottom', ['up'], 'none'],
+    ['bottom', ['down'], 'bottom'],
+  ])('from %s, %j gives %s', (from, dirs, want) => {
+    expect(push(from, ...dirs)).toBe(want)
+  })
+
+  it('leaves maximized for a side, or for what it was', () => {
+    expect(pushTile(undefined, true, 'left')).toEqual({ tile: 'left', maximized: false })
+    expect(pushTile('top', true, 'down')).toEqual({ tile: 'top', maximized: false })
+    expect(pushTile(undefined, true, 'down')).toEqual({ tile: undefined, maximized: false })
+    expect(pushTile(undefined, true, 'up')).toEqual({ tile: undefined, maximized: true })
   })
 })

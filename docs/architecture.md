@@ -188,7 +188,14 @@ App.vue ── LoginScreen (logged out)
   zones and tile geometry are in `src/wm/snap.ts`, and a tiled window keeps
   its own rect next to its `tile`. Right-clicking the title bar opens the
   window menu (Move, Resize, Always on Top, ...); the window layer is its
-  own stacking context, so Always on Top windows stay under the panel. A window can open another as its modal dialog
+  own stacking context, so Always on Top windows stay under the panel.
+- **Keyboard shortcuts** (D53): `src/shell/shortcuts.ts` is the keymap
+  (Cinnamon's keys and the Alt+Shift alternates), `src/shell/keyboard.ts`
+  catches them on the window before any app and runs them; Alt+Tab's
+  switcher is `src/stores/switcher.ts` with `shell/WindowSwitcher.vue`.
+  The start menu's open state is in `src/stores/shell.ts`, so keys open it;
+  frames take keyboard requests (window menu, Move, Resize) through
+  `wm.requestFrame`. Fullscreen with Keyboard Lock is `src/lib/fullscreen.ts`. A window can open another as its modal dialog
   (`openDialog`, D49): the dialog stays above it, hides and closes with it
   and is left out of the window list and the saved layout, and the parent's
   content is `inert` until it closes.

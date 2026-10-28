@@ -7,24 +7,16 @@ import JobsPanel from './JobsPanel.vue'
 import Notices from './Notices.vue'
 import Panel from './Panel.vue'
 import PolkitDialog from './PolkitDialog.vue'
+import WindowSwitcher from './WindowSwitcher.vue'
 import WindowLayer from '@/wm/WindowLayer.vue'
 import { useWindows } from '@/stores/windows'
-import { lockScreen } from './actions'
+import { installShortcuts } from './keyboard'
 
 const wm = useWindows()
 const background = useBackground()
 const workArea = ref<HTMLElement | null>(null)
 let ro: ResizeObserver | undefined
-
-// Cinnamon's Lock Screen shortcut. Captured before apps see it, so it works
-// from a terminal too. Windows reports AltGr as Ctrl+Alt: AltGr+L types "ł".
-function onKey(e: KeyboardEvent) {
-  if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.code === 'KeyL' && !e.getModifierState('AltGraph')) {
-    e.preventDefault()
-    e.stopPropagation()
-    void lockScreen()
-  }
-}
+let removeShortcuts: (() => void) | undefined
 
 onMounted(() => {
   void background.load()
@@ -32,11 +24,12 @@ onMounted(() => {
     if (entry) wm.setArea(entry.contentRect.width, entry.contentRect.height)
   })
   if (workArea.value) ro.observe(workArea.value)
-  window.addEventListener('keydown', onKey, true)
+  // Captured before apps see them, so they work from a terminal too.
+  removeShortcuts = installShortcuts()
 })
 onBeforeUnmount(() => {
   ro?.disconnect()
-  window.removeEventListener('keydown', onKey, true)
+  removeShortcuts?.()
 })
 </script>
 
@@ -49,6 +42,7 @@ onBeforeUnmount(() => {
       <JobsPanel />
     </div>
     <Panel />
+    <WindowSwitcher />
     <Dialogs />
     <PolkitDialog />
   </div>

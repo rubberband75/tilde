@@ -214,6 +214,55 @@ describe('edge tiling', () => {
   })
 })
 
+describe('keyboard tiling and Show Desktop', () => {
+  it('push the window through the tiles, and maximize from the top', () => {
+    const wm = useWindows()
+    wm.setArea(1200, 800)
+    const a = wm.open('files')!
+    const before = { ...wm.get(a)!.rect }
+    wm.pushTile(a, 'left')
+    wm.pushTile(a, 'up')
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 0, y: 0, w: 600, h: 400 })
+    wm.pushTile(a, 'right')
+    expect(wm.get(a)!.tile).toBe('top')
+    wm.pushTile(a, 'up')
+    expect(wm.get(a)!.state).toBe('maximized')
+    wm.pushTile(a, 'down')
+    expect(wm.get(a)!.tile).toBe('top')
+    wm.pushTile(a, 'down')
+    expect(wm.shownRect(wm.get(a)!)).toEqual(before)
+  })
+
+  it('Show Desktop minimizes everything, and brings back what it hid', () => {
+    const wm = useWindows()
+    const a = wm.open('files')!
+    const b = wm.open('terminal')!
+    const c = wm.open('system-info')!
+    wm.minimize(c)
+    wm.focus(a)
+    wm.toggleShowDesktop()
+    expect(wm.windows.every((w) => w.state === 'minimized')).toBe(true)
+    expect(wm.focusedId).toBeNull()
+    wm.toggleShowDesktop()
+    expect(wm.get(a)!.state).toBe('normal')
+    expect(wm.get(b)!.state).toBe('normal')
+    expect(wm.get(c)!.state).toBe('minimized')
+    // The window that was on top is on top again.
+    expect(wm.focusedId).toBe(a)
+  })
+
+  it('Show Desktop starts afresh once a window comes back in between', () => {
+    const wm = useWindows()
+    const a = wm.open('files')!
+    const b = wm.open('terminal')!
+    wm.toggleShowDesktop()
+    wm.focus(a)
+    wm.toggleShowDesktop()
+    expect(wm.get(a)!.state).toBe('minimized')
+    expect(wm.get(b)!.state).toBe('minimized')
+  })
+})
+
 describe('always on top', () => {
   it('stacks above other windows, which keep their order below it', () => {
     const wm = useWindows()
