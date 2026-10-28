@@ -748,6 +748,43 @@ selection and a dependency on `@internationalized/date`, for a grid that
 only shows a month; its first weekday is not taken from the locale
 either).
 
+**D55 — Network applet over NetworkManager; the sound applet waits for Xpra** (2026-10-28, accepted)
+The panel's network applet shows the host's wired and Wi-Fi devices from
+NetworkManager on the system bus, as the user, like drives over udisks
+(D39): their state, connection and addresses, the Wi-Fi switch, and the
+networks in range by strength, with a lock for secured ones. Clicking a
+network connects: a saved connection is used; a new one is made
+system-wide with the password in NetworkManager's keeping, as nm-applet
+does; a new secured network asks for its password in a Tilde dialog, and
+a refused password asks again (the new connection is deleted, so it is
+not saved with a password that does not work). The request waits until
+the connection is up or has failed; why it failed comes from the device's
+`StateChanged` signal, since the device goes from failed to disconnected
+at once (and may autoconnect elsewhere), so its `StateReason` property
+has forgotten by the time anyone reads it. Disconnect and Wi-Fi off ask first
+when the browser may be using that connection: the device holding the
+address in the URL, or, for a host name, the one with the default route;
+nothing for a browser on the host itself. polkit decides every change
+and, from a web session, usually asks for an administrator's password
+through Tilde's agent (D44): NetworkManager only lets polkit ask when the
+call carries D-Bus's interactive-authorization flag, which the worker
+sets while its agent runs. Without NetworkManager (servers on
+systemd-networkd) the applet is hidden. Connections, disconnections and
+the switch go to the audit log (D46). Only WPA/WPA2 and WPA3 Personal and
+open networks are set up here: enterprise, WEP and Enhanced Open need a
+connections editor, as do hidden networks, VPNs and static addresses.
+The sound applet moves to Phase 7: a web session is rarely the one the
+sound card belongs to (logind gives it to the session at the machine),
+so host volume would usually have no device to act on; it means
+something once Xpra brings remote apps' sound to the browser. The e2e VM
+tests the applet against real Wi-Fi: mac80211_hwsim radios, hostapd and
+dnsmasq serving a WPA2 network and an open one, and NetworkManager
+managing one more radio only, so the VM's own network is untouched.
+Rejected: `nmcli` from the worker (parsing its output, and a process per
+request, for what one D-Bus call answers); a NetworkManager secret agent
+in the worker, so NetworkManager could ask Tilde for passwords
+(heavier, and only needed for the cases left to a connections editor).
+
 ---
 
 ## Open decisions

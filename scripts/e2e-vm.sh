@@ -58,6 +58,11 @@ TEST_USB=TILDE-USB
 # RFC 6238 test secret; the tests compute codes from it.
 TEST_2FA_USER=tester2fa
 TEST_2FA_SECRET=3132333435363738393031323334353637383930
+# Wi-Fi networks for the network applet's test (D55), served in the VM by
+# hostapd on mac80211_hwsim radios: one with WPA2, one open.
+TEST_WIFI_SECURE=TildeSecure
+TEST_WIFI_OPEN=TildeOpen
+TEST_WIFI_PASS=tilde-wifi-pass
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
 die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
@@ -221,9 +226,82 @@ polkit.addRule(function (action, subject) {
     } catch (e) {}
     return type == "web" ? polkit.Result.AUTH_SELF : polkit.Result.YES;
   }
+  // Network changes from the test user's web session; Wi-Fi on and off
+  // asks for the user's own password, to go through Tilde's agent too.
+  if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
+    return action.id == "org.freedesktop.NetworkManager.enable-disable-wifi" ?
+      polkit.Result.AUTH_SELF : polkit.Result.YES;
+  }
   return polkit.Result.NOT_HANDLED;
 });
 EOF
+
+  # Wi-Fi for the network applet (D55), all inside the VM: three radios
+  # from mac80211_hwsim; hostapd serves the two test networks on wlan0 and
+  # wlan1, with dnsmasq for DHCP (no router, so they never become the
+  # default route), and NetworkManager manages only wlan2, so the VM's own
+  # network (netplan and systemd-networkd) and ssh are left alone. Test VM
+  # only.
+  vm_ssh "set -e
+    if ! dpkg -s network-manager hostapd dnsmasq-base iw >/dev/null 2>&1 || ! modinfo mac80211_hwsim >/dev/null 2>&1; then
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q network-manager hostapd dnsmasq-base iw \
+        linux-modules-extra-\$(uname -r) >/dev/null
+    fi
+    echo mac80211_hwsim | sudo tee /etc/modules-load.d/tilde-e2e.conf >/dev/null
+    echo 'options mac80211_hwsim radios=3' | sudo tee /etc/modprobe.d/tilde-e2e.conf >/dev/null
+    lsmod | grep -q '^mac80211_hwsim' || sudo modprobe mac80211_hwsim radios=3
+    sudo mkdir -p /etc/tilde-e2e"
+  vm_ssh "sudo tee /etc/NetworkManager/conf.d/99-tilde-e2e.conf >/dev/null" <<EOF
+[keyfile]
+unmanaged-devices=*,except:interface-name:wlan2
+EOF
+  vm_ssh "sudo tee /etc/tilde-e2e/ap-secure.conf >/dev/null" <<EOF
+interface=wlan0
+driver=nl80211
+ssid=$TEST_WIFI_SECURE
+hw_mode=g
+channel=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$TEST_WIFI_PASS
+EOF
+  vm_ssh "sudo tee /etc/tilde-e2e/ap-open.conf >/dev/null" <<EOF
+interface=wlan1
+driver=nl80211
+ssid=$TEST_WIFI_OPEN
+hw_mode=g
+channel=6
+EOF
+  vm_ssh "sudo tee /etc/systemd/system/tilde-e2e-ap.service >/dev/null" <<EOF
+[Unit]
+Description=Wi-Fi access points for the e2e tests
+After=network.target
+[Service]
+ExecStartPre=-/usr/sbin/ip addr add 10.42.1.1/24 dev wlan0
+ExecStartPre=-/usr/sbin/ip addr add 10.42.2.1/24 dev wlan1
+ExecStart=/usr/sbin/hostapd /etc/tilde-e2e/ap-secure.conf /etc/tilde-e2e/ap-open.conf
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+  vm_ssh "sudo tee /etc/systemd/system/tilde-e2e-dhcp.service >/dev/null" <<EOF
+[Unit]
+Description=DHCP for the e2e test Wi-Fi networks
+After=tilde-e2e-ap.service
+[Service]
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/dev/null --port=0 --bind-dynamic \
+  --interface=wlan0 --interface=wlan1 --dhcp-range=10.42.1.10,10.42.1.99,1h --dhcp-range=10.42.2.10,10.42.2.99,1h \
+  --dhcp-option=3 --dhcp-option=6 --dhcp-leasefile=/run/tilde-e2e-dhcp.leases
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+  vm_ssh "set -e
+    sudo systemctl daemon-reload
+    sudo systemctl disable --now NetworkManager-wait-online.service >/dev/null 2>&1 || true
+    sudo systemctl enable --now tilde-e2e-ap.service tilde-e2e-dhcp.service >/dev/null 2>&1
+    sudo systemctl restart NetworkManager"
 
   # Mounted until the VM reboots; recreated by the next run after that.
   vm_ssh "set -e
@@ -275,6 +353,17 @@ mount_test_usb() {
     findmnt -n \$dev >/dev/null || sudo -u $TEST_USER udisksctl mount --no-user-interaction -b \$dev >/dev/null"
 }
 
+# Starts the network test from Wi-Fi on, disconnected, with no saved
+# Wi-Fi connections.
+reset_wifi() {
+  vm_ssh "set -e
+    sudo nmcli radio wifi on
+    sudo nmcli -t -f UUID,TYPE connection show | awk -F: '\$2 == \"802-11-wireless\" { print \$1 }' |
+      xargs -r -n1 sudo nmcli connection delete uuid >/dev/null
+    sudo nmcli device disconnect wlan2 >/dev/null 2>&1 || true
+    sudo nmcli device wifi rescan ifname wlan2 >/dev/null 2>&1 || true"
+}
+
 # The Playwright suite (web/e2e) in Chromium on the host, against the VM
 # through its own SSH tunnel. Reports land in web/playwright-report.
 run_ui_tests() {
@@ -286,6 +375,7 @@ run_ui_tests() {
 
   reset_oath
   mount_test_usb
+  reset_wifi
 
   vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
   local tunnel=$!
@@ -302,6 +392,7 @@ run_ui_tests() {
   local status=0
   (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
     TILDE_DRIVE=$TEST_DRIVE TILDE_USB=$TEST_USB TILDE_2FA_USER=$TEST_2FA_USER TILDE_2FA_SECRET=$TEST_2FA_SECRET \
+    TILDE_WIFI_SECURE=$TEST_WIFI_SECURE TILDE_WIFI_OPEN=$TEST_WIFI_OPEN TILDE_WIFI_PASS=$TEST_WIFI_PASS \
     npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
   kill "$tunnel" 2>/dev/null || true
   trap - EXIT

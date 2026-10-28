@@ -83,10 +83,15 @@ could already do.
 - Pushes events on a WebSocket (`events.go`): a snapshot of all jobs on
   connect, then every change as a whole job object, and changes to the
   folders clients show (`watch.go`: one inotify watch per folder for all
-  clients, changes coalesced for 200 ms; D34), and drive changes from udisks
-  signals (`drives.go`, D39).
+  clients, changes coalesced for 200 ms; D34), drive changes from udisks
+  signals (`drives.go`, D39) and network changes from NetworkManager's
+  (`network.go`, D55).
 - Lists, mounts, unmounts and ejects drives through udisks2 on the system
   bus, as the user (`drives.go`).
+- Lists the host's wired and Wi-Fi devices and networks, connects and
+  disconnects them and switches Wi-Fi through NetworkManager on the system
+  bus, as the user (`network.go`, D55); the panel's network applet is
+  `web/src/shell/NetworkApplet.vue`.
 - Is the polkit authentication agent of Tilde's web session (`polkit.go`,
   D44): polkit's requests for a password go to a dialog in every browser,
   and polkit's setuid `polkit-agent-helper-1` checks the answers.
@@ -174,7 +179,7 @@ App.vue ── LoginScreen (logged out)
             │         (a modal dialog window, the file chooser, sits above its parent)
             ├── Notices
             ├── JobsPanel ── ConflictDialog   file job progress and questions
-            ├── Panel ── StartMenu, launchers, WindowList, tray (fullscreen, browsers, user, clock + calendar)
+            ├── Panel ── StartMenu, launchers, WindowList, tray (fullscreen, network, browsers, user, clock + calendar)
             └── Dialogs                       ctx.confirm / ctx.prompt
 ```
 

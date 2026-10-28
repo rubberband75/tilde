@@ -4,7 +4,7 @@ import { connectEvents, type EventStream } from '@/api/events'
 import { jobsApi } from '@/api/jobs'
 import type { Job, WorkerEvent } from '@/api/types'
 import { dirName } from '@/api/fs'
-import { emitDrivesChanged, emitFsChanged } from '@/lib/bus'
+import { emitDrivesChanged, emitFsChanged, emitNetworkChanged } from '@/lib/bus'
 import { setWatchSender, watchedDirs } from '@/lib/fswatch'
 import { usePolkit } from './polkit'
 
@@ -60,6 +60,9 @@ export const useJobs = defineStore('jobs', () => {
         break
       case 'drives':
         emitDrivesChanged()
+        break
+      case 'network':
+        emitNetworkChanged()
         break
       case 'polkit':
         void usePolkit().refresh()

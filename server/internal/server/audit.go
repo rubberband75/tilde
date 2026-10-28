@@ -217,6 +217,21 @@ func workerRecord(user string, ev protocol.AuditEvent) (auditRecord, bool) {
 		r.Text = volume("unmounted")
 	case "eject":
 		r.Text = volume("ejected")
+	case "network_connect":
+		r.Fields = append(r.Fields, [2]string{"INTERFACE", ev.Device}, [2]string{"CONNECTION", ev.Name}, [2]string{"RESULT", ev.Result})
+		if ev.Result == "connected" {
+			r.Text = fmt.Sprintf("connected %s to %q", ev.Device, ev.Name)
+		} else {
+			r.Text = fmt.Sprintf("failed to connect %s to %q (%s)", ev.Device, ev.Name, ev.Result)
+			r.Failed = true
+		}
+	case "network_disconnect":
+		r.Fields = append(r.Fields, [2]string{"INTERFACE", ev.Device}, [2]string{"CONNECTION", ev.Name})
+		r.Text = fmt.Sprintf("disconnected %s from %q", ev.Device, ev.Name)
+	case "wifi_on":
+		r.Text = "turned Wi-Fi on"
+	case "wifi_off":
+		r.Text = "turned Wi-Fi off"
 	case "polkit":
 		r.Fields = append(r.Fields, [2]string{"ACTION", ev.Action}, [2]string{"IDENTITY", ev.Identity}, [2]string{"RESULT", ev.Result})
 		switch ev.Result {

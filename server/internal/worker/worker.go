@@ -49,6 +49,7 @@ type Worker struct {
 	events    *eventHub
 	watcher   *dirWatcher
 	drives    *driveService
+	network   *networkService
 	jobs      *jobManager
 	logind    *logindConn
 	polkit    *polkitAgent
@@ -103,6 +104,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		events:     events,
 		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
 		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
+		network:    newNetworkService(func() { events.publish(event{Type: "network"}) }),
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
 		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
@@ -156,6 +158,11 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/network", w.handleNetwork)
+	m.HandleFunc("POST /api/v1/network/wifi", w.handleWifiSwitch)
+	m.HandleFunc("POST /api/v1/network/scan", w.handleNetworkScan)
+	m.HandleFunc("POST /api/v1/network/connect", w.handleNetworkConnect)
+	m.HandleFunc("POST /api/v1/network/disconnect", w.handleNetworkDisconnect)
 	m.HandleFunc("GET /api/v1/bookmarks", w.handleBookmarks)
 	m.HandleFunc("POST /api/v1/bookmarks", w.handleBookmarkAdd)
 	m.HandleFunc("DELETE /api/v1/bookmarks", w.handleBookmarkRemove)
@@ -232,6 +239,7 @@ func (w *Worker) handleHello(rw http.ResponseWriter, r *http.Request) {
 func (w *Worker) Shutdown() {
 	w.watcher.close()
 	w.drives.close()
+	w.network.close()
 	w.polkit.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()

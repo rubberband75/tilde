@@ -94,13 +94,23 @@ bug in Tilde can never give more than the account already has.
   name may start or cancel a request, so another user cannot put a
   password dialog in this user's browser. The browser may answer only as
   one of the users polkit named. Locked browsers cannot reach it (`423`).
+- Network (D55): the worker changes the host's network only through
+  NetworkManager on the system bus, as the user, so NetworkManager and
+  polkit decide (from a web session polkit usually wants an
+  administrator's password). Requests can only name devices and networks
+  NetworkManager lists. A Wi-Fi password goes to NetworkManager, which
+  stores it in its system connection as nm-applet does; the worker keeps
+  and logs none, and the browser's field is a password entry with no
+  autocomplete. A new connection whose password was refused is deleted.
+  Turning off what the browser may be using asks first.
 - Audit log (D46): root writes to the system journal, tagged
   `tilde-audit` with the facility authpriv (so rsyslog also files it in
   `/var/log/auth.log`): logins and failed logins, the rate limit, locks
   (by the user, idle or logind), unlocks, signing out, sessions starting
   and ending, terminals, deletions (move to trash, delete permanently,
-  empty trash; the first 20 paths and a count), mounts, unmounts, ejects
-  and polkit authentications. Fields: `TILDE_EVENT`, `TILDE_USER`,
+  empty trash; the first 20 paths and a count), mounts, unmounts, ejects,
+  polkit authentications, network connections, disconnections and the
+  Wi-Fi switch. Fields: `TILDE_EVENT`, `TILDE_USER`,
   `TILDE_RHOST`, and per event `TILDE_PATH`, `TILDE_COUNT`,
   `TILDE_REASON`, `TILDE_ACTION`... Read it with `journalctl -t
   tilde-audit` (`TILDE_USER=alice` to filter). The worker reports its

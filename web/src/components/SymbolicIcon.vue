@@ -38,6 +38,12 @@ export type SymbolicName =
   | 'volume'
   | 'volume-muted'
   | 'check'
+  | 'network-wired'
+  | 'network-wireless-0'
+  | 'network-wireless-1'
+  | 'network-wireless-2'
+  | 'network-wireless-3'
+  | 'network-offline'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -76,6 +82,13 @@ const paths: Record<SymbolicName, string> = {
   volume: 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9',
   'volume-muted': 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 6l3.5 4M14.5 6 11 10',
   check: 'M3 8.5l3.5 3.5L13 4.5',
+  'network-wired': 'M2.5 8.5h11v5h-11zM5 8.5V6h6v2.5M8 6V2.5M5.5 11h.01M8 11h.01M10.5 11h.01',
+  'network-wireless-0': 'M8 13.25v.5',
+  'network-wireless-1': 'M8 13.25v.5M5.53 11.03A3.5 3.5 0 0 1 10.47 11.03',
+  'network-wireless-2': 'M8 13.25v.5M5.53 11.03A3.5 3.5 0 0 1 10.47 11.03M3.4 8.9A6.5 6.5 0 0 1 12.6 8.9',
+  'network-wireless-3':
+    'M8 13.25v.5M5.53 11.03A3.5 3.5 0 0 1 10.47 11.03M3.4 8.9A6.5 6.5 0 0 1 12.6 8.9M1.28 6.78A9.5 9.5 0 0 1 14.72 6.78',
+  'network-offline': 'M3.4 8.9A6.5 6.5 0 0 1 12.6 8.9M1.28 6.78A9.5 9.5 0 0 1 14.72 6.78M2.5 2.5l11 11',
 }
 
 const d = computed(() => paths[props.name])

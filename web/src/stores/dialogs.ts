@@ -15,6 +15,8 @@ export interface PromptOptions extends ConfirmOptions {
   value?: string
   /** Accessible label of the entry. */
   label?: string
+  /** Hide what is typed (a Wi-Fi password). */
+  password?: boolean
 }
 
 interface Pending extends PromptOptions {

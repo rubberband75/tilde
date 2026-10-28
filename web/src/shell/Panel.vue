@@ -11,6 +11,7 @@ import StartMenu from './StartMenu.vue'
 import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
 import ClientsApplet from './ClientsApplet.vue'
+import NetworkApplet from './NetworkApplet.vue'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
 
@@ -43,6 +44,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
       >
         <SymbolicIcon name="fullscreen" :size="16" />
       </button>
+      <NetworkApplet />
       <ClientsApplet />
       <div class="applet user" :title="`Logged in as ${session.info?.user}`">{{ session.info?.user }}</div>
       <PanelClock />

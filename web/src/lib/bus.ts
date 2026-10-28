@@ -37,3 +37,15 @@ export function onDrivesChanged(fn: () => void): () => void {
 export function emitDrivesChanged(): void {
   driveHandlers.forEach((fn) => fn())
 }
+
+const networkHandlers = new Set<() => void>()
+
+/** NetworkManager's devices or connections changed (the worker's "network" event). */
+export function onNetworkChanged(fn: () => void): () => void {
+  networkHandlers.add(fn)
+  return () => networkHandlers.delete(fn)
+}
+
+export function emitNetworkChanged(): void {
+  networkHandlers.forEach((fn) => fn())
+}

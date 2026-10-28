@@ -43,6 +43,8 @@ function answer(ok: boolean) {
           ref="entry"
           v-model="value"
           class="entry prompt"
+          :type="current.password ? 'password' : 'text'"
+          :autocomplete="current.password ? 'off' : undefined"
           :aria-label="current.label ?? current.title"
           @keydown.enter.prevent="answer(true)"
         />

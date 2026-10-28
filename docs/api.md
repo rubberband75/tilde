@@ -149,6 +149,11 @@ the mount table and `udisks` is false.
 | GET | `/api/v1/drives` | `{udisks, volumes: Volume[]}`: the root first, then mounted volumes, then unmounted ones. `Volume`: `{id, device, name, fsType, size, free?, mountPoint?, removable, canEject, system, icons}`. `id` is a udisks block object path, or `mount:` and the mount point for mounts udisks does not know. `name` is the label, else the mount folder's name, else "4.0 GB Volume". `canEject`: mounted under the user's `/media` (what udisks mounted for them), or on a removable non-system drive. `icons` are freedesktop names, most specific first |
 | POST | `/api/v1/drives/mount` | `{id}` → `Volume`, mounted (at once if it already is). From a web session polkit wants a password: it asks through Tilde's agent (D44), and the request waits while the dialog is open. `403 cancelled` if the user cancels, `403 not_authorized` if polkit refuses (or no agent is running) |
 | POST | `/api/v1/drives/unmount` | `{id}` → `204`. udisks lets users unmount their own mounts; others need an administrator: `403 not_authorized`. `409 busy` while files are open on it |
+| GET | `/api/v1/network` | `NetworkState` (D55): `{available, wifiEnabled, wifiHardware, devices: NetDevice[]}`. `available` is false without NetworkManager. `NetDevice`: `{id, interface, type: ethernet\|wifi, state: connected\|connecting\|disconnected\|unavailable\|deactivating\|failed, connection?, addresses?, default, networks?}`; only wired and Wi-Fi devices NetworkManager manages, wired first. `default`: carries the default route. `networks` (Wi-Fi): `{ssid, strength (0–100), security: none\|psk\|sae\|enterprise\|other, active, known}`, one per network name (its strongest access point), the connected one first, then by strength; hidden networks left out |
+| POST | `/api/v1/network/wifi` | `{enabled}` → `204`. The Wi-Fi switch; polkit may ask for a password through Tilde's agent (D44): `403 not_authorized` if refused |
+| POST | `/api/v1/network/scan` | `{device}` → `204`. Asks a Wi-Fi device to scan now; results come as `network` events. A scan polkit refuses is not an error (NetworkManager scans by itself) |
+| POST | `/api/v1/network/connect` | `{device, ssid?, password?}` → `{connected, reason: ""\|wrong_password\|failed\|timeout}` once the connection is up or has failed (up to 45 s, plus a polkit dialog). Wired: NetworkManager picks the connection. Wi-Fi: `ssid` must be in range; a saved connection is used (with `password`, its password is replaced first), else a new system-wide one is made. `400 password_required` for a new secured network without `password`, `400 unsupported` for enterprise and other security. A new connection whose password was refused is deleted again |
+| POST | `/api/v1/network/disconnect` | `{device}` → `204`. NetworkManager leaves the device down until it is connected again |
 | POST | `/api/v1/drives/eject` | `{id}` → `{unmounted, ejected}`. Unmounts every mounted volume of the drive, then powers the drive off (or ejects the medium). polkit refuses that last step outside an active local session, so `ejected` is usually false from a browser; the drive is unmounted and safe to unplug either way |
 
 Only mounting asks polkit for a password (through the agent below);
@@ -248,6 +253,10 @@ A client that falls too far behind is closed with 1013 and should reconnect.
 `{"type":"drives"}` says drives or volumes changed (plugged in, mounted,
 unmounted, from udisks signals, at most every 300 ms once a client has
 asked for `/api/v1/drives`): fetch the list again.
+
+`{"type":"network"}` says NetworkManager's devices, connections or access
+points changed (at most once a second once a client has asked for
+`/api/v1/network`): fetch it again.
 
 `{"type":"polkit"}` says polkit's authentication requests changed (D44):
 fetch `/api/v1/polkit` again. Requests made while the socket was down are

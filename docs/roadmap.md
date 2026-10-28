@@ -33,7 +33,7 @@ to; tick items off as they land.
 - [x] Layout persisted per user, restored on reload
 - [x] Notifications (simple toasts)
 - [x] Bundled Mint-Y icons with fallback glyphs
-- [ ] Panel: system tray applets (sound, network) — needs D-Bus in the worker
+- [x] Panel: network applet (D55): NetworkManager's wired and Wi-Fi devices, the Wi-Fi switch, connecting to networks (passwords, polkit), a warning before cutting off the browser's own connection
 - [x] Calendar popup on the clock (D54): today's date, a month to page through (buttons, wheel), weeks starting on the locale's first day
 - [x] Keyboard shortcuts (D53): Cinnamon's keys in fullscreen with Keyboard Lock (panel and menu button), Alt+Shift alternates in any browser; Alt+Tab switcher, Super+arrows tiling, Show Desktop, Alt+F4, window menu, Move/Resize
 - [x] Edge snapping and tiling (D52): halves at the side and top edges, quarters at the corners; a preview while dragging; the window's own size back when dragged out; kept through reloads
@@ -100,6 +100,7 @@ to; tick items off as they land.
 ## Phase 7 — Remote windows
 
 - [ ] Xpra HTML5 client in a window; launch host `.desktop` apps from the menu
+- [ ] Sound applet: host volume through PipeWire, with Xpra's audio (moved from phase 2, D55)
 
 ## Phase 8 — Multi-machine
 

@@ -130,6 +130,29 @@ func TestAuditFromWorker(t *testing.T) {
 	}
 }
 
+func TestAuditNetworkFromWorker(t *testing.T) {
+	for _, tc := range []struct {
+		ev     protocol.AuditEvent
+		want   string
+		failed bool
+	}{
+		{protocol.AuditEvent{Event: "network_connect", Name: "HomeNet", Device: "wlp2s0", Result: "connected"},
+			`alice connected wlp2s0 to "HomeNet" from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "network_connect", Name: "Cafe", Device: "wlp2s0", Result: "wrong_password"},
+			`alice failed to connect wlp2s0 to "Cafe" (wrong_password) from 192.0.2.1`, true},
+		{protocol.AuditEvent{Event: "network_disconnect", Name: "Wired connection 1", Device: "enp3s0"},
+			`alice disconnected enp3s0 from "Wired connection 1" from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "wifi_off"}, `alice turned Wi-Fi off from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "wifi_on"}, `alice turned Wi-Fi on from 192.0.2.1`, false},
+	} {
+		tc.ev.Rhost = "192.0.2.1"
+		r, ok := workerRecord("alice", tc.ev)
+		if !ok || r.message() != tc.want || r.Failed != tc.failed {
+			t.Errorf("%s: %v %q failed=%v, want %q failed=%v", tc.ev.Event, ok, r.message(), r.Failed, tc.want, tc.failed)
+		}
+	}
+}
+
 // TestJournal: records reach journald's socket in its native protocol,
 // values with line breaks in the binary form.
 func TestJournal(t *testing.T) {

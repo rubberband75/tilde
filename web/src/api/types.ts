@@ -184,6 +184,7 @@ export type WorkerEvent =
   | { type: 'fs'; dirs: string[] }
   /** Drives or volumes changed (plugged in, mounted, unmounted): fetch /api/v1/drives again. */
   | { type: 'drives' }
+  | { type: 'network' }
   /** polkit's authentication requests changed: fetch /api/v1/polkit again (D44). */
   | { type: 'polkit' }
 
@@ -268,6 +269,46 @@ export interface PolkitRequest {
   identities: string[]
   /** A question after the password (a verification code), waiting for its answer. */
   prompt?: AuthPrompt
+}
+
+/** GET /api/v1/network (D55): NetworkManager's wired and Wi-Fi devices. */
+export interface NetworkState {
+  /** False without NetworkManager; the applet is hidden. */
+  available: boolean
+  wifiEnabled: boolean
+  /** The radio's own switch (airplane-mode key); software cannot turn it back on. */
+  wifiHardware: boolean
+  devices: NetDevice[]
+}
+
+export interface NetDevice {
+  id: string
+  interface: string
+  type: 'ethernet' | 'wifi'
+  state: 'connected' | 'connecting' | 'disconnected' | 'unavailable' | 'deactivating' | 'failed'
+  connection?: string
+  /** IP addresses, without prefix lengths. */
+  addresses?: string[]
+  /** Carries the default route. */
+  default: boolean
+  networks?: WifiNetwork[]
+}
+
+export interface WifiNetwork {
+  ssid: string
+  /** 0–100. */
+  strength: number
+  /** none, psk (WPA2 Personal), sae (WPA3 Personal); enterprise and other need a connections editor. */
+  security: 'none' | 'psk' | 'sae' | 'enterprise' | 'other'
+  active: boolean
+  /** NetworkManager has a saved connection for it. */
+  known: boolean
+}
+
+/** POST /api/v1/network/connect */
+export interface ConnectResult {
+  connected: boolean
+  reason: '' | 'wrong_password' | 'failed' | 'timeout'
 }
 
 /** GET /api/v1/polkit */

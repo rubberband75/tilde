@@ -59,6 +59,10 @@
   --menu-box-bg: #303036;
   --menu-entry-bg: #303036;
   --menu-entry-fg: #d3d3d3;
+  /* GtkSwitch (the network applet's Wi-Fi switch) */
+  --switch-bg: #3b3b41;
+  --switch-on-bg: #35a854;
+  --switch-thumb: #e6e6e6;
 
   /* GTK popup menus (context menus inside apps) */
   --popup-bg: #2e2e33;

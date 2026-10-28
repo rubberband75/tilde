@@ -22,6 +22,15 @@ type badRequest struct{ msg string }
 
 func (e badRequest) Error() string { return e.msg }
 
+// codedErr is a client error with its own status and code, for the
+// frontend to act on (a Wi-Fi network that needs a password).
+type codedErr struct {
+	status    int
+	code, msg string
+}
+
+func (e codedErr) Error() string { return e.msg }
+
 // ErrOtherDrive is returned when an operation would cross filesystems.
 var ErrOtherDrive = errors.New("the file is on a different drive")
 
@@ -45,7 +54,10 @@ func writeErr(w http.ResponseWriter, err error) {
 // the code for per-item errors too.
 func classifyErr(err error) (int, string) {
 	var br badRequest
+	var ce codedErr
 	switch {
+	case errors.As(err, &ce):
+		return ce.status, ce.code
 	case errors.As(err, &br):
 		return http.StatusBadRequest, "bad_request"
 	case errors.Is(err, fs.ErrNotExist):

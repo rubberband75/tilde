@@ -123,7 +123,8 @@ const ClientHeader = "X-Tilde-Client"
 // many it takes.
 type AuditEvent struct {
 	// Event: terminal_open, terminal_close, trash, delete, empty_trash,
-	// mount, unmount, eject, polkit.
+	// mount, unmount, eject, polkit, network_connect, network_disconnect,
+	// wifi_on, wifi_off.
 	Event string `json:"event"`
 	// Rhost is the browser's address (ClientHeader); empty for what no
 	// request caused, such as a shell that exited.
@@ -131,12 +132,14 @@ type AuditEvent struct {
 	// Paths are the first items concerned; Count is how many there were.
 	Paths []string `json:"paths,omitempty"`
 	Count int      `json:"count,omitempty"`
-	// Terminal is the terminal's id; Name and Device name a volume.
+	// Terminal is the terminal's id; Name and Device name a volume, or a
+	// network connection and its interface.
 	Terminal string `json:"terminal,omitempty"`
 	Name     string `json:"name,omitempty"`
 	Device   string `json:"device,omitempty"`
 	// Action, Identity and Result describe a polkit request: what for,
-	// whose password, and granted, failed or cancelled.
+	// whose password, and granted, failed or cancelled. Result is also how
+	// a network connection went: connected, wrong_password, failed, timeout.
 	Action   string `json:"action,omitempty"`
 	Identity string `json:"identity,omitempty"`
 	Result   string `json:"result,omitempty"`
