@@ -651,6 +651,40 @@ untrusted files in the user's session for formats most browsers play);
 the browser's built-in controls (they cannot follow the theme or show
 the playlist).
 
+**D52 — Edge tiling and the window menu, as in Cinnamon** (2026-10-27, accepted)
+Dragging a window by its title bar to the left, right or top edge of the
+work area tiles it to that half; the ends of those edges (a quarter of
+the edge, at most 160 px) give the four quarters. The top edge tiles
+rather than maximizes (Cinnamon offers either, as `tile-maximize`; chosen
+by the project owner): maximizing already has the button, a double-click
+and the menu, and a top half would otherwise be out of reach. The bottom edge is the panel, so the
+bottom half waits for keyboard tiling. A preview in the selection color shows
+under the window while the pointer is in a zone, and the pointer may be
+past the edge (over the panel, or outside the browser while the drag holds
+the pointer). The window keeps its own rect: the tile is a field next to
+it (`tile`) and is drawn from the work area, so it follows a browser
+resize, comes back after a reload, after minimizing and after
+maximizing; dragging the window out gives it its own size again under the
+pointer, as dragging out of maximized does. Resizing a tile (a handle,
+or the menu's Resize) makes it a plain window where it is, rather than
+resizing its neighbour, which Muffin does and Tilde leaves for later.
+Right-clicking the title bar opens Cinnamon's window menu with the items
+that mean something in a browser: Minimize, Maximize or Unmaximize, Move,
+Resize, Always on Top and Close. Move and Resize follow the pointer with
+no button held, or the arrow keys (10 px); a click or Enter keeps the
+change, Escape or a right click undoes it. Browsers cannot warp the
+pointer, so it moves the window by how far it goes rather than carrying
+it. Always on Top (`above`, saved with the layout) puts the window, and a
+dialog of it, in a layer above the others; the window layer is now its own
+stacking context, so neither that layer nor z-indexes that grow with every
+focus change can reach the panel, the notices or the start menu (before,
+about 50 000 focus changes would have put windows over the panel).
+Not yet: keyboard tiling (Super+arrows, with the keyboard shortcuts item),
+Alt+Space for the menu, workspaces. Rejected: interact.js for the snap
+math (D6 kept it as an option; the zones are a few lines and testable on
+their own in `wm/snap.ts`); moving the window under the pointer as
+Cinnamon's Move does by warping it.
+
 ---
 
 ## Open decisions

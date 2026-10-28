@@ -129,6 +129,7 @@ select {
   outline: none;
 }
 .popup-menu .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -139,6 +140,11 @@ select {
 .popup-menu .item[data-highlighted] {
   background: var(--popup-item-hover-bg);
   color: var(--popup-item-hover-fg);
+}
+/* The check of a checkbox item, in the item's left padding. */
+.popup-menu .item .indicator {
+  position: absolute;
+  left: 2px;
 }
 .popup-menu .item[data-disabled] {
   opacity: 0.45;

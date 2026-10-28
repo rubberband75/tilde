@@ -1,15 +1,27 @@
 <script setup lang="ts">
 // One window: Mint-Y title bar, drag, eight resize handles, minimize,
-// maximize and close. Geometry lives in the window store; during a drag the
-// frame moves with a CSS transform and commits the position on release,
-// which avoids relayout on every pointer move.
-import { computed, nextTick, ref, watch } from 'vue'
+// maximize and close, edge tiling and the window menu (D52). Geometry lives
+// in the window store; during a drag the frame moves with a CSS transform
+// and commits the position on release, which avoids relayout on every
+// pointer move.
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuItemIndicator,
+  ContextMenuPortal,
+  ContextMenuRoot,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from 'reka-ui'
 import { appComponent, getApp } from '@/apps/registry'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import { createContext } from '@/shell/actions'
 import { useWindows, type AppWindow, type Rect } from '@/stores/windows'
 import { currentStyle, type WindowButton } from '@/theme/desktopStyle'
+import { snapTarget, tileRect, type Tile } from './snap'
 
 const props = defineProps<{ win: AppWindow }>()
 const wm = useWindows()
@@ -20,12 +32,18 @@ const ctx = createContext(props.win.id)
 
 const focused = computed(() => wm.focusedId === props.win.id)
 const maximized = computed(() => props.win.state === 'maximized')
+const tiled = computed(() => !maximized.value && !!props.win.tile)
 const minimized = computed(() => wm.isHidden(props.win))
 /** A modal dialog of this window is open: the content takes no input. */
 const blocked = computed(() => !!wm.dialogOf(props.win.id))
 
 const content = ref<HTMLElement | null>(null)
 let lastFocus: HTMLElement | null = null
+
+/** Gives keyboard focus back to the widget inside that had it last. */
+function refocus() {
+  if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
+}
 
 function onFocusIn(e: FocusEvent) {
   if (e.target instanceof HTMLElement) lastFocus = e.target
@@ -41,31 +59,25 @@ function onFocusIn(e: FocusEvent) {
 function keepFocus(e: MouseEvent) {
   e.preventDefault()
   if (content.value?.contains(document.activeElement)) return
-  if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
+  refocus()
 }
 
 // When its dialog closes, the window's focus goes back where it was.
 watch(blocked, (now, before) => {
-  if (before && !now && focused.value) {
-    void nextTick(() => {
-      if (lastFocus?.isConnected && content.value?.contains(lastFocus)) lastFocus.focus({ preventScroll: true })
-    })
-  }
+  if (before && !now && focused.value) void nextTick(refocus)
 })
 
 const drag = ref<{ dx: number; dy: number } | null>(null)
 const live = ref<Rect | null>(null)
 
 const style = computed(() => {
-  const z = props.win.z
-  if (maximized.value) return { left: '0px', top: '0px', width: `${wm.area.w}px`, height: `${wm.area.h}px`, zIndex: z }
-  const r = live.value ?? props.win.rect
+  const r = (!maximized.value && live.value) || wm.shownRect(props.win)
   return {
     left: `${r.x}px`,
     top: `${r.y}px`,
     width: `${r.w}px`,
     height: `${r.h}px`,
-    zIndex: z,
+    zIndex: wm.stackZ(props.win),
     transform: drag.value ? `translate3d(${drag.value.dx}px, ${drag.value.dy}px, 0)` : undefined,
   }
 })
@@ -75,28 +87,41 @@ function startDrag(e: PointerEvent) {
   wm.focus(props.win.id)
   const el = e.currentTarget as HTMLElement
   el.setPointerCapture(e.pointerId)
-  const sx = e.clientX
-  const sy = e.clientY
+  // Pointer positions are taken relative to the work area.
+  const layer = el.closest('.window-layer')?.getBoundingClientRect() ?? { left: 0, top: 0 }
+  const sx = e.clientX - layer.left
+  const sy = e.clientY - layer.top
   let base: Rect = { ...props.win.rect }
   let moved = false
+  let target: Tile | null = null
+
+  // The edge tiling preview, under the window (D52).
+  const showSnap = (t: Tile | null) => {
+    if (t === target) return
+    target = t
+    wm.snapPreview = t ? { rect: tileRect(t, wm.area), z: wm.stackZ(props.win) } : null
+  }
 
   const onMove = (ev: PointerEvent) => {
-    const dx = ev.clientX - sx
-    const dy = ev.clientY - sy
+    const dx = ev.clientX - layer.left - sx
+    const dy = ev.clientY - layer.top - sy
     if (!moved) {
       if (Math.abs(dx) + Math.abs(dy) < 4) return
       moved = true
       wm.interacting = true
-      if (maximized.value) {
-        // Leave maximized under the pointer, keeping the grab point at the
-        // same relative position along the title bar, as Cinnamon does.
-        const ratio = sx / Math.max(1, wm.area.w)
-        base = { ...props.win.rect, x: sx - props.win.rect.w * ratio, y: 0 }
-        wm.setRect(props.win.id, base)
-        wm.toggleMaximize(props.win.id)
+      if (maximized.value || tiled.value) {
+        // Leave maximized or the tile under the pointer, keeping the grab
+        // point at the same relative position along the title bar, as
+        // Cinnamon does; the window gets its own size back.
+        const shown = wm.shownRect(props.win)
+        const ratio = (sx - shown.x) / Math.max(1, shown.w)
+        wm.setRect(props.win.id, { ...props.win.rect, x: sx - props.win.rect.w * ratio, y: shown.y })
+        wm.restore(props.win.id)
+        base = { ...props.win.rect }
       }
     }
     drag.value = { dx, dy }
+    showSnap(snapTarget(sx + dx, sy + dy, wm.area))
   }
   const onUp = (ev: PointerEvent) => {
     el.releasePointerCapture(ev.pointerId)
@@ -104,8 +129,11 @@ function startDrag(e: PointerEvent) {
     el.removeEventListener('pointerup', onUp)
     el.removeEventListener('pointercancel', onUp)
     if (moved && drag.value) {
-      wm.setRect(props.win.id, { ...base, x: base.x + drag.value.dx, y: base.y + drag.value.dy })
+      // A tiled window keeps base, the rect it had before, for later.
+      if (target && ev.type === 'pointerup') wm.snapTo(props.win.id, target)
+      else wm.setRect(props.win.id, { ...base, x: base.x + drag.value.dx, y: base.y + drag.value.dy })
     }
+    wm.snapPreview = null
     drag.value = null
     wm.interacting = false
   }
@@ -120,6 +148,8 @@ type Edge = (typeof edges)[number]
 function startResize(e: PointerEvent, edge: Edge) {
   if (e.button !== 0 || maximized.value) return
   wm.focus(props.win.id)
+  // Resizing a tile makes it a plain window where it is.
+  wm.untile(props.win.id)
   const el = e.currentTarget as HTMLElement
   el.setPointerCapture(e.pointerId)
   const start = { ...props.win.rect }
@@ -162,6 +192,95 @@ function startResize(e: PointerEvent, edge: Edge) {
   el.addEventListener('pointercancel', onUp)
 }
 
+/** Arrow-key step for the window menu's Move and Resize, in pixels. */
+const KEY_STEP = 10
+let endKeyboardMode: ((keep: boolean) => void) | null = null
+
+/**
+ * The window menu's Move and Resize, as in Cinnamon: moving the pointer
+ * (no button held) or the arrow keys move the window or its bottom-right
+ * corner; a click or Enter keeps the change, Escape or a right click
+ * undoes it. Browsers cannot warp the pointer, so it moves the window by
+ * how far it goes rather than taking it along.
+ */
+function startKeyboardMode(mode: 'move' | 'resize') {
+  if (maximized.value || endKeyboardMode) return
+  wm.focus(props.win.id)
+  wm.untile(props.win.id)
+  const id = props.win.id
+  const start = { ...props.win.rect }
+  const min = app.value?.minSize ?? { w: 240, h: 140 }
+  let dx = 0
+  let dy = 0
+  let last: { x: number; y: number } | null = null
+  const apply = () => {
+    live.value =
+      mode === 'move'
+        ? { ...start, x: start.x + dx, y: start.y + dy }
+        : { ...start, w: Math.max(min.w, start.w + dx), h: Math.max(min.h, start.h + dy) }
+  }
+
+  const onMove = (ev: PointerEvent) => {
+    if (last) {
+      dx += ev.clientX - last.x
+      dy += ev.clientY - last.y
+      apply()
+    }
+    last = { x: ev.clientX, y: ev.clientY }
+  }
+  const steps: Record<string, [number, number]> = {
+    ArrowLeft: [-KEY_STEP, 0],
+    ArrowRight: [KEY_STEP, 0],
+    ArrowUp: [0, -KEY_STEP],
+    ArrowDown: [0, KEY_STEP],
+  }
+  // Every key goes to the mode, not to the app (the lock shortcut, caught
+  // earlier on the window, still works).
+  const onKey = (ev: KeyboardEvent) => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    const step = steps[ev.key]
+    if (step) {
+      dx += step[0]
+      dy += step[1]
+      apply()
+    } else if (ev.key === 'Enter' || ev.key === ' ') end(true)
+    else if (ev.key === 'Escape') end(false)
+  }
+  const onDown = (ev: PointerEvent) => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    end(ev.button === 0)
+  }
+
+  const end = (keep: boolean) => {
+    window.removeEventListener('pointermove', onMove, true)
+    window.removeEventListener('keydown', onKey, true)
+    window.removeEventListener('pointerdown', onDown, true)
+    if (keep && live.value) wm.setRect(id, live.value)
+    live.value = null
+    wm.interacting = false
+    wm.cursor = ''
+    endKeyboardMode = null
+    refocus()
+  }
+  endKeyboardMode = end
+  apply()
+  wm.interacting = true
+  wm.cursor = mode === 'move' ? 'move' : 'se-resize'
+  window.addEventListener('pointermove', onMove, true)
+  window.addEventListener('keydown', onKey, true)
+  window.addEventListener('pointerdown', onDown, true)
+}
+
+onBeforeUnmount(() => endKeyboardMode?.(false))
+
+/** The menu gives focus to the title bar when it closes; the window's widget should have it. */
+function onMenuClosed(e: Event) {
+  e.preventDefault()
+  refocus()
+}
+
 function press(button: WindowButton) {
   if (button === 'minimize') wm.minimize(props.win.id)
   else if (button === 'maximize') wm.toggleMaximize(props.win.id)
@@ -179,44 +298,76 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
 <template>
   <section
     class="window"
-    :class="{ focused, maximized, minimized, dragging: !!drag }"
+    :class="{ focused, maximized, tiled, minimized, dragging: !!drag }"
     :style="style"
     role="dialog"
     :aria-label="win.title"
     @pointerdown.capture="wm.focus(win.id)"
   >
-    <header class="titlebar" @pointerdown="startDrag" @mousedown="keepFocus" @dblclick="wm.toggleMaximize(win.id)">
-      <div class="buttons left">
-        <button
-          v-for="b in currentStyle.buttons.left"
-          :key="b"
-          class="wm-button"
-          :class="b"
-          :title="buttonLabels[b]"
-          @pointerdown.stop
-          @dblclick.stop
-          @click="press(b)"
-        >
-          <SymbolicIcon :name="buttonIcon(b)" :size="14" />
-        </button>
-      </div>
-      <ThemeIcon class="title-icon" :name="win.icon" :size="16" />
-      <span class="title">{{ win.title }}</span>
-      <div class="buttons right">
-        <button
-          v-for="b in currentStyle.buttons.right"
-          :key="b"
-          class="wm-button"
-          :class="b"
-          :title="buttonLabels[b]"
-          @pointerdown.stop
-          @dblclick.stop
-          @click="press(b)"
-        >
-          <SymbolicIcon :name="buttonIcon(b)" :size="14" />
-        </button>
-      </div>
-    </header>
+    <ContextMenuRoot :modal="false">
+      <ContextMenuTrigger as-child>
+        <header class="titlebar" @pointerdown="startDrag" @mousedown="keepFocus" @dblclick="wm.toggleMaximize(win.id)">
+          <div class="buttons left">
+            <button
+              v-for="b in currentStyle.buttons.left"
+              :key="b"
+              class="wm-button"
+              :class="b"
+              :title="buttonLabels[b]"
+              @pointerdown.stop
+              @dblclick.stop
+              @click="press(b)"
+            >
+              <SymbolicIcon :name="buttonIcon(b)" :size="14" />
+            </button>
+          </div>
+          <ThemeIcon class="title-icon" :name="win.icon" :size="16" />
+          <span class="title">{{ win.title }}</span>
+          <div class="buttons right">
+            <button
+              v-for="b in currentStyle.buttons.right"
+              :key="b"
+              class="wm-button"
+              :class="b"
+              :title="buttonLabels[b]"
+              @pointerdown.stop
+              @dblclick.stop
+              @click="press(b)"
+            >
+              <SymbolicIcon :name="buttonIcon(b)" :size="14" />
+            </button>
+          </div>
+        </header>
+      </ContextMenuTrigger>
+      <ContextMenuPortal>
+        <ContextMenuContent class="popup-menu" @close-auto-focus="onMenuClosed">
+          <ContextMenuItem class="item" @select="wm.minimize(win.id)">Minimize</ContextMenuItem>
+          <ContextMenuItem class="item" @select="wm.toggleMaximize(win.id)">
+            {{ maximized ? 'Unmaximize' : 'Maximize' }}
+          </ContextMenuItem>
+          <ContextMenuItem class="item" :disabled="maximized" @select="startKeyboardMode('move')">Move</ContextMenuItem>
+          <ContextMenuItem class="item" :disabled="maximized" @select="startKeyboardMode('resize')">
+            Resize
+          </ContextMenuItem>
+          <!-- A dialog is stacked with its parent. -->
+          <template v-if="!win.parentId">
+            <ContextMenuSeparator class="separator" />
+            <ContextMenuCheckboxItem
+              class="item"
+              :model-value="!!win.above"
+              @update:model-value="wm.setAbove(win.id, $event === true)"
+            >
+              <ContextMenuItemIndicator class="indicator"
+                ><SymbolicIcon name="check" :size="14"
+              /></ContextMenuItemIndicator>
+              Always on Top
+            </ContextMenuCheckboxItem>
+          </template>
+          <ContextMenuSeparator class="separator" />
+          <ContextMenuItem class="item" @select="wm.requestClose(win.id)">Close</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenuPortal>
+    </ContextMenuRoot>
     <div ref="content" class="content" :inert="blocked" @focusin="onFocusIn">
       <component :is="comp" v-if="comp" :ctx="ctx" />
     </div>
@@ -251,6 +402,10 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
 .window.maximized {
   border-radius: 0;
   border: none;
+}
+/* GTK squares the corners of tiled windows. */
+.window.tiled {
+  border-radius: 0;
 }
 .window.minimized {
   display: none;

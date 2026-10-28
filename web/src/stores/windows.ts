@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, watch } from 'vue'
 import { getApp } from '@/apps/registry'
+import { isTile, tileRect, type Tile } from '@/wm/snap'
 
 export type WindowState = 'normal' | 'minimized' | 'maximized'
 
@@ -21,6 +22,13 @@ export interface AppWindow {
   state: WindowState
   /** Whether a minimized window was maximized before. */
   wasMaximized?: boolean
+  /**
+   * The part of the screen a tiled window fills (D52). rect stays the size
+   * it had before, which dragging it out of the tile brings back.
+   */
+  tile?: Tile
+  /** Always on Top: stacked above every window without it. */
+  above?: boolean
   z: number
   /** Launch args plus state saved by the app; persisted with the layout. */
   args: Record<string, unknown>
@@ -36,6 +44,8 @@ export interface AppWindow {
 const LAYOUT_VERSION = 1
 /** How much of a window must stay on screen when dragged off an edge. */
 const KEEP_VISIBLE = 64
+/** Added to the z of Always on Top windows; z counts focus changes, far below this. */
+const ABOVE_LAYER = 1_000_000_000
 
 /**
  * The window manager's state (docs/architecture.md, "Window manager").
@@ -49,6 +59,10 @@ export const useWindows = defineStore('windows', () => {
   const area = reactive({ w: window.innerWidth, h: window.innerHeight - 40 })
   /** True during a drag or resize; shows an overlay over iframes/terminals. */
   const interacting = ref(false)
+  /** The pointer's cursor over that overlay (the window menu's Move and Resize). */
+  const cursor = ref('')
+  /** Where a window being dragged to an edge would go, shown under it. */
+  const snapPreview = ref<{ rect: Rect; z: number } | null>(null)
 
   let zTop = 10
   let seq = 0
@@ -73,6 +87,25 @@ export const useWindows = defineStore('windows', () => {
     if (w.state === 'minimized') return true
     const parent = w.parentId ? get(w.parentId) : undefined
     return !!parent && isHidden(parent)
+  }
+
+  /** Always on Top, by itself or as the dialog of such a window. */
+  function isAbove(w: AppWindow): boolean {
+    if (w.above) return true
+    const parent = w.parentId ? get(w.parentId) : undefined
+    return !!parent && isAbove(parent)
+  }
+
+  /** The window's z-index: its focus order, within its layer. */
+  function stackZ(w: AppWindow): number {
+    return w.z + (isAbove(w) ? ABOVE_LAYER : 0)
+  }
+
+  /** Where the window is drawn: the whole work area, its tile, or its rect. */
+  function shownRect(w: AppWindow): Rect {
+    if (w.state === 'maximized') return { x: 0, y: 0, w: area.w, h: area.h }
+    if (w.tile) return tileRect(w.tile, area)
+    return w.rect
   }
 
   function clampSize(size: { w: number; h: number }) {
@@ -128,7 +161,7 @@ export const useWindows = defineStore('windows', () => {
     if (!parent || !app || dialogOf(parentId)) return undefined
     const id = `w${Date.now().toString(36)}${(seq++).toString(36)}`
     const size = clampSize(app.defaultSize)
-    const p = parent.state === 'maximized' ? { x: 0, y: 0, w: area.w, h: area.h } : parent.rect
+    const p = shownRect(parent)
     const rect = clampRect({ x: p.x + (p.w - size.w) / 2, y: p.y + Math.max(0, (p.h - size.h) / 3), ...size })
     windows.value.push({
       id,
@@ -168,7 +201,7 @@ export const useWindows = defineStore('windows', () => {
     const visible = windows.value.filter(
       (w) => !isHidden(w) && !(exceptId && (w.id === exceptId || w.parentId === exceptId)),
     )
-    visible.sort((a, b) => b.z - a.z)
+    visible.sort((a, b) => stackZ(b) - stackZ(a))
     focusedId.value = visible[0]?.id ?? null
   }
 
@@ -221,6 +254,42 @@ export const useWindows = defineStore('windows', () => {
     const w = get(id)
     if (!w) return
     w.state = w.state === 'maximized' ? 'normal' : 'maximized'
+    focus(id)
+  }
+
+  /**
+   * Ends a drag to an edge (D52): the window fills a tile, keeping its rect
+   * for when it comes out again.
+   */
+  function snapTo(id: string, tile: Tile) {
+    const w = get(id)
+    if (!w) return
+    w.tile = tile
+    w.state = 'normal'
+    focus(id)
+  }
+
+  /** Back to a plain window at rect, out of its tile or maximized state. */
+  function restore(id: string) {
+    const w = get(id)
+    if (!w) return
+    w.tile = undefined
+    if (w.state === 'maximized') w.state = 'normal'
+  }
+
+  /** Leaves a tile where it is: the tile's geometry becomes the window's rect (resizing it). */
+  function untile(id: string) {
+    const w = get(id)
+    if (!w?.tile) return
+    w.rect = clampRect(tileRect(w.tile, area))
+    w.tile = undefined
+  }
+
+  function setAbove(id: string, above: boolean) {
+    const w = get(id)
+    if (!w) return
+    if (above) w.above = true
+    else delete w.above
     focus(id)
   }
 
@@ -280,6 +349,7 @@ export const useWindows = defineStore('windows', () => {
       const saved = JSON.parse(raw) as { version: number; windows: AppWindow[]; focusedId?: string }
       if (saved.version !== LAYOUT_VERSION || !Array.isArray(saved.windows)) return
       windows.value = saved.windows.filter((w) => getApp(w.appId) && !w.parentId)
+      for (const w of windows.value) if (w.tile !== undefined && !isTile(w.tile)) delete w.tile
       zTop = Math.max(10, ...windows.value.map((w) => w.z))
       focusedId.value = saved.focusedId && get(saved.focusedId) ? saved.focusedId : null
     } catch {
@@ -344,9 +414,13 @@ export const useWindows = defineStore('windows', () => {
     focusedId,
     area,
     interacting,
+    cursor,
+    snapPreview,
     get,
     dialogOf,
     isHidden,
+    stackZ,
+    shownRect,
     open,
     openDialog,
     focus,
@@ -354,6 +428,10 @@ export const useWindows = defineStore('windows', () => {
     close,
     minimize,
     toggleMaximize,
+    snapTo,
+    restore,
+    untile,
+    setAbove,
     activate,
     setRect,
     setTitle,

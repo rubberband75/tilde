@@ -36,8 +36,8 @@ to; tick items off as they land.
 - [ ] Panel: system tray applets (sound, network) — needs D-Bus in the worker
 - [ ] Calendar popup on the clock
 - [ ] Keyboard shortcuts (Alt+Tab equivalent, Super for menu) — browser grabs many; add alternates or Keyboard Lock in fullscreen
-- [ ] Edge snapping and tiling
-- [ ] Window menu (right-click title bar: Always on top, Move, Resize, Close)
+- [x] Edge snapping and tiling (D52): halves at the side and top edges, quarters at the corners; a preview while dragging; the window's own size back when dragged out; kept through reloads
+- [x] Window menu (D52): right-click the title bar for Minimize, Maximize, Move, Resize (pointer or arrow keys), Always on Top, Close
 - [ ] Animations for minimize/maximize
 - [ ] Ubuntu font check / fallback metrics
 

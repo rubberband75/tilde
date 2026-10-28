@@ -93,6 +93,9 @@
   --wm-close-hover-bg: #35a854;
   --wm-close-hover-fg: #ffffff;
   --wm-resize-handle: 6px;
+  /* Edge tiling preview (Muffin's tile preview takes the selection color). */
+  --wm-snap-preview-bg: rgba(53, 168, 84, 0.22);
+  --wm-snap-preview-border: rgba(53, 168, 84, 0.75);
 
   /* Application chrome (gtk-dark.css) */
   --window-bg: #2e2e33;

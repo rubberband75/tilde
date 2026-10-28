@@ -37,6 +37,7 @@ export type SymbolicName =
   | 'next'
   | 'volume'
   | 'volume-muted'
+  | 'check'
 
 const props = withDefaults(defineProps<{ name: SymbolicName; size?: number }>(), { size: 16 })
 
@@ -74,6 +75,7 @@ const paths: Record<SymbolicName, string> = {
   next: 'M12 3.5v9M3.5 3.5 10 8l-6.5 4.5z',
   volume: 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9',
   'volume-muted': 'M2.5 6h2.5l3.5-3v10l-3.5-3H2.5zM11 6l3.5 4M14.5 6 11 10',
+  check: 'M3 8.5l3.5 3.5L13 4.5',
 }
 
 const d = computed(() => paths[props.name])

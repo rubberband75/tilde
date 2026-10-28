@@ -184,7 +184,11 @@ App.vue ── LoginScreen (logged out)
   per-app minimum sizes. While dragging, a transparent shield covers
   everything so iframes cannot swallow pointer events. Double-clicking the
   title bar maximizes; dragging a maximized window restores it under the
-  pointer, like Cinnamon. A window can open another as its modal dialog
+  pointer, like Cinnamon. Dragging to an edge tiles the window (D52): the
+  zones and tile geometry are in `src/wm/snap.ts`, and a tiled window keeps
+  its own rect next to its `tile`. Right-clicking the title bar opens the
+  window menu (Move, Resize, Always on Top, ...); the window layer is its
+  own stacking context, so Always on Top windows stay under the panel. A window can open another as its modal dialog
   (`openDialog`, D49): the dialog stays above it, hides and closes with it
   and is left out of the window list and the saved layout, and the parent's
   content is `inert` until it closes.

@@ -162,6 +162,93 @@ describe('setRect', () => {
   })
 })
 
+describe('edge tiling', () => {
+  it('fills a tile and gives the window its own size back', () => {
+    const wm = useWindows()
+    wm.setArea(1200, 800)
+    const a = wm.open('files')!
+    const before = { ...wm.get(a)!.rect }
+    wm.snapTo(a, 'right')
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 600, y: 0, w: 600, h: 800 })
+    // The tile follows the work area (a browser resize).
+    wm.setArea(1000, 700)
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 500, y: 0, w: 500, h: 700 })
+    wm.restore(a)
+    expect(wm.shownRect(wm.get(a)!)).toEqual(before)
+  })
+
+  it('comes back to the tile from maximized and minimized', () => {
+    const wm = useWindows()
+    wm.setArea(1200, 800)
+    const a = wm.open('files')!
+    wm.toggleMaximize(a)
+    wm.snapTo(a, 'bottom-left')
+    expect(wm.get(a)!.state).toBe('normal')
+    wm.toggleMaximize(a)
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 0, y: 0, w: 1200, h: 800 })
+    wm.toggleMaximize(a)
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 0, y: 400, w: 600, h: 400 })
+    wm.minimize(a)
+    wm.focus(a)
+    expect(wm.shownRect(wm.get(a)!)).toEqual({ x: 0, y: 400, w: 600, h: 400 })
+  })
+
+  it('untiles in place before a resize', () => {
+    const wm = useWindows()
+    wm.setArea(1200, 800)
+    const a = wm.open('files')!
+    wm.snapTo(a, 'top-right')
+    wm.untile(a)
+    expect(wm.get(a)!.tile).toBeUndefined()
+    expect(wm.get(a)!.rect).toEqual({ x: 600, y: 0, w: 600, h: 400 })
+  })
+
+  it('centers a dialog over its parent tile', () => {
+    const wm = useWindows()
+    wm.setArea(1200, 800)
+    const parent = wm.open('text-editor')!
+    wm.snapTo(parent, 'right')
+    const dialog = wm.openDialog(parent, 'file-chooser')!
+    const r = wm.get(dialog)!.rect
+    expect(r.x + r.w / 2).toBe(900)
+  })
+})
+
+describe('always on top', () => {
+  it('stacks above other windows, which keep their order below it', () => {
+    const wm = useWindows()
+    const a = wm.open('files')!
+    const b = wm.open('terminal')!
+    wm.setAbove(a, true)
+    const z = (id: string) => wm.stackZ(wm.get(id)!)
+    expect(z(a)).toBeGreaterThan(z(b))
+    wm.focus(b)
+    expect(z(a)).toBeGreaterThan(z(b))
+    expect(wm.focusedId).toBe(b)
+
+    // Closing the focused window passes the focus to the one on top.
+    const c = wm.open('system-info')!
+    wm.close(c)
+    expect(wm.focusedId).toBe(a)
+
+    wm.setAbove(a, false)
+    wm.focus(b)
+    expect(z(b)).toBeGreaterThan(z(a))
+    expect(wm.get(a)!.above).toBeUndefined()
+  })
+
+  it('takes a dialog along with its parent', () => {
+    const wm = useWindows()
+    const parent = wm.open('text-editor')!
+    const other = wm.open('files')!
+    wm.setAbove(parent, true)
+    const dialog = wm.openDialog(parent, 'file-chooser')!
+    wm.focus(other)
+    expect(wm.stackZ(wm.get(dialog)!)).toBeGreaterThan(wm.stackZ(wm.get(parent)!))
+    expect(wm.stackZ(wm.get(dialog)!)).toBeGreaterThan(wm.stackZ(wm.get(other)!))
+  })
+})
+
 describe('layout persistence', () => {
   async function saveLayout(user: string, build: (wm: ReturnType<typeof useWindows>) => void) {
     vi.useFakeTimers()
@@ -238,6 +325,27 @@ describe('layout persistence', () => {
     localStorage.setItem('tilde:layout:alice', JSON.stringify({ version: 999, windows: [win] }))
     wm.load('alice')
     expect(wm.windows).toHaveLength(0)
+  })
+
+  it('keeps tiles and Always on Top, dropping tiles it does not know', async () => {
+    let a = ''
+    let b = ''
+    await saveLayout('alice', (wm) => {
+      a = wm.open('files')!
+      b = wm.open('terminal')!
+      wm.snapTo(a, 'left')
+      wm.setAbove(b, true)
+    })
+    const raw = JSON.parse(localStorage.getItem('tilde:layout:alice')!) as { windows: Array<{ tile?: string }> }
+    raw.windows[1]!.tile = 'middle'
+    localStorage.setItem('tilde:layout:alice', JSON.stringify(raw))
+
+    setActivePinia(createPinia())
+    const wm = useWindows()
+    wm.load('alice')
+    expect(wm.get(a)!.tile).toBe('left')
+    expect(wm.get(b)!.above).toBe(true)
+    expect(wm.get(b)!.tile).toBeUndefined()
   })
 
   it('survives corrupt storage', () => {

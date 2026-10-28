@@ -43,7 +43,7 @@ server/                 Go module "tilde" (one binary, three roles)
   e2e/                  end-to-end tests (build tag "e2e"), run in a VM
 web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/shell/            desktop, panel, start menu, window list, login
-  src/wm/               window manager (frame, layer)
+  src/wm/               window manager (frame, layer, edge tiling in snap.ts)
   src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
                         editor/, chooser/ (ctx.chooseFile), image-viewer/,
                         media-player/, properties/, system-info/, backgrounds/
