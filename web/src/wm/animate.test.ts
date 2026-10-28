@@ -3,7 +3,7 @@ import { createApp, defineComponent, h, nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppManifest } from '@/apps/types'
 import { useWindows } from '@/stores/windows'
-import { boxTransform, GEOMETRY_MS, MINIMIZE_MS, sameBox } from './animate'
+import { animateWindow, boxTransform, CLOSE_MS, GEOMETRY_MS, MINIMIZE_MS, OPEN_MS, sameBox } from './animate'
 import WindowFrame from './WindowFrame.vue'
 
 describe('boxTransform', () => {
@@ -162,5 +162,65 @@ describe('frame animations', () => {
     await nextTick()
     expect(played).toHaveLength(0)
     expect(frame().classList.contains('minimized')).toBe(true)
+  })
+})
+
+describe('opening and closing', () => {
+  function element(classes = '') {
+    const el = document.createElement('section')
+    el.className = classes
+    const calls: { frames: Keyframe[]; duration: number; a: { onfinish?: () => void } }[] = []
+    el.animate = ((frames: Keyframe[], opts: KeyframeAnimationOptions) => {
+      const a: { onfinish?: () => void; oncancel?: () => void } = {}
+      calls.push({ frames, duration: opts.duration as number, a })
+      return a as unknown as Animation
+    }) as HTMLElement['animate']
+    return { el, calls }
+  }
+
+  beforeEach(() => vi.stubGlobal('matchMedia', () => ({ matches: false })))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('grows a new window in, and shrinks a closed one out before it goes', () => {
+    const open = element('window')
+    const opened = vi.fn()
+    animateWindow(open.el, 'open', opened)
+    expect(open.calls[0]!.duration).toBe(OPEN_MS)
+    expect(open.calls[0]!.frames).toEqual([
+      { transform: 'scale(0.92)', opacity: 0 },
+      { transform: 'none', opacity: 1 },
+    ])
+    expect(opened).not.toHaveBeenCalled()
+    open.calls[0]!.a.onfinish!()
+    expect(opened).toHaveBeenCalledOnce()
+
+    const close = element('window')
+    const gone = vi.fn()
+    animateWindow(close.el, 'close', gone)
+    expect(close.calls[0]!.duration).toBe(CLOSE_MS)
+    expect(close.calls[0]!.frames[1]).toEqual({ transform: 'scale(0.92)', opacity: 0 })
+    expect(close.el.inert).toBe(true)
+    expect(gone).not.toHaveBeenCalled()
+    close.calls[0]!.a.onfinish!()
+    expect(gone).toHaveBeenCalledOnce()
+  })
+
+  it('goes at once for minimized windows, restored ones and reduced motion', () => {
+    for (const [classes, effect] of [
+      ['window minimized', 'close'],
+      ['window', undefined],
+    ] as const) {
+      const { el, calls } = element(classes)
+      const done = vi.fn()
+      animateWindow(el, effect, done)
+      expect(calls).toHaveLength(0)
+      expect(done).toHaveBeenCalledOnce()
+    }
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    const { el, calls } = element('window')
+    const done = vi.fn()
+    animateWindow(el, 'open', done)
+    expect(calls).toHaveLength(0)
+    expect(done).toHaveBeenCalledOnce()
   })
 })

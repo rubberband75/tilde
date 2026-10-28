@@ -329,6 +329,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
   <section
     class="window"
     ref="frame"
+    :data-id="win.id"
     :class="{ focused, maximized, tiled, minimized: minimized && !leaving, leaving, dragging: !!drag }"
     :style="style"
     role="dialog"

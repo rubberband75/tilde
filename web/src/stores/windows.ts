@@ -70,6 +70,11 @@ export const useWindows = defineStore('windows', () => {
   const frameRequest = ref<{ id: string; action: FrameAction } | null>(null)
   /** Windows Show Desktop minimized, to bring back on the next press. */
   let desktopShown: string[] | null = null
+  /**
+   * Windows just opened or closed here, for their animation (D57): not the
+   * ones a reload or an unlock brings back, nor the ones logout clears.
+   */
+  const effects = new Map<string, 'open' | 'close'>()
 
   let zTop = 10
   let seq = 0
@@ -155,6 +160,7 @@ export const useWindows = defineStore('windows', () => {
       z: ++zTop,
       args: { ...args },
     })
+    effects.set(id, 'open')
     focusedId.value = id
     return id
   }
@@ -182,6 +188,7 @@ export const useWindows = defineStore('windows', () => {
       args: { ...args },
       parentId,
     })
+    effects.set(id, 'open')
     focus(parentId)
     return id
   }
@@ -242,6 +249,7 @@ export const useWindows = defineStore('windows', () => {
     closeHandlers.delete(id)
     closeGuards.delete(id)
     const parentId = windows.value[i]!.parentId
+    effects.set(id, 'close')
     windows.value.splice(i, 1)
     if (focusedId.value === id) {
       if (parentId && get(parentId) && !isHidden(get(parentId)!)) focusedId.value = parentId
@@ -332,6 +340,13 @@ export const useWindows = defineStore('windows', () => {
     desktopShown = shown.map((w) => w.id)
   }
 
+  /** The effect to play for a window entering or leaving, once. */
+  function takeEffect(id: string): 'open' | 'close' | undefined {
+    const e = effects.get(id)
+    effects.delete(id)
+    return e
+  }
+
   function requestFrame(id: string, action: FrameAction) {
     if (get(id)) frameRequest.value = { id, action }
   }
@@ -415,6 +430,7 @@ export const useWindows = defineStore('windows', () => {
     windows.value = []
     focusedId.value = null
     desktopShown = null
+    effects.clear()
     closeGuards.clear()
     closeHandlers.clear()
   }
@@ -481,6 +497,7 @@ export const useWindows = defineStore('windows', () => {
     pushTile,
     toggleShowDesktop,
     requestFrame,
+    takeEffect,
     activate,
     setRect,
     setTitle,

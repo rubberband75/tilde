@@ -26,6 +26,7 @@ test('windows tile at the screen edges and keep their size for later', async ({ 
   await desktopIcon(page, 'Home').dblclick()
   const win = windowNamed(page, 'Home')
   await expect(win).toBeVisible()
+  await settled(win)
   const before = await box(win)
 
   // The left edge offers the left half, shown while dragging.
@@ -116,11 +117,19 @@ test('the window menu: unmaximize, move, resize and always on top', async ({ des
   await expect(win).toHaveCount(0)
 })
 
-test('minimizing and maximizing animate, unless motion is reduced', async ({ desktop: page }) => {
+test('windows animate opening, closing, minimizing and maximizing, unless motion is reduced', async ({
+  desktop: page,
+}) => {
   await desktopIcon(page, 'Home').dblclick()
   const win = windowNamed(page, 'Home')
   await expect(win).toBeVisible()
   const running = () => win.evaluate((el) => el.getAnimations().length)
+  // Opening plays; a reload brings the window back without it.
+  expect(await running()).toBe(1)
+  await settled(win)
+  await page.reload()
+  await expect(win).toBeVisible()
+  expect(await running()).toBe(0)
 
   await win.locator('.titlebar .title').dblclick()
   await expect(win).toHaveClass(/maximized/)
@@ -134,9 +143,16 @@ test('minimizing and maximizing animate, unless motion is reduced', async ({ des
   await expect(win).toBeVisible()
   await expect.poll(running).toBe(0)
 
+  // Closing plays out, then the window goes.
+  await win.getByTitle('Close').click()
+  await expect(win).toHaveCount(0)
+
+  await desktopIcon(page, 'Home').dblclick()
+  await expect(win).toBeVisible()
+  await settled(win)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await win.locator('.titlebar .title').dblclick()
-  await expect(win).not.toHaveClass(/maximized/)
+  await expect(win).toHaveClass(/maximized/)
   expect(await running()).toBe(0)
   await win.getByTitle('Minimize').click()
   await expect(win).toBeHidden()

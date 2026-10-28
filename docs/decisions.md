@@ -832,9 +832,13 @@ geometry itself would lay out the content on every frame, and resize a
 terminal's PTY as many times. A minimizing frame stays drawn (and takes
 no clicks) until it has played. Drags change a window's state on their
 own (out of maximized or a tile) and are not animated; neither is
-anything under `prefers-reduced-motion`. Not yet: opening and closing
-(Cinnamon fades and scales those too), a switch to turn effects off
-(waits for the Settings app). Rejected: CSS transitions on position and
+anything under `prefers-reduced-motion`. Opening grows a window from 92%
+as it fades in (150 ms); closing shrinks and fades it out (120 ms), the
+window taking no clicks or focus meanwhile, through a `TransitionGroup`
+that keeps the frame drawn until it has played. The store marks the
+windows opened and closed in this page, so windows a reload or an unlock
+brings back, and the ones logout or a lock clears, come and go at once.
+Not yet: a switch to turn effects off (waits for the Settings app). Rejected: CSS transitions on position and
 size (the relayout above); a library (the Web Animations API does it).
 
 ---

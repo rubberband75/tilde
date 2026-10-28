@@ -10,6 +10,10 @@ import { useWindows } from '@/stores/windows'
 
 export const MINIMIZE_MS = 200
 export const GEOMETRY_MS = 160
+export const OPEN_MS = 150
+export const CLOSE_MS = 120
+/** How small an opening window starts and a closing one ends. */
+const OPEN_SCALE = 'scale(0.92)'
 
 export interface Box {
   left: number
@@ -58,6 +62,34 @@ function reducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+function canAnimate(el: Element): el is HTMLElement {
+  return el instanceof HTMLElement && typeof el.animate === 'function' && !reducedMotion()
+}
+
+/**
+ * A window opening grows a little from its centre as it fades in; one
+ * closing shrinks and fades out, after which `done` takes it away. Hidden
+ * (minimized) windows go at once.
+ */
+export function animateWindow(el: Element, effect: 'open' | 'close' | undefined, done: () => void) {
+  if (!effect || !canAnimate(el) || el.classList.contains('minimized')) {
+    done()
+    return
+  }
+  const shown = { transform: 'none', opacity: 1 }
+  const small = { transform: OPEN_SCALE, opacity: 0 }
+  if (effect === 'close') {
+    el.style.pointerEvents = 'none'
+    el.inert = true
+  }
+  const a = el.animate(effect === 'open' ? [small, shown] : [shown, small], {
+    duration: effect === 'open' ? OPEN_MS : CLOSE_MS,
+    easing: effect === 'open' ? 'ease-out' : 'ease-in',
+  })
+  a.onfinish = () => done()
+  a.oncancel = () => done()
+}
+
 /**
  * Animates a window frame's state changes. Returns `leaving`: true while a
  * minimizing window plays out, so the frame stays drawn until it is done.
@@ -89,10 +121,11 @@ export function useFrameAnimation(el: Ref<HTMLElement | null>, win: () => AppWin
       // Drags change the state on their own (out of maximized, or a tile);
       // the drag shows the movement.
       if (!node || typeof node.animate !== 'function' || reducedMotion() || wm.interacting) return
-      // Where it is drawn now, before this change renders: during a drop
-      // into a tile, where the pointer let go.
-      const from = node.getBoundingClientRect()
+      // Where it is drawn now, before this change renders (during a drop
+      // into a tile, where the pointer let go), once an opening has played.
       stop()
+      for (const a of node.getAnimations?.() ?? []) a.finish()
+      const from = node.getBoundingClientRect()
 
       if (now.hidden && !before.hidden) {
         const target = buttonBox(win())

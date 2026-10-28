@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import WindowFrame from './WindowFrame.vue'
 import { useWindows } from '@/stores/windows'
+import { animateWindow } from './animate'
 
 const wm = useWindows()
+
+// Opening and closing (D57). TransitionGroup keeps a closed window drawn
+// until it has played; without a tag it adds no element around the frames.
+function effectFor(el: Element) {
+  const id = el instanceof HTMLElement ? el.dataset.id : undefined
+  return id ? wm.takeEffect(id) : undefined
+}
+const onEnter = (el: Element, done: () => void) => animateWindow(el, effectFor(el), done)
+const onLeave = (el: Element, done: () => void) => animateWindow(el, effectFor(el), done)
 </script>
 
 <template>
@@ -21,7 +31,9 @@ const wm = useWindows()
         }"
       />
     </Transition>
-    <WindowFrame v-for="w in wm.windows" :key="w.id" :win="w" />
+    <TransitionGroup :css="false" @enter="onEnter" @leave="onLeave">
+      <WindowFrame v-for="w in wm.windows" :key="w.id" :win="w" />
+    </TransitionGroup>
     <!-- During a drag or resize, cover everything so iframes (future Xpra
          windows, local web apps) cannot swallow pointer events. -->
     <div

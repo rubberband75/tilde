@@ -263,6 +263,32 @@ describe('keyboard tiling and Show Desktop', () => {
   })
 })
 
+describe('open and close effects', () => {
+  it('are played once, for windows opened and closed here only', async () => {
+    vi.useFakeTimers()
+    const wm = useWindows()
+    wm.load('alice')
+    const a = wm.open('files')!
+    const dialog = wm.openDialog(a, 'file-chooser')!
+    expect(wm.takeEffect(a)).toBe('open')
+    expect(wm.takeEffect(a)).toBeUndefined()
+    expect(wm.takeEffect(dialog)).toBe('open')
+    wm.close(dialog)
+    expect(wm.takeEffect(dialog)).toBe('close')
+    await nextTick()
+    vi.advanceTimersByTime(1000)
+
+    // A reload brings windows back without an effect; logout clears them without one.
+    setActivePinia(createPinia())
+    const again = useWindows()
+    again.load('alice')
+    expect(again.takeEffect(a)).toBeUndefined()
+    const b = again.open('terminal')!
+    again.reset()
+    expect(again.takeEffect(b)).toBeUndefined()
+  })
+})
+
 describe('always on top', () => {
   it('stacks above other windows, which keep their order below it', () => {
     const wm = useWindows()

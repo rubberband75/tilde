@@ -39,7 +39,7 @@ to; tick items off as they land.
 - [x] Edge snapping and tiling (D52): halves at the side and top edges, quarters at the corners; a preview while dragging; the window's own size back when dragged out; kept through reloads
 - [x] Window menu (D52): right-click the title bar for Minimize, Maximize, Move, Resize (pointer or arrow keys), Always on Top, Close
 - [x] Animations for minimize/maximize (D57): into and out of the window-list button, maximize, restore and tiling from where the window was; transforms only, off for reduced motion
-- [ ] Animations for opening and closing windows
+- [x] Animations for opening and closing windows (D57): grow and fade in, shrink and fade out; not for windows a reload brings back or logout clears
 - [x] Ubuntu font check / fallback metrics (D56): the Ubuntu font bundled (as "Ubuntu derivative Tilde", UFL 1.0), an installed copy first, fallbacks scaled to its widths; Medium title bars and DejaVu Sans Mono as in Mint
 
 ## Phase 3 — Nemo clone
