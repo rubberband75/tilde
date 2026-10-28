@@ -345,6 +345,21 @@ EOF
     fi"
 }
 
+# Starts each UI run with a fresh server: its login rate limit (5 failed
+# attempts per address in 15 minutes) and the logins waiting on a second
+# question live in memory, and the suite fails some on purpose, so runs
+# close together would otherwise refuse each other's logins.
+restart_tilde() {
+  vm_ssh 'set -e
+    sudo systemctl restart tilde
+    for i in $(seq 1 20); do
+      curl -ksf -o /dev/null https://127.0.0.1:8443/ && exit 0
+      sleep 0.5
+    done
+    echo "tilde did not come back" >&2
+    exit 1'
+}
+
 # pam_oath refuses a code it has seen, keeping the last one in its users
 # file: start each run from a fresh file, so reruns can use the same codes.
 reset_oath() {
@@ -418,6 +433,7 @@ run_ui_tests() {
   (cd "$ROOT/web" && npx playwright install chromium) >/dev/null ||
     die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
 
+  restart_tilde
   reset_oath
   mount_test_usb
   reset_wifi
