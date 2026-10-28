@@ -88,6 +88,9 @@ could already do.
   (`network.go`, D55).
 - Lists, mounts, unmounts and ejects drives through udisks2 on the system
   bus, as the user (`drives.go`).
+- Samples CPU, memory, network and disk once a second while some client
+  asks over the events socket, and sends each one whole snapshots
+  (`resources.go`, D61).
 - Lists processes from `/proc` with CPU shares between samples, and sends
   them signals as the user, by PID and start time (`processes.go`, D59).
 - Lists the system's and the user's systemd services and starts, stops and
@@ -183,7 +186,7 @@ App.vue ── LoginScreen (logged out)
             │         (a modal dialog window, the file chooser, sits above its parent)
             ├── Notices
             ├── JobsPanel ── ConflictDialog   file job progress and questions
-            ├── Panel ── StartMenu, launchers, WindowList, tray (fullscreen, network, browsers, user, clock + calendar)
+            ├── Panel ── StartMenu, launchers, WindowList, tray (fullscreen, resources, network, browsers, user, clock + calendar)
             └── Dialogs                       ctx.confirm / ctx.prompt
 ```
 

@@ -96,3 +96,25 @@ test('the Services tab starts and stops system and user services', async ({ desk
   await expect(state(userService!)).toHaveText('Inactive', { timeout: 20_000 })
   await expect(auth).toHaveCount(0)
 })
+
+// D61: the panel applet's graphs, and the Resources tab it opens.
+test('the system monitor applet and the Resources tab', async ({ desktop: page }) => {
+  const applet = page.getByRole('navigation', { name: 'Panel' }).getByRole('button', { name: /^CPU: / })
+  // The first snapshot comes after a second of sampling.
+  await expect(applet).toHaveAttribute('aria-label', /CPU: [\d.]+%, Memory: .+ of .+/, { timeout: 10_000 })
+  await expect(applet.locator('polyline').first()).toHaveAttribute('points', /\d/)
+
+  await applet.click()
+  const mon = windowNamed(page, 'System Monitor')
+  await expect(mon.getByRole('tab', { name: 'Resources' })).toHaveAttribute('aria-selected', 'true')
+  await expect(mon.getByRole('list', { name: 'Each CPU' }).getByRole('listitem').first()).toContainText(
+    /CPU1\s*[\d.]+%/,
+  )
+  await expect(mon.getByText(/Memory\s+.+ \([\d.]+%\) of .+/)).toBeVisible()
+
+  // Hovering a graph reads the seconds out.
+  const cpuGraph = mon.getByRole('img', { name: 'CPU use over the last minute' })
+  const box = (await cpuGraph.boundingBox())!
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2)
+  await expect(mon.getByRole('status').filter({ hasText: 'now' })).toContainText(/CPU\s*[\d.]+%/)
+})

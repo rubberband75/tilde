@@ -263,6 +263,18 @@ asked for `/api/v1/drives`): fetch the list again.
 points changed (at most once a second once a client has asked for
 `/api/v1/network`): fetch it again.
 
+`{"type":"resources","on":true}` from the client asks for resource
+snapshots (D61), `on:false` stops them. While some client asks, the worker
+samples `/proc` once a second and sends each asking client
+`{"type":"resources","resources":Resources}`, always a whole snapshot;
+right after asking, `{"type":"resources-history","history":[...]}` with the
+last minute (up to 60, oldest first). `Resources`: `{time, cpu, cores[],
+memory: {total, used, cache?}, swap: {total, used}, netReceive, netSend,
+netReceived, netSent, diskRead, diskWrite}`: percentages of CPU since the
+previous snapshot, bytes, and bytes a second (network over every interface
+but loopback, disk over whole disks). A reconnected socket starts
+unwatched: ask again.
+
 `{"type":"polkit"}` says polkit's authentication requests changed (D44):
 fetch `/api/v1/polkit` again. Requests made while the socket was down are
 not repeated, so fetch it after each snapshot too.

@@ -61,6 +61,12 @@
   --menu-box-bg: #303036;
   --menu-entry-bg: #303036;
   --menu-entry-fg: #d3d3d3;
+  /* Graphs (System Monitor, its applet; D61): categorical slots validated
+     against --view-bg and --panel-bg (dataviz palette, dark steps). */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --graph-grid: rgba(255, 255, 255, 0.07);
+  --graph-crosshair: rgba(255, 255, 255, 0.35);
   /* GtkSwitch (the network applet's Wi-Fi switch) */
   --switch-bg: #3b3b41;
   --switch-on-bg: #35a854;

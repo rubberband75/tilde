@@ -29,10 +29,12 @@ type event struct {
 }
 
 // clientMessage is a frame from the client: {"type":"watch","dirs":[...]}
-// replaces the set of folders it wants "fs" events for.
+// replaces the set of folders it wants "fs" events for, and
+// {"type":"resources","on":true} asks for resource snapshots (D61).
 type clientMessage struct {
 	Type string   `json:"type"`
 	Dirs []string `json:"dirs"`
+	On   bool     `json:"on"`
 }
 
 // eventBuffer is how many events a client may fall behind before it is
@@ -98,13 +100,25 @@ func (w *Worker) handleEvents(rw http.ResponseWriter, r *http.Request) {
 	c.SetReadLimit(1 << 20)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// This client's resource snapshots, while it asks for them.
+	res := make(chan []byte, 4)
+	defer w.resources.unwatch(res)
 	// The reader owns the client's watches and drops them when the
 	// connection ends (the deferred CloseNow makes its Read fail).
 	go func() {
 		defer cancel()
 		watches := &watchSet{w: w.watcher}
 		defer watches.clear()
-		readClient(ctx, c, watches)
+		// The only one that starts watching: stopping here too means a
+		// last message during the close cannot leave the sampling running.
+		defer w.resources.unwatch(res)
+		readClient(ctx, c, watches, func(on bool) {
+			if on {
+				w.resources.watch(res)
+			} else {
+				w.resources.unwatch(res)
+			}
+		})
 	}()
 
 	first, ch, unsubscribe := w.events.subscribe(func() event {
@@ -126,22 +140,31 @@ func (w *Worker) handleEvents(rw http.ResponseWriter, r *http.Request) {
 			if err := writeEvent(ctx, c, b); err != nil {
 				return
 			}
+		case b := <-res:
+			if err := writeEvent(ctx, c, b); err != nil {
+				return
+			}
 		}
 	}
 }
 
 // readClient applies the client's watch messages until it disconnects.
-func readClient(ctx context.Context, c *websocket.Conn, watches *watchSet) {
+func readClient(ctx context.Context, c *websocket.Conn, watches *watchSet, resources func(on bool)) {
 	for {
 		typ, b, err := c.Read(ctx)
 		if err != nil {
 			return
 		}
 		var m clientMessage
-		if typ != websocket.MessageText || json.Unmarshal(b, &m) != nil || m.Type != "watch" {
+		if typ != websocket.MessageText || json.Unmarshal(b, &m) != nil {
 			continue
 		}
-		watches.set(m.Dirs)
+		switch m.Type {
+		case "watch":
+			watches.set(m.Dirs)
+		case "resources":
+			resources(m.On)
+		}
 	}
 }
 

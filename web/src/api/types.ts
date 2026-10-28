@@ -187,9 +187,32 @@ export type WorkerEvent =
   | { type: 'network' }
   /** polkit's authentication requests changed: fetch /api/v1/polkit again (D44). */
   | { type: 'polkit' }
+  /** While asked for (D61): the latest whole snapshot, every second. */
+  | { type: 'resources'; resources: Resources }
+  /** Right after asking: the last minute's snapshots, oldest first. */
+  | { type: 'resources-history'; history?: Resources[] }
+
+/** CPU, memory, network and disk use (D61), from /proc. */
+export interface Resources {
+  /** Unix milliseconds. */
+  time: number
+  /** Percent of all CPUs busy since the previous snapshot, and per CPU. */
+  cpu: number
+  cores: number[]
+  /** Bytes; used is total minus available. */
+  memory: { total: number; used: number; cache?: number }
+  swap: { total: number; used: number }
+  /** Bytes a second, and network totals since boot. */
+  netReceive: number
+  netSend: number
+  netReceived: number
+  netSent: number
+  diskRead: number
+  diskWrite: number
+}
 
 /** Client → worker on the events WebSocket: the folders to watch (replaces the previous set). */
-export type ClientMessage = { type: 'watch'; dirs: string[] }
+export type ClientMessage = { type: 'watch'; dirs: string[] } | { type: 'resources'; on: boolean }
 
 /** GET /api/v1/fs/properties */
 export interface Properties {

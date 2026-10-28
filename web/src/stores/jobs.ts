@@ -6,6 +6,8 @@ import type { Job, WorkerEvent } from '@/api/types'
 import { dirName } from '@/api/fs'
 import { emitDrivesChanged, emitFsChanged, emitNetworkChanged } from '@/lib/bus'
 import { setWatchSender, watchedDirs } from '@/lib/fswatch'
+import { setResourcesSender } from '@/lib/resources'
+import { useResources } from './resources'
 import { usePolkit } from './polkit'
 
 /** Folders whose listing a job changes. */
@@ -67,6 +69,12 @@ export const useJobs = defineStore('jobs', () => {
       case 'polkit':
         void usePolkit().refresh()
         break
+      case 'resources':
+        useResources().add(ev.resources)
+        break
+      case 'resources-history':
+        useResources().setHistory(ev.history ?? [])
+        break
     }
   }
 
@@ -74,15 +82,20 @@ export const useJobs = defineStore('jobs', () => {
     stream?.close()
     const s = connectEvents(onEvent, (reconnected) => {
       s.send({ type: 'watch', dirs: watchedDirs() })
+      // A new connection is unwatched: ask again if something shows them.
+      setResourcesSender((on) => s.send({ type: 'resources', on }))
       // Changes made while the socket was down were not reported.
       if (reconnected) emitFsChanged(...watchedDirs())
     })
     stream = s
     setWatchSender((dirs) => s.send({ type: 'watch', dirs }))
+    setResourcesSender((on) => s.send({ type: 'resources', on }))
   }
 
   function disconnect() {
     setWatchSender(undefined)
+    setResourcesSender(undefined)
+    useResources().reset()
     stream?.close()
     stream = undefined
     byId.value = {}

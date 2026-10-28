@@ -907,6 +907,30 @@ boot, masking, a unit's journal (`journalctl -u`, which journald limits
 to what the user may read), timers. Rejected: `systemctl` from the
 worker (parsing its output for what two D-Bus calls answer).
 
+**D61 — System monitor applet and Resources tab: one sampler, whole snapshots while watched** (2026-10-28, accepted)
+The panel has a system monitor applet: CPU and memory over the last
+minute as two small graphs, the figures in its tooltip; a click opens
+System Monitor's new Resources tab, as GNOME's: CPU (and each CPU's
+share), memory and swap, network receiving and sending, disk reading
+and writing, each a graph of the last minute with the figures now in its
+legend, and a hover crosshair that reads every series out at a second.
+The worker reads `/proc/stat`, `meminfo`, `net/dev` and `diskstats`
+(whole disks only: partitions, loop, RAM, zram, device-mapper and md
+devices are counted in their disks) once a second, but only while some
+browser asks, over the events socket; it sends each asking browser the
+whole snapshot, never a change against an earlier one, as the lesson
+from webdesktopd says, and keeps the last minute, so a graph opened
+later starts full. The applet and the tab each hold a watch while shown;
+the first one asks the worker, the last one stops it, and a reconnected
+socket asks again. The graphs use two categorical slots (blue, orange,
+the dark steps of the dataviz reference palette), checked with its
+validator against the view and panel surfaces, and put memory and swap
+on one percentage axis, never two scales. Not yet: hiding the applet
+(waits for panel settings), File Systems tab, per-interface and per-disk
+graphs. Rejected: each browser polling once a second (the applet shows
+all day, and every browser would sample on its own); changes instead of
+snapshots.
+
 ---
 
 ## Open decisions

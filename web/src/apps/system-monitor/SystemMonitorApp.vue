@@ -1,16 +1,25 @@
 <script setup lang="ts">
-// System Monitor (D59, D60), after GNOME's that Mint ships: a tab for
-// processes and one for services. Only the tab shown lists anything.
-import { ref } from 'vue'
+// System Monitor (D59, D60, D61), after GNOME's that Mint ships: tabs for
+// processes, resources and services. Only the tab shown lists anything.
+import { ref, watch } from 'vue'
 import type { AppContext } from '@/apps/types'
 import ProcessesView from './ProcessesView.vue'
+import ResourcesView from './ResourcesView.vue'
 import ServicesView from './ServicesView.vue'
 
 const props = defineProps<{ ctx: AppContext }>()
 const ctx = props.ctx
 
-type Tab = 'processes' | 'services'
-const tab = ref<Tab>(ctx.args.tab === 'services' ? 'services' : 'processes')
+type Tab = 'processes' | 'resources' | 'services'
+const asTab = (v: unknown): Tab => (v === 'services' || v === 'resources' ? v : 'processes')
+const tab = ref<Tab>(asTab(ctx.args.tab))
+// The panel applet opens the Resources tab, in a window already open too.
+watch(
+  () => ctx.args.tab,
+  (t) => {
+    tab.value = asTab(t)
+  },
+)
 
 function show(t: Tab) {
   tab.value = t
@@ -24,6 +33,7 @@ function show(t: Tab) {
       <button
         v-for="t in [
           ['processes', 'Processes'],
+          ['resources', 'Resources'],
           ['services', 'Services'],
         ] as const"
         :key="t[0]"
@@ -37,6 +47,7 @@ function show(t: Tab) {
       </button>
     </nav>
     <ProcessesView v-if="tab === 'processes'" class="pane" :ctx="ctx" />
+    <ResourcesView v-else-if="tab === 'resources'" class="pane" :ctx="ctx" />
     <ServicesView v-else class="pane" :ctx="ctx" />
   </div>
 </template>

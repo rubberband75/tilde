@@ -52,6 +52,7 @@ type Worker struct {
 	network   *networkService
 	procs     *processSampler
 	services  *serviceManagers
+	resources *resourceMonitor
 	jobs      *jobManager
 	logind    *logindConn
 	polkit    *polkitAgent
@@ -109,6 +110,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		network:    newNetworkService(func() { events.publish(event{Type: "network"}) }),
 		procs:      &processSampler{},
 		services:   &serviceManagers{},
+		resources:  newResourceMonitor(),
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
 		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
@@ -249,6 +251,7 @@ func (w *Worker) Shutdown() {
 	w.drives.close()
 	w.network.close()
 	w.services.close()
+	w.resources.close()
 	w.polkit.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
