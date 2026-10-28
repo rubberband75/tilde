@@ -222,3 +222,27 @@ func TestClientAddr(t *testing.T) {
 		}
 	}
 }
+
+// TestStaticFont: the bundled font (D56) is served as a font, cached like
+// the other hashed assets, and allowed by the CSP.
+func TestStaticFont(t *testing.T) {
+	web := fstest.MapFS{
+		"index.html":                   {Data: []byte("app")},
+		"assets/tilde-ui-abc123.woff2": {Data: []byte("wOF2font")},
+	}
+	s, err := New(Config{Listen: "127.0.0.1:0", Web: web})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/tilde-ui-abc123.woff2", nil))
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "font/woff2" {
+		t.Fatalf("status %d, type %q", w.Code, w.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(w.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("cache %q", w.Header().Get("Cache-Control"))
+	}
+	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "font-src 'self'") {
+		t.Fatalf("csp %q", w.Header().Get("Content-Security-Policy"))
+	}
+}

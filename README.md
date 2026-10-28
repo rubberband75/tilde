@@ -88,3 +88,8 @@ The bundled Mint-Y icons (`web/public/icons/Mint-Y`) come from
 [linuxmint/mint-y-icons](https://github.com/linuxmint/mint-y-icons) and are
 licensed CC BY-SA 4.0, with some icons under GPLv3; see the license and
 credits files in that directory.
+
+The bundled font (`web/src/assets/fonts/tilde-ui.woff2`) is "Ubuntu
+derivative Tilde", a subset of Canonical's
+[Ubuntu font](https://design.ubuntu.com/font), licensed under the Ubuntu
+Font Licence 1.0 ([UBUNTU-FONT-LICENCE.txt](web/src/assets/fonts/UBUNTU-FONT-LICENCE.txt)).

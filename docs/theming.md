@@ -43,6 +43,10 @@ the worker) is planned for the Settings app.
 
 ## Fonts
 
-Mint uses the Ubuntu font at 10 pt. Tilde does not bundle fonts; on a Mint
-client the installed Ubuntu font is used, elsewhere it falls back to Noto
-Sans or DejaVu Sans.
+Mint uses the Ubuntu font at 10 pt, Ubuntu Medium for title bars and DejaVu
+Sans Mono for monospace. Tilde bundles the Ubuntu font as `Tilde UI` (D56,
+`styles/fonts.css`, built by `make fonts`): an installed Ubuntu is used
+first, then the bundled file, and while it loads the fallbacks (Arial or
+its metric twins Liberation Sans and Arimo, then DejaVu Sans) are scaled to
+take Ubuntu's space, so nothing moves when it arrives. Monospace is not
+bundled: DejaVu Sans Mono, then Ubuntu Mono, Menlo or Consolas.

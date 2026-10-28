@@ -255,6 +255,9 @@ App.vue ── LoginScreen (logged out)
   socket reconnects as soon as a lock closes it) switches the session store
   to `locked`; the desktop is unmounted and its stores reset, as on logout,
   and the window layout comes back from `localStorage` on unlock.
+- **Font** (D56): the bundled Ubuntu font in `src/assets/fonts`, its
+  `@font-face` rules and size-adjusted fallbacks in `src/styles/fonts.css`
+  (both made by `make fonts`), used through `--font-ui`.
 - **Theme**: design tokens in `src/styles/themes/mint-y-dark.css`, layout in
   `src/theme/desktopStyle.ts`. See `docs/theming.md`.
 - **Icons**: bundled Mint-Y PNGs resolved by freedesktop name through

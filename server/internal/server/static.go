@@ -2,10 +2,15 @@ package server
 
 import (
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
 )
+
+// Go's own table has no .woff2 (the bundled font, D56); hosts without
+// /etc/mime.types would serve it as text.
+func init() { _ = mime.AddExtensionType(".woff2", "font/woff2") }
 
 const notBuiltHTML = `<!doctype html><meta charset="utf-8"><title>Tilde</title>
 <body style="background:#222226;color:#e1e1e1;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0">

@@ -468,7 +468,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-weight: bold;
+  font-weight: var(--wm-title-weight);
   text-align: center;
 }
 .buttons {

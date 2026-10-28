@@ -17,7 +17,7 @@ LDFLAGS := -s -w -X tilde/internal/buildinfo.Version=$(VERSION)
 DEV_LISTEN ?= 127.0.0.1:8443
 
 .PHONY: all build deps web server server-nopam test test-go test-web check \
-        fmt e2e-vm dev dev-server dev-server-root dev-web icons e2e e2e-ui install uninstall clean
+        fmt e2e-vm dev dev-server dev-server-root dev-web icons fonts e2e e2e-ui install uninstall clean
 
 all: build
 
@@ -76,6 +76,11 @@ dev-web:
 
 icons:
 	./scripts/fetch-icons.sh
+
+# Rebuilds the bundled Ubuntu font and its @font-face rules (D56).
+fonts:
+	python3 scripts/build-fonts.py
+	cd web && npx prettier --write src/styles/fonts.css >/dev/null
 
 # Boots (or reuses) a throwaway VM, installs the current build like
 # "make install" and runs the Go e2e suite there, then the Playwright UI

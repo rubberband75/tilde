@@ -785,6 +785,41 @@ request, for what one D-Bus call answers); a NetworkManager secret agent
 in the worker, so NetworkManager could ask Tilde for passwords
 (heavier, and only needed for the cases left to a connections editor).
 
+**D56 — Bundle the Ubuntu font, with fallbacks that take its space** (2026-10-28, accepted)
+Linux Mint draws its interface in Ubuntu 10, title bars in Ubuntu Medium
+10 and monospace in DejaVu Sans Mono 10, but the font comes from the
+machine the browser runs on: Windows and macOS have no Ubuntu font, and
+their Segoe UI or Helvetica take different widths, so labels, title bars
+and the Files grid (fixed cell sizes) laid out differently. Tilde now
+bundles the Ubuntu font as one WOFF2 file (154 KiB): the variable font
+from the fonts-ubuntu package, pinned to normal width with weights 300
+to 700, subset to Latin, Greek and Cyrillic. That is a Modified Version
+under the Ubuntu Font Licence 1.0, which must keep the original name with
+"derivative X" added, so the file is named "Ubuntu derivative Tilde"; its
+copyright notice stays in the file and the licence sits next to it. CSS
+calls it `Tilde UI`, with one face per weight Tilde uses (400, 500, 700),
+each trying the installed Ubuntu first and the bundled file after (a
+single face over an installed variable font is unreliable: some browsers
+fake the other weights from the regular one). The file goes through Vite
+into the hashed, cached `/assets/`, and the server names its type itself
+(Go's own table has no `.woff2`). While it loads, fallbacks take
+Ubuntu's space: Arial (Windows, macOS) and its metric twins Liberation
+Sans and Arimo (Linux), then DejaVu Sans, scaled with `size-adjust` from
+average letter widths weighted by English letter frequencies (as Next.js
+and fontaine do) and given Ubuntu's ascent and descent, so nothing moves
+when it arrives (within about 2% of Ubuntu's width; Chromium on Linux
+hints web fonts to whole-pixel letter widths, which makes `size-adjust`
+move in steps there, so the test measures with hinting off). `make fonts` (`scripts/build-fonts.py`, fontTools) builds
+the font and the `@font-face` rules reproducibly; both are committed, as
+the icons are. Title bars now use Medium (500) rather than bold, and
+monospace puts DejaVu Sans Mono first, as Mint does. Not bundled:
+monospace (Menlo or Consolas elsewhere; the terminal and editor are less
+tied to layout), italics (Tilde uses none; browsers slant the regular).
+Rejected: shipping the original TTF unchanged (1 MB, plus the width axis
+nobody uses); serving the host's installed font from the server (a new
+kind of file the server reads, and nothing for hosts without it);
+fallbacks alone (the layout would match but not the look).
+
 ---
 
 ## Open decisions

@@ -16,11 +16,13 @@
   --accent-fg: #ffffff;
   --accent-soft: rgba(53, 168, 84, 0.35);
 
-  /* Type: Mint uses the Ubuntu font at 10pt. Not bundled; falls back. */
-  --font-ui: 'Ubuntu', 'Noto Sans', 'DejaVu Sans', system-ui, sans-serif;
+  /* Type: Mint's Ubuntu 10 (bundled as Tilde UI, styles/fonts.css; D56),
+     then fallbacks scaled to take its space. Title bars are Ubuntu Medium,
+     monospace is Mint's DejaVu Sans Mono 10. */
+  --font-ui: 'Tilde UI', 'Tilde UI Fallback', 'Tilde UI Fallback DejaVu', system-ui, sans-serif;
   --font-size-ui: 13.333px;
   --font-size-small: 12px;
-  --font-mono: 'Ubuntu Mono', 'DejaVu Sans Mono', 'Noto Sans Mono', monospace;
+  --font-mono: 'DejaVu Sans Mono', 'Ubuntu Mono', 'Noto Sans Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
   /* Desktop */
   --desktop-bg:
@@ -83,6 +85,7 @@
 
   /* Window decorations */
   --wm-titlebar-height: 32px;
+  --wm-title-weight: 500;
   --wm-titlebar-bg: #222226;
   --wm-titlebar-bg-unfocused: #26262a;
   --wm-title-fg: #dadada;

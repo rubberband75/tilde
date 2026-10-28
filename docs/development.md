@@ -141,6 +141,12 @@ keyring) still needs a real Mint install to check by hand.
 - A blank or broken stream usually means something wrote to the worker's
   stdout. Search for `fmt.Print` and C libraries that print.
 
+## Fonts
+
+`make fonts` rebuilds `web/src/assets/fonts/tilde-ui.woff2` and
+`web/src/styles/fonts.css` from the installed `fonts-ubuntu` package (or
+`UBUNTU_FONT_DIR`), with python3-fonttools and python3-brotli (D56).
+
 ## Icons
 
 `make icons` refreshes `web/public/icons/Mint-Y` from
