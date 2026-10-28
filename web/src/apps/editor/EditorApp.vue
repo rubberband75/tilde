@@ -13,9 +13,12 @@ import { dirName } from '@/api/fs'
 import { textMimeTypes } from '@/apps/registry'
 import type { AppContext } from '@/apps/types'
 import { onBeforeLock } from '@/lib/beforeLock'
+import { draftsApi } from '@/api/text'
 import { onFsChanged } from '@/lib/bus'
 import { useWatchedDirs } from '@/lib/fswatch'
 import { EditorDocument } from './document'
+import RecoverPanel from './RecoverPanel.vue'
+import { recoverable, shownDraftKeys, type Recoverable } from './recovery'
 import { baseExtensions, languageFor } from './setup'
 
 const props = defineProps<{ ctx: AppContext }>()
@@ -151,6 +154,59 @@ async function openFiles() {
   }
 }
 
+// Unsaved documents whose windows are gone (D58), offered in a new empty
+// window, and listed on request.
+const recover = ref<Recoverable[]>([])
+const recoverOpen = ref(false)
+const recoverDismissed = ref(false)
+let recovered = false
+
+/** An empty new document nobody has typed in: it can give its place away. */
+const untouched = () => !state.path && !state.dirty && !text()
+
+async function loadRecoverable() {
+  try {
+    const drafts = await draftsApi.list()
+    recover.value = recoverable(drafts, shownDraftKeys([...ctx.appWindows(), ctx.args]))
+  } catch {
+    recover.value = []
+  }
+}
+
+function openRecovered(item: Recoverable) {
+  ctx.launch('text-editor', item.args)
+  recover.value = recover.value.filter((r) => r.key !== item.key)
+  recovered = true
+  if (recover.value.length === 0) closeRecover()
+}
+
+async function discardRecovered(item: Recoverable) {
+  const ok = await ctx.confirm({
+    title: `Discard “${item.name}”?`,
+    message: 'The unsaved text will be deleted. This cannot be undone.',
+    confirm: 'Discard',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await draftsApi.remove(item.key)
+  } catch (e) {
+    ctx.notify(`Could not discard “${item.name}”: ${(e as Error).message}`, 'error')
+  }
+  await loadRecoverable()
+}
+
+/** Closes the list; an untouched window that recovered something goes too. */
+function closeRecover() {
+  recoverOpen.value = false
+  if (recovered && untouched()) {
+    ctx.setCloseGuard(null)
+    ctx.close()
+    return
+  }
+  view.value?.focus()
+}
+
 async function reload() {
   try {
     setText(await doc.reload())
@@ -228,6 +284,7 @@ onMounted(async () => {
   ready.value = true
   view.value.focus()
   await setLanguage()
+  if (untouched()) await loadRecoverable()
 })
 
 /**
@@ -273,7 +330,14 @@ onBeforeUnmount(() => {
         Wrap Lines
       </button>
     </header>
-    <div v-if="state.changedOnDisk" class="infobar" role="status">
+    <div v-if="recover.length && !recoverOpen && !recoverDismissed && untouched()" class="infobar" role="status">
+      <span>
+        {{ recover.length === 1 ? '1 unsaved document' : `${recover.length} unsaved documents` }} can be recovered.
+      </span>
+      <button class="btn" @click="recoverOpen = true">Show</button>
+      <button class="btn" @click="recoverDismissed = true">Not Now</button>
+    </div>
+    <div v-else-if="state.changedOnDisk" class="infobar" role="status">
       <span>“{{ doc.name }}” changed on disk after your unsaved changes.</span>
       <button class="btn" @click="reload">Reload</button>
       <button class="btn" @click="state.changedOnDisk = false">Keep My Changes</button>
@@ -285,7 +349,16 @@ onBeforeUnmount(() => {
       <span>You do not have permission to change “{{ doc.name }}”.</span>
       <button class="btn" @click="saveAs">Save As…</button>
     </div>
-    <div ref="host" class="host" />
+    <div class="body">
+      <div ref="host" class="host" />
+      <RecoverPanel
+        v-if="recoverOpen"
+        :items="recover"
+        @open="openRecovered"
+        @discard="discardRecovered"
+        @close="closeRecover"
+      />
+    </div>
     <footer class="status">
       <span>{{ languageName }}</span>
       <span>Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
@@ -334,9 +407,13 @@ onBeforeUnmount(() => {
 .infobar span {
   flex: 1;
 }
-.host {
+.body {
+  position: relative;
   flex: 1;
   min-height: 0;
+}
+.host {
+  height: 100%;
   overflow: hidden;
 }
 .status {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 type savedText struct {
@@ -178,7 +179,46 @@ func TestDrafts(t *testing.T) {
 	}
 	decode[any](t, resp, http.StatusNoContent)
 	decode[apiError](t, mustGet(t, c, api("/api/v1/drafts", q)), http.StatusNotFound)
-	decode[apiError](t, mustGet(t, c, api("/api/v1/drafts", nil)), http.StatusBadRequest)
+	decode[apiError](t, mustGet(t, c, api("/api/v1/drafts", url.Values{"key": {""}})), http.StatusBadRequest)
+}
+
+// TestDraftList: without a key, every draft is listed, newest first,
+// without its text (D58).
+func TestDraftList(t *testing.T) {
+	c, home := startWorker(t)
+	list := func() []DraftInfo {
+		return decode[struct{ Drafts []DraftInfo }](t, mustGet(t, c, api("/api/v1/drafts", nil)), http.StatusOK).Drafts
+	}
+	if got := list(); len(got) != 0 {
+		t.Fatalf("no drafts yet: %+v", got)
+	}
+	put := func(key, text string) {
+		b, _ := json.Marshal(map[string]string{"text": text})
+		req, _ := http.NewRequest(http.MethodPut, api("/api/v1/drafts", url.Values{"key": {key}}), bytes.NewReader(b))
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decode[any](t, resp, http.StatusNoContent)
+	}
+	put("new:a", "\n\n   Shopping list\nmilk\n")
+	time.Sleep(10 * time.Millisecond)
+	put("file:"+filepath.Join(home, "notes.txt"), strings.Repeat("é", 100))
+	// Something else in the folder, and a draft under another name.
+	dir := filepath.Join(home, ".local", "state", "tilde", "drafts")
+	os.WriteFile(filepath.Join(dir, "junk.json"), []byte("{not json"), 0o600)
+	os.WriteFile(filepath.Join(dir, "moved.json"), []byte(`{"key":"new:z","text":"x"}`), 0o600)
+
+	got := list()
+	if len(got) != 2 {
+		t.Fatalf("drafts %+v", got)
+	}
+	if got[0].Key != "file:"+filepath.Join(home, "notes.txt") || got[0].Preview != strings.Repeat("é", 80)+"…" || got[0].Size != 200 {
+		t.Fatalf("newest %+v", got[0])
+	}
+	if got[1].Key != "new:a" || got[1].Preview != "Shopping list" || got[1].Updated.IsZero() {
+		t.Fatalf("older %+v", got[1])
+	}
 }
 
 func mustGet(t *testing.T, c *http.Client, u string) *http.Response {

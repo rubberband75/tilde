@@ -1,5 +1,5 @@
 import { api, buildUrl, handleResponse, request } from './client'
-import type { Draft, SavedText, TextFile } from './types'
+import type { Draft, DraftInfo, SavedText, TextFile } from './types'
 
 export const textApi = {
   get: (path: string) => api.get<TextFile>('/api/v1/text', { path }),
@@ -21,6 +21,8 @@ export const textApi = {
 
 export const draftsApi = {
   get: (key: string) => api.get<Draft>('/api/v1/drafts', { key }),
+  /** Every draft, newest first, without its text. */
+  list: () => api.get<{ drafts: DraftInfo[] }>('/api/v1/drafts').then((r) => r.drafts),
   put: (key: string, text: string, base: string) =>
     request<void>('PUT', buildUrl('/api/v1/drafts', { key }), { json: { text, base } }),
   remove: (key: string) => request<void>('DELETE', buildUrl('/api/v1/drafts', { key })),

@@ -353,6 +353,17 @@ export interface SavedText {
 }
 
 /** The editor's unsaved changes, kept by the worker (D48). */
+/** GET /api/v1/drafts without a key (D58): a draft without its text. */
+export interface DraftInfo {
+  key: string
+  base?: string
+  updated: string
+  /** Bytes of text. */
+  size: number
+  /** The first line with something on it, at most 80 characters. */
+  preview: string
+}
+
 export interface Draft {
   key: string
   text: string

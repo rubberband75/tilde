@@ -187,7 +187,7 @@ func (w *Worker) Handler() http.Handler {
 
 	m.HandleFunc("GET /api/v1/text", w.handleTextGet)
 	m.HandleFunc("PUT /api/v1/text", w.handleTextPut)
-	m.HandleFunc("GET /api/v1/drafts", w.handleDraftGet)
+	m.HandleFunc("GET /api/v1/drafts", w.handleDrafts)
 	m.HandleFunc("PUT /api/v1/drafts", w.handleDraftPut)
 	m.HandleFunc("DELETE /api/v1/drafts", w.handleDraftDelete)
 

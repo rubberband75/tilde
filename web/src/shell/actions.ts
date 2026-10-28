@@ -54,6 +54,10 @@ export function createContext(windowId: string): AppContext {
     setIcon: (icon) => wm.setIcon(windowId, icon),
     close: () => void wm.requestClose(windowId),
     saveState: (patch) => wm.saveState(windowId, patch),
+    appWindows: () => {
+      const appId = wm.get(windowId)?.appId
+      return wm.windows.filter((w) => w.appId === appId && w.id !== windowId).map((w) => w.args)
+    },
     setCloseGuard: (guard) => wm.setCloseGuard(windowId, guard),
     onClose: (fn) => wm.onClose(windowId, fn),
     get home() {

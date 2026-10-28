@@ -568,7 +568,7 @@ would lose hard links, another user's ownership, a group the user is not
 in or an ACL, and then the file is rewritten in place. An unmodified
 document follows changes on disk through the folder's inotify events.
 Save As took a typed path until the shared file chooser (D49). Not yet:
-tabs, reopening an untitled draft whose window is gone. Rejected: Monaco (workers, CSP, size); keeping drafts in the
+tabs, reopening an untitled draft whose window is gone (D58). Rejected: Monaco (workers, CSP, size); keeping drafts in the
 browser (`localStorage` is per browser and stays readable after a lock);
 the upload endpoint for saving (its rename drops permissions and replaces
 symlinks).
@@ -840,6 +840,27 @@ windows opened and closed in this page, so windows a reload or an unlock
 brings back, and the ones logout or a lock clears, come and go at once.
 Not yet: a switch to turn effects off (waits for the Settings app). Rejected: CSS transitions on position and
 size (the relayout above); a library (the Web Animations API does it).
+
+**D58 — Recover unsaved documents from a list in the editor** (2026-10-28, accepted)
+The worker keeps every unsaved document as a draft (D48), but a draft is
+found again only by its window: one whose window is gone (closed in
+another browser, a layout lost with the browser's storage) was out of
+reach, and for a document never saved there was no other way back. The
+worker now lists its drafts without their text (`GET /api/v1/drafts`);
+an empty new editor window says when some are not shown by any editor
+window in this browser ("2 unsaved documents can be recovered"), and
+Show lists them over the editor, newest first: a file's name and folder,
+or a never-saved document's first line, and when it was last edited.
+Open brings each back in its own window, still unsaved (a file's draft
+by opening the file, which loads it); Discard asks first, then deletes
+it. An empty window that recovered something closes once the list does,
+as one gives its place to opened files. Apps still reach other windows
+only through `ctx`: `ctx.appWindows()` gives the saved state of the same
+app's other windows. A draft open in another browser's window is listed
+too, since the worker cannot know; opening it there as well is the same
+as opening one file twice. Rejected: reopening such windows by itself
+(windows would appear in every browser that loads the layout, and
+drafts a user meant to drop would keep coming back).
 
 ---
 

@@ -180,6 +180,7 @@ first answer ends it. Unanswered requests are cancelled after 5 minutes.
 | GET | `/api/v1/text?path=` | `{text, version, writable, entry}`. `415 not_text` for binary or non-UTF-8 files, `413 too_large` over 10 MB, `400 is_a_directory`. `version` names the contents (mtime, size, inode) |
 | PUT | `/api/v1/text?path=&base=[&force=1]` | Body: the text (UTF-8). `base` is the version it was opened at, `""` for a new file. `200 {version, entry}`; `409 changed` if the file changed (or was deleted) since `base`, `409 exists` for a new file whose name is taken; `force=1` saves anyway. A symlink's target is written; a new copy is renamed into place unless that would lose hard links, another owner, the group or an ACL, then the file is rewritten in place. Permissions are kept |
 | GET | `/api/v1/drafts?key=` | `Draft`: `{key, text, base?, updated}`, or `404`. Keys: `file:` + path, or `new:` + an id for a document never saved |
+| GET | `/api/v1/drafts` | Without `key`: `{drafts: DraftInfo[]}`, every draft newest first, without its text (D58). `DraftInfo`: `{key, base?, updated, size, preview}`; `size` in bytes, `preview` the first line with something on it (at most 80 characters) |
 | PUT | `/api/v1/drafts?key=` | `{text, base}` → `204`. Kept in `$XDG_STATE_HOME/tilde/drafts` (folder 0700, files 0600) |
 | DELETE | `/api/v1/drafts?key=` | `204`, also when there was none |
 

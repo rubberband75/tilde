@@ -237,7 +237,8 @@ App.vue ── LoginScreen (logged out)
   document per window (`document.ts`): it drafts unsaved changes to the
   worker as the user types and before Lock Screen (`src/lib/beforeLock.ts`),
   reopens them after a reload or lock, and saves against the version it
-  opened.
+  opened. Drafts no window here shows are offered in an empty window
+  (`recovery.ts`, `RecoverPanel.vue`, D58).
 - **Image viewer** (`src/apps/image-viewer`, D50): an `<img>` on
   `fs/content` (the mtime in the URL), the folder's images in name order
   (`viewer.ts`: types, order, zoom steps, Best Fit), zoom by scaling and

@@ -75,6 +75,12 @@ export interface AppContext {
   isInteracting(): boolean
   /** Launch another app. */
   launch(appId: string, args?: Record<string, unknown>): void
+  /**
+   * The saved state (args) of this app's other windows in this browser:
+   * the text editor leaves the drafts they show out of its list to
+   * recover (D58). Not other apps' windows.
+   */
+  appWindows(): ReadonlyArray<Readonly<Record<string, unknown>>>
   /** Open a file or folder with the app registered for its type. */
   openEntry(entry: Entry): void
   notify(message: string, kind?: 'info' | 'error'): void
