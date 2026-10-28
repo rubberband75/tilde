@@ -732,6 +732,22 @@ shortcut two steps); Ctrl+Alt for Super (a Mint client takes Ctrl+Alt+
 arrows for its workspaces and Ctrl+Alt+T); Keyboard Lock without
 fullscreen (browsers allow it only in fullscreen).
 
+**D54 — Calendar popup on the clock, drawn by hand** (2026-10-27, accepted)
+Clicking the panel clock opens Cinnamon's calendar: today's weekday and
+date on top, then a month with buttons and the mouse wheel to page
+through months; clicking the month's name comes back to today's. Days of
+the neighbouring months fill six weeks, dimmed, so the popup never
+changes size. Like the clock, it uses the browser's locale and time zone,
+and the week starts on the locale's first day (`Intl.Locale` week info,
+or CLDR's Sunday and Saturday regions where the browser has none, as
+Firefox). Today moves on at midnight while the popup is open. Not yet:
+week numbers (off by default in Cinnamon), events (Cinnamon reads them
+from Evolution's data server), "Date and Time Settings" (waits for the
+Settings app). Rejected: Reka UI's Calendar (a date picker, with
+selection and a dependency on `@internationalized/date`, for a grid that
+only shows a month; its first weekday is not taken from the locale
+either).
+
 ---
 
 ## Open decisions

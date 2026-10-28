@@ -34,7 +34,7 @@ to; tick items off as they land.
 - [x] Notifications (simple toasts)
 - [x] Bundled Mint-Y icons with fallback glyphs
 - [ ] Panel: system tray applets (sound, network) — needs D-Bus in the worker
-- [ ] Calendar popup on the clock
+- [x] Calendar popup on the clock (D54): today's date, a month to page through (buttons, wheel), weeks starting on the locale's first day
 - [x] Keyboard shortcuts (D53): Cinnamon's keys in fullscreen with Keyboard Lock (panel and menu button), Alt+Shift alternates in any browser; Alt+Tab switcher, Super+arrows tiling, Show Desktop, Alt+F4, window menu, Move/Resize
 - [x] Edge snapping and tiling (D52): halves at the side and top edges, quarters at the corners; a preview while dragging; the window's own size back when dragged out; kept through reloads
 - [x] Window menu (D52): right-click the title bar for Minimize, Maximize, Move, Resize (pointer or arrow keys), Always on Top, Close

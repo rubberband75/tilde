@@ -29,5 +29,5 @@ export function useClock() {
     new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now.value),
   )
   const date = computed(() => new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(now.value))
-  return { time, date }
+  return { now, time, date }
 }

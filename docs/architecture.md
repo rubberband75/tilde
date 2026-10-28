@@ -174,7 +174,7 @@ App.vue ── LoginScreen (logged out)
             │         (a modal dialog window, the file chooser, sits above its parent)
             ├── Notices
             ├── JobsPanel ── ConflictDialog   file job progress and questions
-            ├── Panel ── StartMenu, launchers, WindowList, tray (browsers, user, clock)
+            ├── Panel ── StartMenu, launchers, WindowList, tray (fullscreen, browsers, user, clock + calendar)
             └── Dialogs                       ctx.confirm / ctx.prompt
 ```
 
