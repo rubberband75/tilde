@@ -194,6 +194,8 @@ App.vue ── LoginScreen (logged out)
   its own rect next to its `tile`. Right-clicking the title bar opens the
   window menu (Move, Resize, Always on Top, ...); the window layer is its
   own stacking context, so Always on Top windows stay under the panel.
+  State changes animate (`src/wm/animate.ts`, D57): a transform from the old
+  box to the new one, into or out of the window-list button for minimize.
 - **Keyboard shortcuts** (D53): `src/shell/shortcuts.ts` is the keymap
   (Cinnamon's keys and the Alt+Shift alternates), `src/shell/keyboard.ts`
   catches them on the window before any app and runs them; Alt+Tab's

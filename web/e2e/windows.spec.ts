@@ -1,6 +1,11 @@
 import { desktopIcon, expect, test, windowNamed } from './fixtures'
 import type { Locator, Page } from '@playwright/test'
 
+/** Waits for a window's animation (D57) to end, so its box is its own. */
+async function settled(l: Locator) {
+  await expect.poll(() => l.evaluate((el) => el.getAnimations().length)).toBe(0)
+}
+
 async function box(l: Locator) {
   const b = (await l.boundingBox())!
   return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }
@@ -43,6 +48,7 @@ test('windows tile at the screen edges and keep their size for later', async ({ 
 
   // Dragged out of the tile, the window has its own size again.
   await dragTitle(page, win, { x: area.w / 2, y: area.h / 3 })
+  await settled(win)
   const out = await box(win)
   expect({ w: out.w, h: out.h }).toEqual({ w: before.w, h: before.h })
 
@@ -72,6 +78,7 @@ test('the window menu: unmaximize, move, resize and always on top', async ({ des
   await expect(menuItem('Move')).toBeDisabled()
   await menuItem('Unmaximize').click()
   await expect(win).not.toHaveClass(/maximized/)
+  await settled(win)
   const start = await box(win)
 
   // Move: the arrow keys move the window, Enter keeps it there.
@@ -107,4 +114,30 @@ test('the window menu: unmaximize, move, resize and always on top', async ({ des
   await menu()
   await menuItem('Close').click()
   await expect(win).toHaveCount(0)
+})
+
+test('minimizing and maximizing animate, unless motion is reduced', async ({ desktop: page }) => {
+  await desktopIcon(page, 'Home').dblclick()
+  const win = windowNamed(page, 'Home')
+  await expect(win).toBeVisible()
+  const running = () => win.evaluate((el) => el.getAnimations().length)
+
+  await win.locator('.titlebar .title').dblclick()
+  await expect(win).toHaveClass(/maximized/)
+  expect(await running()).toBe(1)
+
+  // Into its window-list button, and hidden once that has played.
+  await win.getByTitle('Minimize').click()
+  expect(await running()).toBe(1)
+  await expect(win).toBeHidden()
+  await page.getByRole('toolbar', { name: 'Windows' }).getByTitle('Home').click()
+  await expect(win).toBeVisible()
+  await expect.poll(running).toBe(0)
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await win.locator('.titlebar .title').dblclick()
+  await expect(win).not.toHaveClass(/maximized/)
+  expect(await running()).toBe(0)
+  await win.getByTitle('Minimize').click()
+  await expect(win).toBeHidden()
 })

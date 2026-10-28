@@ -22,6 +22,7 @@ import { createContext } from '@/shell/actions'
 import { useWindows, type AppWindow, type Rect } from '@/stores/windows'
 import { currentStyle, type WindowButton } from '@/theme/desktopStyle'
 import { snapTarget, tileRect, type Tile } from './snap'
+import { useFrameAnimation } from './animate'
 
 const props = defineProps<{ win: AppWindow }>()
 const wm = useWindows()
@@ -38,6 +39,13 @@ const minimized = computed(() => wm.isHidden(props.win))
 const blocked = computed(() => !!wm.dialogOf(props.win.id))
 
 const content = ref<HTMLElement | null>(null)
+const frame = ref<HTMLElement | null>(null)
+// Minimizing plays out before the frame is hidden (D57).
+const { leaving } = useFrameAnimation(
+  frame,
+  () => props.win,
+  () => minimized.value,
+)
 let lastFocus: HTMLElement | null = null
 
 /** Gives keyboard focus back to the widget inside that had it last. */
@@ -320,7 +328,8 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
 <template>
   <section
     class="window"
-    :class="{ focused, maximized, tiled, minimized, dragging: !!drag }"
+    ref="frame"
+    :class="{ focused, maximized, tiled, minimized: minimized && !leaving, leaving, dragging: !!drag }"
     :style="style"
     role="dialog"
     :aria-label="win.title"
@@ -440,6 +449,9 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
 }
 .window.dragging {
   will-change: transform;
+}
+.window.leaving {
+  pointer-events: none;
 }
 
 .titlebar {

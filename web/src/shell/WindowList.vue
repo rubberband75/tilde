@@ -12,6 +12,7 @@ const wm = useWindows()
     <button
       v-for="w in wm.ordered"
       :key="w.id"
+      :data-window="w.id"
       class="item"
       :class="{ focused: wm.focusedId === w.id && w.state !== 'minimized', minimized: w.state === 'minimized' }"
       :title="w.title"

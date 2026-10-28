@@ -820,6 +820,23 @@ nobody uses); serving the host's installed font from the server (a new
 kind of file the server reads, and nothing for hosts without it);
 fallbacks alone (the layout would match but not the look).
 
+**D57 — Window animations as transforms, Cinnamon's traditional effect** (2026-10-28, accepted)
+Minimizing shrinks a window into its window-list button while it fades
+(a dialog into its parent's), and unminimizing grows it back out, in
+200 ms; maximizing, restoring and tiling (by dragging or keys) move the
+window from where it was in 160 ms, and a drop into a tile starts from
+where the pointer let go. The frame takes its new geometry at once and a
+Web Animations transform plays the old box into the new one, scaling the
+content on the way, as Muffin scales a window's texture: animating the
+geometry itself would lay out the content on every frame, and resize a
+terminal's PTY as many times. A minimizing frame stays drawn (and takes
+no clicks) until it has played. Drags change a window's state on their
+own (out of maximized or a tile) and are not animated; neither is
+anything under `prefers-reduced-motion`. Not yet: opening and closing
+(Cinnamon fades and scales those too), a switch to turn effects off
+(waits for the Settings app). Rejected: CSS transitions on position and
+size (the relayout above); a library (the Web Animations API does it).
+
 ---
 
 ## Open decisions
