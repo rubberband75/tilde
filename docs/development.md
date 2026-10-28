@@ -44,7 +44,8 @@ theme, icons and font are bundled.
 
 Architectures: anything Go and cgo build for; the build must be native
 or use a C cross-compiler with that architecture's `libpam`. Raspberry
-Pi OS (arm64) is a target; its e2e run is still to come (`make e2e-pi`,
+Pi OS (arm64, Raspberry Pi 4 and later) is a target; 32-bit armhf is
+not; its e2e run is still to come (`make e2e-pi`,
 on request).
 
 Tested so far: Linux Mint 22 (development) and Ubuntu 24.04 server, on

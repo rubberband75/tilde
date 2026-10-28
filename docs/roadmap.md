@@ -99,12 +99,14 @@ to; tick items off as they land.
 - [x] System Monitor: enable and disable services at boot, a service's journal (D62): a details pane under the Services list
 - [x] System monitor tray applet (D61): CPU and memory graphs in the panel, System Monitor's Resources tab (CPU, memory and swap, network, disk); whole snapshots once a second while watched
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**: a second port (D66)
+- [ ] Notifications: Tilde takes `org.freedesktop.Notifications` when no other program has it, and shows them as toasts (D70)
 - [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/` (D67), the desktop's own settings read as defaults, never written; recent logins and failed attempts from the audit log (D46), served by the server
 
 ## Phase 7 — Remote windows
 
 - [ ] Xpra HTML5 client in a window; launch host `.desktop` apps from the menu
 - [ ] Sound applet: host volume through PipeWire, with Xpra's audio (moved from phase 2, D55)
+- [ ] Explore game streaming (Steam): WebRTC from the host GPU, gamepad and pointer lock (open decision)
 
 ## Phase 8 — Multi-machine
 
@@ -116,4 +118,6 @@ to; tick items off as they land.
 - [x] systemd unit without sandboxing, `/etc/default/tilde`, PAM file, `make install`
 - [x] CI on GitHub Actions: format checks, Go and frontend tests, builds (D30)
 - [ ] Packages with nfpm (D65): `.deb` for amd64 and arm64, a release workflow attaching them to GitHub releases; then `.rpm` and Arch, each with its family's PAM file
+- [ ] Installing enables and starts Tilde on localhost and prints how to open it to the LAN, a VPN, an SSH tunnel or a reverse proxy (D68)
+- [ ] Session lifetime as a server setting, 12 hours by default (D69)
 - [ ] Raspberry Pi OS e2e run (D64): arm64 under QEMU, a small part of the suite, only on request (`make e2e-pi`)

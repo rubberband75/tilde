@@ -96,7 +96,7 @@ tab leaves the session running; no auto-logout by default.
 Random 256-bit token in an `HttpOnly; Secure; SameSite=Strict` cookie
 (`__Host-tilde`), stored server-side by hash, rotated on every login and
 unlock, revoked on logout. Idle (no input from any client) → lock.
-Absolute lifetime 12 hours (open question: confirm). Concurrent clients
+Absolute lifetime 12 hours (confirmed by D69). Concurrent clients
 allowed, with a tray indicator later.
 
 **D17 — Server restart ends sessions in v1** (2026-10-19, accepted, 4f)
@@ -1015,13 +1015,15 @@ usual run stays as fast as it is: `make e2e-pi`, not part of
 
 **D65 — Packages with nfpm, released on GitHub** (2026-10-28, accepted)
 Tilde is packaged with nfpm, from one configuration: `.deb` first, for
-amd64 and arm64 (armhf if older Raspberry Pis turn out to matter), then
-`.rpm` and Arch packages, each with its family's PAM file and the
-systemd unit and `/etc/default/tilde` as `make install` puts them. A
-release workflow builds them (natively on ARM runners, as the PAM build
-needs cgo) and attaches them to a GitHub release; an apt repository, and
-the AUR, can follow once people use it. Rejected: debhelper (Debian
-packages only, where the targets span families, D64).
+amd64 and arm64, then `.rpm` and Arch packages, each with its family's
+PAM file and the systemd unit and `/etc/default/tilde` as `make install`
+puts them. (Settled the same day: no armhf, as the Raspberry Pis are Pi
+4s, which run 64-bit Raspberry Pi OS; installing enables and starts
+Tilde on localhost, D68.) A release workflow builds them (natively on
+ARM runners, as the PAM build needs cgo) and attaches them to a GitHub
+release; an apt repository, and the AUR, can follow once people use it.
+Rejected: debhelper (Debian packages only, where the targets span
+families, D64).
 
 **D66 — Local web apps on a second port** (2026-10-28, accepted)
 Local web apps (code-server, Jupyter) are served from a separate origin,
@@ -1048,11 +1050,46 @@ desktop's when it has one and is 15 minutes otherwise, unless set in
 Tilde (D40). Rejected: writing Cinnamon's gsettings (nothing to write to
 on most hosts, and a surprise on the others).
 
+**D68 — Reaching Tilde: localhost by default, the install says how to open it** (2026-10-28, accepted; amends D24)
+The package enables and starts Tilde, listening on `127.0.0.1:8443` as
+D24 has it, and prints how to reach it from elsewhere: from the LAN or a
+VPN (WireGuard, Tailscale) with `--listen` on that address, through an
+SSH tunnel (`ssh -L 8443:127.0.0.1:8443 host`), or from the internet
+behind a reverse proxy with its own certificate (`--trust-proxy`,
+`--allowed-origins`), and with two-factor (D43). The user reaches it
+from the LAN for now and wants to try it from outside soon, by SSH
+tunnel or over the internet. Each of those works with the server as it
+is; listening on more than one address at once (localhost and the LAN)
+and getting a certificate by itself (ACME) would be additions.
+
+**D69 — Sessions last at most 12 hours, a server setting** (2026-10-28, accepted; settles D16's open question)
+A session ends 12 hours after login, however active, and the user logs
+in again; the user wants no more than that and does not mind logging in.
+The limit becomes a setting of the server's (in `/etc/default/tilde`),
+an administrator's policy rather than a user's preference; idle locking
+(D40) stays separate.
+
+**D70 — Tilde is the notification service when nothing else is** (2026-10-28, accepted; replaces the open "Events" question)
+`notify-send` and other programs' notifications show as Tilde's toasts:
+the worker takes the `org.freedesktop.Notifications` name on the user's
+session bus when no other program has it, as on a headless server or a
+Pi. While a desktop at the machine has it (Cinnamon's own notifications),
+Tilde leaves it alone; one user's sessions share one session bus, so
+only one program can have the name. Showing notifications in both
+places at once is still open (see Open decisions).
+
+**D71 — Remote apps with Xpra** (2026-10-28, accepted; confirms D26)
+Host graphical apps run in Tilde windows through Xpra's HTML5 client; the
+first ones the user has in mind are VS Code and Disk Usage Analyzer,
+which Xpra's per-window forwarding suits. Streaming games (Steam), which
+needs another approach, is a separate question (see Open decisions).
+
 ---
 
 ## Open decisions
 
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
-| Events | notifications on the events WebSocket (job progress D31, folder changes D34 done) | per D11 | Phase 5 |
+| Notifications in both places | mirror the desktop's notifications into Tilde by watching the session bus (D70) | view-only mirror, a setting | When notifications are built |
+| Game streaming | WebRTC video from the host GPU (capture, hardware encode, input), alongside Xpra (D71) | explore after Xpra | Phase 7 |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |
