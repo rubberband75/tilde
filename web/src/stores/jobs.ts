@@ -8,6 +8,7 @@ import { emitDrivesChanged, emitFsChanged, emitNetworkChanged } from '@/lib/bus'
 import { setWatchSender, watchedDirs } from '@/lib/fswatch'
 import { setResourcesSender } from '@/lib/resources'
 import { useResources } from './resources'
+import { useSettings } from './settings'
 import { usePolkit } from './polkit'
 
 /** Folders whose listing a job changes. */
@@ -74,6 +75,9 @@ export const useJobs = defineStore('jobs', () => {
         break
       case 'resources-history':
         useResources().setHistory(ev.history ?? [])
+        break
+      case 'settings':
+        void useSettings().load()
         break
     }
   }

@@ -754,6 +754,51 @@ func TestAuditLog(t *testing.T) {
 	t.Fatalf("missing from the journal: %v", want)
 }
 
+// TestRecentLoginsIgnoreForgeries: anyone may send the journal an entry
+// tagged tilde-audit; System Settings' Recent Logins shows only the
+// server's own (D72).
+func TestRecentLoginsIgnoreForgeries(t *testing.T) {
+	e := setup(t)
+	forged := "logged in from 198.51.100.7 (forged)"
+	cmd := exec.Command("logger", "--journald")
+	cmd.Stdin = strings.NewReader("SYSLOG_IDENTIFIER=tilde-audit\nTILDE_USER=" + e.user +
+		"\nTILDE_EVENT=login\nTILDE_RHOST=198.51.100.7\nPRIORITY=5\nMESSAGE=" + e.user + " " + forged + "\n")
+	if out, err := cmd.CombinedOutput(); err != nil || os.Geteuid() == 0 {
+		t.Fatalf("logger as uid %d: %v %s", os.Geteuid(), err, out)
+	}
+	// The forgery is in the journal before Recent Logins is read.
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		out, _ := exec.Command("sudo", "journalctl", "--no-pager", "-t", "tilde-audit", "TILDE_RHOST=198.51.100.7").Output()
+		if strings.Contains(string(out), forged) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the forged entry did not reach the journal: %s", out)
+		}
+	}
+	var res struct {
+		Available bool
+		Entries   []struct{ Event, Text string }
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		decode(t, e.do(t, http.MethodGet, "/api/auth/logins", nil), http.StatusOK, &res)
+		if !res.Available {
+			t.Fatal("the journal is unavailable")
+		}
+		if slices.ContainsFunc(res.Entries, func(r struct{ Event, Text string }) bool { return r.Event == "login" }) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no login of this test's: %+v", res.Entries)
+		}
+	}
+	for _, r := range res.Entries {
+		if strings.Contains(r.Text, "forged") {
+			t.Fatalf("a forged record is listed: %+v", r)
+		}
+	}
+}
+
 // totp is RFC 6238's code for counter, with SHA-1 and 6 digits, as pam_oath
 // makes it for "HOTP/T30".
 func totp(t *testing.T, secretHex string, counter uint64) string {

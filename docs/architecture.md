@@ -103,8 +103,12 @@ could already do.
 - Is the polkit authentication agent of Tilde's web session (`polkit.go`,
   D44): polkit's requests for a password go to a dialog in every browser,
   and polkit's setuid `polkit-agent-helper-1` checks the answers.
-- Reads the user's screensaver settings with gsettings and streams the idle
-  lock delay to the server (`lock.go`, `/internal/session`, D40), and
+- Keeps Tilde's settings (`settings.go`, D72) in
+  `~/.config/tilde/settings.json` for System Settings
+  (`web/src/apps/settings/`, `web/src/stores/settings.ts`).
+- Reads the user's screensaver settings with gsettings, or Tilde's own
+  delay, and streams the idle lock delay to the server (`lock.go`,
+  `/internal/session`, D40), and
   follows its logind session (`logind.go`, D41): sets `LockedHint` when the
   server says every browser is locked, and passes on logind's lock
   requests. These `/internal/` routes are the server's own and never

@@ -6,6 +6,7 @@
 // new one, scaling the content on the way, as Muffin scales a window.
 import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { AppWindow } from '@/stores/windows'
+import { useSettings } from '@/stores/settings'
 import { useWindows } from '@/stores/windows'
 
 export const MINIMIZE_MS = 200
@@ -58,7 +59,9 @@ function buttonBox(win: AppWindow): Box | null {
   return null
 }
 
+/** Reduced motion asked for by the system, or animations off in Tilde's settings (D72). */
 function reducedMotion(): boolean {
+  if (!useSettings().settings.effects.animations) return true
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 

@@ -120,6 +120,17 @@ export const apps: AppManifest[] = [
     component: () => import('./backgrounds/BackgroundsApp.vue'),
   },
   {
+    id: 'settings',
+    name: 'System Settings',
+    comment: 'Control Center: screen lock, effects, panel and more',
+    icon: 'preferences-system',
+    category: 'Preferences',
+    singleInstance: true,
+    defaultSize: { w: 720, h: 500 },
+    minSize: { w: 520, h: 340 },
+    component: () => import('./settings/SettingsApp.vue'),
+  },
+  {
     id: 'system-monitor',
     name: 'System Monitor',
     comment: 'View current processes and monitor system state',

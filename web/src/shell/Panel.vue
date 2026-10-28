@@ -7,6 +7,7 @@ import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import { desktopFullscreen, toggleDesktopFullscreen } from '@/lib/fullscreen'
 import { useNotices } from '@/stores/notices'
+import { useSettings } from '@/stores/settings'
 import StartMenu from './StartMenu.vue'
 import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
@@ -19,6 +20,8 @@ import { useWindows } from '@/stores/windows'
 const wm = useWindows()
 const session = useSession()
 const notices = useNotices()
+// Which applets show (D72).
+const settings = useSettings()
 
 async function fullscreen() {
   if (!(await toggleDesktopFullscreen())) notices.push('This browser did not allow fullscreen.', 'error')
@@ -38,6 +41,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
     <WindowList />
     <div class="tray">
       <button
+        v-if="settings.settings.panel.fullscreen"
         class="applet fullscreen"
         :class="{ active: desktopFullscreen }"
         :title="desktopFullscreen ? 'Leave Fullscreen' : 'Fullscreen (all keys go to Tilde)'"
@@ -45,8 +49,8 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
       >
         <SymbolicIcon name="fullscreen" :size="16" />
       </button>
-      <ResourcesApplet />
-      <NetworkApplet />
+      <ResourcesApplet v-if="settings.settings.panel.resources" />
+      <NetworkApplet v-if="settings.settings.panel.network" />
       <ClientsApplet />
       <div class="applet user" :title="`Logged in as ${session.info?.user}`">{{ session.info?.user }}</div>
       <PanelClock />

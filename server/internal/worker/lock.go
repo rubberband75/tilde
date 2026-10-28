@@ -20,8 +20,9 @@ import (
 
 // LockSettings says when an idle client locks.
 type LockSettings struct {
-	// Source is where the delay came from: "cinnamon", "gnome", or
-	// "default" (neither desktop's schemas are installed).
+	// Source is where the delay came from: "tilde" (the user's own in
+	// System Settings, D72), "cinnamon", "gnome", or "default" (neither
+	// desktop's schemas are installed).
 	Source string `json:"source"`
 	// LockAfter is how many seconds without input lock a client; 0 means
 	// never (the screensaver or its lock is turned off).
@@ -136,11 +137,12 @@ func (w *Worker) handleSession(rw http.ResponseWriter, r *http.Request) {
 	var locks <-chan struct{}
 	t := time.NewTicker(lockSettingsInterval)
 	defer t.Stop()
-	last := readLockSettings(r.Context())
+	last := w.lockSettings(r.Context())
 	if !send(sessionEvent{Type: "settings", LockSettings: last}) {
 		return
 	}
 	for {
+		recheck := false
 		select {
 		case <-r.Context().Done():
 			return
@@ -158,13 +160,21 @@ func (w *Worker) handleSession(rw http.ResponseWriter, r *http.Request) {
 			if !send(sessionEvent{Type: "audit", Audit: &ev}) {
 				return
 			}
+		// The desktop's settings are read again every minute; Tilde's own
+		// reach the server as soon as they are saved.
 		case <-t.C:
-			if s := readLockSettings(r.Context()); s != last {
-				if !send(sessionEvent{Type: "settings", LockSettings: s}) {
-					return
-				}
-				last = s
+			recheck = true
+		case <-w.settingsChanged:
+			recheck = true
+		}
+		if !recheck {
+			continue
+		}
+		if s := w.lockSettings(r.Context()); s != last {
+			if !send(sessionEvent{Type: "settings", LockSettings: s}) {
+				return
 			}
+			last = s
 		}
 	}
 }

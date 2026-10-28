@@ -33,6 +33,7 @@ them in sync.
 | POST | `/api/auth/lock` | — | `204`. Locks every browser logged in as this user. `423 locked` from a locked browser |
 | GET | `/api/auth/clients` | — | `200 {clients: ClientInfo[]}`: the user's signed-in browsers (D47), this one first, then the most recently seen. `ClientInfo`: `{id, address, agent, since, lastSeen, lastInput, locked, connected, current}`; `address` and `agent` (its `User-Agent`) are from its login or last unlock; `connected`: a tab has the events socket open. `423 locked` from a locked browser |
 | POST | `/api/auth/clients/signout` | `{id}` | `204`: signs that browser out (its requests and sockets end). `400` for this browser (log out instead), `404 not_found`, `423 locked` |
+| GET | `/api/auth/logins` | — | `200 {available, entries: LoginRecord[]}`: this account's last 50 logins and failed attempts (logins, failed logins and unlocks, the rate limit), newest first, read by the server from the audit log (D46, D72). `LoginRecord`: `{time, event, rhost, text, failed}`; `time` in ms, `text` the audit message without the user's name. `available` is false when the journal cannot be read. `423 locked` from a locked browser |
 | POST | `/api/auth/unlock` | `{password}` | `200 SessionInfo` and a new session cookie (the old one stops working); only this browser unlocks. `401 auth_failed`, `403 account_expired` / `password_expired`, `429 rate_limited` (shared with login: 5 attempts per address in 15 minutes), `401 too_many_attempts` after 5 tries on this cookie, which is then signed out |
 
 `SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login
@@ -55,7 +56,8 @@ Lock and `423` responses, `session` while locked, logout and leave carry
 `Clear-Site-Data: "cache"`.
 Report input on the first event after a quiet spell, then at most every
 `heartbeat` seconds while it continues; the server allows twice that for
-reports on their way. `lockAfter` follows the user's Cinnamon screensaver
+reports on their way. `lockAfter` is Tilde's own delay if the user set
+one in System Settings (D72), else follows the user's Cinnamon screensaver
 settings (`idle-delay` + `lock-delay`, when `idle-activation-enabled` and
 `lock-enabled`), else GNOME's, else 900. The token lives 12 hours from
 login or the last unlock.
@@ -98,6 +100,8 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/desktop/background` | `{source, picture, options, primary, secondary, shading}`: Tilde's own background if one was picked (`source: "tilde"`, `~/.config/tilde/desktop-background.json`), else Cinnamon's (`"cinnamon"`, `org.cinnamon.desktop.background` read with `gsettings`), else `"default"` (the theme's). `picture` is a path (empty: colors only); `options` is `none`, `wallpaper` (tiled), `centered`, `scaled`, `stretched`, `zoom` or `spanned`; colors are `#rrggbb`; `shading` is `solid`, `vertical` or `horizontal` |
 | PUT | `/api/v1/desktop/background` | The same fields without `source` → the background now shown. Unknown options and bad colors fall back to defaults; `picture` must be absolute. `{reset: true}` drops Tilde's background. Cinnamon's settings are never written |
 | GET | `/api/v1/desktop/backgrounds` | `{collections: [{name, images: Entry[]}]}`: Cinnamon's wallpaper lists (`cinnamon-background-properties/*.xml` in `$XDG_DATA_DIRS`), the Pictures folder, and folders from `~/.cinnamon/backgrounds/user-folders.lst`; images only, top level, at most 1000 each |
+| GET | `/api/v1/settings` | `{settings: Settings, desktopLock: {source, lockAfter}}`. `Settings` (D72), from `~/.config/tilde/settings.json`, defaults for anything missing: `{lock: {own, enabled, minutes}, effects: {animations}, panel: {resources, network, fullscreen}}`. `lock.own`: Tilde's own delay (`enabled`, `minutes` 1–1440) rather than the desktop's. `desktopLock` is what the desktop says (`source`: `cinnamon`, `gnome` or `default`; `lockAfter` in seconds, 0 never) |
+| PUT | `/api/v1/settings` | A whole `Settings` → the saved settings; `400` for a delay out of range. Every client gets a `settings` event, and the server the new lock delay at once. The desktop's settings are never written |
 | POST | `/api/v1/desktop/layout` | `{positions: {key: {col, row} \| null}, replace?}` → layout. Merges (`null` removes a key) or, with `replace`, starts from nothing. Stored in `~/.config/tilde/desktop-layout.json`; cells up to 1000, at most 5000 icons |
 
 ### Files
@@ -276,6 +280,9 @@ netReceived, netSent, diskRead, diskWrite}`: percentages of CPU since the
 previous snapshot, bytes, and bytes a second (network over every interface
 but loopback, disk over whole disks). A reconnected socket starts
 unwatched: ask again.
+
+`{"type":"settings"}` says the user saved System Settings in some
+browser (D72): fetch `/api/v1/settings` again.
 
 `{"type":"polkit"}` says polkit's authentication requests changed (D44):
 fetch `/api/v1/polkit` again. Requests made while the socket was down are

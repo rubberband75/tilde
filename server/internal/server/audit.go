@@ -21,8 +21,11 @@ import (
 // tilde-audit, with the facility authpriv, so rsyslog also files it in
 // /var/log/auth.log next to sshd's:
 //
-//	journalctl -t tilde-audit
-//	journalctl -t tilde-audit TILDE_USER=alice TILDE_EVENT=delete
+//	journalctl -t tilde-audit _UID=0
+//	journalctl -t tilde-audit _UID=0 TILDE_USER=alice TILDE_EVENT=delete
+//
+// Any process may send the journal an entry tagged tilde-audit; _UID is
+// set by journald, so _UID=0 keeps only the server's.
 //
 // The server records what it sees itself (logins, locks, sessions); the
 // worker reports what the user does (terminals, deletions, mounts, polkit)

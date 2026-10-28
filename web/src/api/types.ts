@@ -187,6 +187,8 @@ export type WorkerEvent =
   | { type: 'network' }
   /** polkit's authentication requests changed: fetch /api/v1/polkit again (D44). */
   | { type: 'polkit' }
+  /** The settings were saved, in this browser or another (D72): fetch them again. */
+  | { type: 'settings' }
   /** While asked for (D61): the latest whole snapshot, every second. */
   | { type: 'resources'; resources: Resources }
   /** Right after asking: the last minute's snapshots, oldest first. */
@@ -376,6 +378,36 @@ export interface SavedText {
 }
 
 /** The editor's unsaved changes, kept by the worker (D48). */
+/** GET/PUT /api/v1/settings (D72): Tilde's own settings, in ~/.config/tilde. */
+export interface Settings {
+  lock: {
+    /** Tilde's own delay below, rather than the desktop's. */
+    own: boolean
+    enabled: boolean
+    /** 1 to 1440. */
+    minutes: number
+  }
+  effects: { animations: boolean }
+  panel: { resources: boolean; network: boolean; fullscreen: boolean }
+}
+
+/** When idle browsers lock, and where that came from (D40). */
+export interface LockSettings {
+  source: 'tilde' | 'cinnamon' | 'gnome' | 'default'
+  /** Seconds without input; 0 is never. */
+  lockAfter: number
+}
+
+/** GET /api/auth/logins (D72): one of the user's recent logins or failed attempts. */
+export interface LoginRecord {
+  /** Unix milliseconds. */
+  time: number
+  event: 'login' | 'login_failed' | 'unlock_failed' | 'rate_limited'
+  rhost?: string
+  text: string
+  failed: boolean
+}
+
 /** GET /api/v1/processes (D59): one process from /proc. */
 export interface Process {
   pid: number

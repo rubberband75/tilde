@@ -100,7 +100,8 @@ to; tick items off as they land.
 - [x] System monitor tray applet (D61): CPU and memory graphs in the panel, System Monitor's Resources tab (CPU, memory and swap, network, disk); whole snapshots once a second while watched
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**: a second port (D66)
 - [ ] Notifications: Tilde takes `org.freedesktop.Notifications` when no other program has it, and shows them as toasts (D70)
-- [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/` (D67), the desktop's own settings read as defaults, never written; recent logins and failed attempts from the audit log (D46), served by the server
+- [x] System Settings app (D72): screen lock (follow Cinnamon's or GNOME's delay, or Tilde's own; D40), window animations, the panel's applets, Backgrounds, saved per user in `~/.config/tilde/settings.json` (D67), the desktop's own settings read, never written; recent logins and failed attempts from the audit log (D46), served by the server
+- [ ] Settings: theme (a light Mint-Y, and the accent colours) once there is more than one
 
 ## Phase 7 — Remote windows
 

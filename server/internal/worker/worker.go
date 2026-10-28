@@ -53,10 +53,12 @@ type Worker struct {
 	procs     *processSampler
 	services  *serviceManagers
 	resources *resourceMonitor
-	jobs      *jobManager
-	logind    *logindConn
-	polkit    *polkitAgent
-	auditQ    *auditQueue
+	// settingsChanged wakes the session stream to send the lock delay (D72).
+	settingsChanged chan struct{}
+	jobs            *jobManager
+	logind          *logindConn
+	polkit          *polkitAgent
+	auditQ          *auditQueue
 }
 
 // Options overrides locations, mainly for tests.
@@ -96,25 +98,26 @@ func New(info *userinfo.Info, opt Options) *Worker {
 	trash := NewTrash(opt.DataHome)
 	events := newEventHub()
 	w := &Worker{
-		info:       info,
-		hostname:   host,
-		configHome: opt.ConfigHome,
-		drafts:     filepath.Join(opt.StateHome, "tilde", "drafts"),
-		cacheHome:  opt.CacheHome,
-		umask:      readUmask(),
-		trash:      trash,
-		terms:      newTerminalManager(info.Shell, info.Home),
-		events:     events,
-		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
-		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
-		network:    newNetworkService(func() { events.publish(event{Type: "network"}) }),
-		procs:      &processSampler{},
-		services:   &serviceManagers{},
-		resources:  newResourceMonitor(),
-		jobs:       newJobManager(events, trash),
-		logind:     newLogindConn(opt),
-		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
-		auditQ:     newAuditQueue(),
+		info:            info,
+		hostname:        host,
+		configHome:      opt.ConfigHome,
+		drafts:          filepath.Join(opt.StateHome, "tilde", "drafts"),
+		cacheHome:       opt.CacheHome,
+		umask:           readUmask(),
+		trash:           trash,
+		terms:           newTerminalManager(info.Shell, info.Home),
+		events:          events,
+		watcher:         newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
+		drives:          newDriveService(func() { events.publish(event{Type: "drives"}) }),
+		network:         newNetworkService(func() { events.publish(event{Type: "network"}) }),
+		procs:           &processSampler{},
+		services:        &serviceManagers{},
+		resources:       newResourceMonitor(),
+		settingsChanged: make(chan struct{}, 1),
+		jobs:            newJobManager(events, trash),
+		logind:          newLogindConn(opt),
+		polkit:          newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
+		auditQ:          newAuditQueue(),
 	}
 	w.terms.exited = func(id string) { w.audit(nil, protocol.AuditEvent{Event: "terminal_close", Terminal: id}) }
 	w.polkit.audit = w.auditQ.add
@@ -164,6 +167,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/settings", w.handleSettings)
+	m.HandleFunc("PUT /api/v1/settings", w.handleSettingsSave)
 	m.HandleFunc("GET /api/v1/processes", w.handleProcesses)
 	m.HandleFunc("POST /api/v1/processes/signal", w.handleProcessSignal)
 	m.HandleFunc("GET /api/v1/services", w.handleServices)

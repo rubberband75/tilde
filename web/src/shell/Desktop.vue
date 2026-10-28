@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useBackground } from '@/stores/background'
+import { useSettings } from '@/stores/settings'
 import DesktopIcons from './DesktopIcons.vue'
 import Dialogs from './Dialogs.vue'
 import JobsPanel from './JobsPanel.vue'
@@ -18,8 +19,11 @@ const workArea = ref<HTMLElement | null>(null)
 let ro: ResizeObserver | undefined
 let removeShortcuts: (() => void) | undefined
 
+const settings = useSettings()
+
 onMounted(() => {
   void background.load()
+  void settings.load()
   ro = new ResizeObserver(([entry]) => {
     if (entry) wm.setArea(entry.contentRect.width, entry.contentRect.height)
   })

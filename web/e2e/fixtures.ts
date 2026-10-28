@@ -82,6 +82,19 @@ export class Api {
     expect(res.status(), await res.text()).toBe(200)
   }
 
+  /** Puts System Settings back to the defaults (D72). */
+  async resetSettings() {
+    const res = await this.request.put('/api/v1/settings', {
+      data: {
+        lock: { own: false, enabled: true, minutes: 15 },
+        effects: { animations: true },
+        panel: { resources: true, network: true, fullscreen: true },
+      },
+      headers: this.headers,
+    })
+    expect(res.status(), await res.text()).toBe(200)
+  }
+
   /** Clears Tilde's saved desktop layout (an empty saved layout: no Nemo seed). */
   async resetDesktopLayout() {
     const res = await this.request.post('/api/v1/desktop/layout', {

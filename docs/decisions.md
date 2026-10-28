@@ -1084,6 +1084,23 @@ first ones the user has in mind are VS Code and Disk Usage Analyzer,
 which Xpra's per-window forwarding suits. Streaming games (Steam), which
 needs another approach, is a separate question (see Open decisions).
 
+**D72 — System Settings: lock, effects, panel, recent logins** (2026-10-28, accepted)
+A System Settings app with Cinnamon's modules Tilde has a use for: the
+screen lock (follow the desktop's delay, Cinnamon's or GNOME's as D40
+reads it, or Tilde's own: on or off and the minutes), window animations
+(D57), which panel applets show, a link to Backgrounds, and recent
+logins. Changes apply at once, as in Cinnamon, and are kept by the worker
+in `~/.config/tilde/settings.json` (D67); a file from an older Tilde
+keeps the defaults for what it lacks, and the desktop's settings are only
+read. Saving sends every browser a `settings` event and the server the
+new lock delay at once, rather than at the next minute's re-read. Recent
+logins come from the audit log (D46), which only root may read, so the
+server serves them, filtered to the session's own user and the login
+events, and to entries the server itself wrote (`_UID`, which journald
+sets): anyone may send the journal an entry tagged `tilde-audit`. The
+worker could not read the log. The theme waits until there is a
+second one.
+
 ---
 
 ## Open decisions

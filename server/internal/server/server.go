@@ -151,6 +151,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("POST /api/auth/unlock", s.handleUnlock)
 	m.HandleFunc("POST /api/auth/answer", s.handleAnswer)
 	m.HandleFunc("GET /api/auth/clients", s.handleClients)
+	m.HandleFunc("GET /api/auth/logins", s.handleLogins)
 	m.HandleFunc("POST /api/auth/clients/signout", s.handleClientSignOut)
 	m.HandleFunc("/api/v1/", s.handleWorkerAPI)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

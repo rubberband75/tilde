@@ -122,13 +122,23 @@ bug in Tilde can never give more than the account already has.
   Fields: `TILDE_EVENT`, `TILDE_USER`,
   `TILDE_RHOST`, and per event `TILDE_PATH`, `TILDE_COUNT`,
   `TILDE_REASON`, `TILDE_ACTION`... Read it with `journalctl -t
-  tilde-audit` (`TILDE_USER=alice` to filter). The worker reports its
+  tilde-audit _UID=0` (`TILDE_USER=alice` to filter): any process may
+  send the journal an entry tagged `tilde-audit`, but `_UID` is
+  journald's own, so `_UID=0` keeps only root's. The worker reports its
   events to the server, which writes them under the session's user,
   accepts only the event types it knows, and takes at most 200 at once
   and 20 a second from each user; failed logins from the network share
   one such budget. Messages escape control characters, so a file name
   cannot forge a line in `auth.log`. Commands typed in a terminal are not
   recorded: use auditd for that.
+  System Settings shows a user their own recent logins and failed
+  attempts (D72): the server, as root, runs `journalctl -t tilde-audit`
+  matching `_UID` to its own (so no other process's forged entries),
+  `TILDE_USER` to the session's user and only the login events, so a user
+  sees their own records and none of anyone else's. It reads at most 1 MiB
+  of four fields, with at most four reads running at once. A locked
+  browser cannot ask. The worker cannot read the audit log: it runs as the
+  user, who usually may not read the system journal.
 - Origin check (`internal/server/middleware.go`): every non-GET/HEAD/OPTIONS
   request and every WebSocket upgrade must carry an `Origin` whose host equals
   the request's `Host` (or one passed with `--allowed-origins`).
