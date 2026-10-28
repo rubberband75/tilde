@@ -65,6 +65,41 @@ export function canStop(s: Service): boolean {
   return running(s)
 }
 
+/** Only services with an [Install] section can be switched on or off at boot. */
+export function canSwitchBoot(s: Service): boolean {
+  return s.boot === 'enabled' || s.boot === 'disabled'
+}
+
+/** Why the boot switch is off, for the services it cannot change. */
+export function bootNote(s: Service): string {
+  switch (s.boot) {
+    case 'static':
+      return 'Started by other services or on demand, not at boot by itself.'
+    case 'masked':
+    case 'masked-runtime':
+      return 'Masked: it cannot be started at all.'
+    case 'generated':
+    case 'transient':
+      return 'Made by systemd at boot, from other configuration.'
+    case 'indirect':
+      return 'Started through another unit.'
+    case 'alias':
+      return 'Another name for a service.'
+    case undefined:
+    case '':
+      return 'It has no unit file.'
+  }
+  return ''
+}
+
+/** A journal line's time: the time of day, with the date when not today. */
+export function journalTime(ms: number, now: Date = new Date()): string {
+  const d = new Date(ms)
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return time
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`
+}
+
 /** Failed first by state, then running, then the rest. */
 function stateRank(s: Service): number {
   if (s.active === 'failed') return 0

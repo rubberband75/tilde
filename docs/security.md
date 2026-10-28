@@ -107,7 +107,9 @@ bug in Tilde can never give more than the account already has.
   only over D-Bus, as the user: systemd asks polkit for the system's
   (usually an administrator's password, through Tilde's agent), and the
   user's own manager is theirs. Requests can only name services the
-  manager lists. Stopping `tilde.service` asks first.
+  manager lists. Stopping `tilde.service` asks first. A service's journal
+  is read by `journalctl` as the user, the name passed as its own
+  argument, so journald's own access rules apply (D62).
 - Audit log (D46): root writes to the system journal, tagged
   `tilde-audit` with the facility authpriv (so rsyslog also files it in
   `/var/log/auth.log`): logins and failed logins, the rate limit, locks
@@ -115,7 +117,8 @@ bug in Tilde can never give more than the account already has.
   and ending, terminals, deletions (move to trash, delete permanently,
   empty trash; the first 20 paths and a count), mounts, unmounts, ejects,
   polkit authentications, network connections, disconnections, the
-  Wi-Fi switch, and starting, stopping and restarting system services.
+  Wi-Fi switch, and starting, stopping, restarting, enabling and
+  disabling system services.
   Fields: `TILDE_EVENT`, `TILDE_USER`,
   `TILDE_RHOST`, and per event `TILDE_PATH`, `TILDE_COUNT`,
   `TILDE_REASON`, `TILDE_ACTION`... Read it with `journalctl -t

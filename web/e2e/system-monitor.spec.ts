@@ -85,6 +85,26 @@ test('the Services tab starts and stops system and user services', async ({ desk
     await expect(state(service!)).toHaveText(after, { timeout: 20_000 })
   }
 
+  // The selected service's details: the journal as the user may read it
+  // (not the system's: the test user is not in adm), and the boot switch,
+  // which asks polkit too (D62).
+  const details = mon.getByRole('region', { name: `${service} details` })
+  await expect(details).toContainText('Only your own logs are shown')
+  const boot = details.getByRole('switch')
+  await expect(boot).not.toBeChecked()
+  for (const [checked, label] of [
+    [true, 'Enabled'],
+    [false, 'Disabled'],
+  ] as const) {
+    await boot.click()
+    await expect(auth).toBeVisible()
+    await auth.getByLabel('Password', { exact: true }).fill(password)
+    await auth.getByRole('button', { name: 'Authenticate' }).click()
+    await expect(row(service!).getByRole('cell').nth(3)).toHaveText(label, { timeout: 15_000 })
+    if (checked) await expect(boot).toBeChecked()
+    else await expect(boot).not.toBeChecked()
+  }
+
   // The user's own: no password.
   await mon.getByRole('radio', { name: 'My Services' }).click()
   await search.fill(userService!)
@@ -92,9 +112,21 @@ test('the Services tab starts and stops system and user services', async ({ desk
   await row(userService!).click()
   await button('Start').click()
   await expect(state(userService!)).toHaveText('Running', { timeout: 20_000 })
+  // It logs 300 lines. Scrolled up to read them, the log stays there
+  // through the list's refreshes (every 5 s) and the service's own changes.
+  const userLog = mon.getByRole('log', { name: `${userService} journal` })
+  await expect(userLog).toContainText('line 300', { timeout: 15_000 })
+  await userLog.evaluate((el) => {
+    el.scrollTop = 0
+  })
+  await page.waitForTimeout(6000)
+  expect(await userLog.evaluate((el) => el.scrollTop)).toBe(0)
   await button('Stop').click()
   await expect(state(userService!)).toHaveText('Inactive', { timeout: 20_000 })
   await expect(auth).toHaveCount(0)
+  // Stopping reloads the journal; the reader is still at the top.
+  await expect(userLog).toContainText('Stopped', { timeout: 15_000 })
+  expect(await userLog.evaluate((el) => el.scrollTop)).toBeLessThan(40)
 })
 
 // D61: the panel applet's graphs, and the Resources tab it opens.
@@ -112,9 +144,12 @@ test('the system monitor applet and the Resources tab', async ({ desktop: page }
   )
   await expect(mon.getByText(/Memory\s+.+ \([\d.]+%\) of .+/)).toBeVisible()
 
-  // Hovering a graph reads the seconds out.
+  // Hovering a graph reads the seconds out at that point. The window opens
+  // with an animation (D57): measured before it ends, the graph is smaller
+  // and the pointer lands seconds away from "now".
+  await expect.poll(() => mon.evaluate((el) => el.getAnimations().length)).toBe(0)
   const cpuGraph = mon.getByRole('img', { name: 'CPU use over the last minute' })
   const box = (await cpuGraph.boundingBox())!
-  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2)
+  await cpuGraph.hover({ position: { x: box.width - 3, y: box.height / 2 } })
   await expect(mon.getByRole('status').filter({ hasText: 'now' })).toContainText(/CPU\s*[\d.]+%/)
 })

@@ -1,13 +1,19 @@
 package worker
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +72,7 @@ type systemdSource interface {
 	units(ctx context.Context) ([]unitStatus, error)
 	unitFiles(ctx context.Context) ([]unitFile, error)
 	// call runs a Manager method; interactive lets polkit ask for a password.
+	// The first argument names the unit (or units, for unit-file methods).
 	call(ctx context.Context, method string, interactive bool, args ...any) error
 	state(ctx context.Context, name string) (active, sub string, err error)
 }
@@ -326,6 +333,12 @@ func waitSettled(ctx context.Context, src systemdSource, name string) (string, s
 	}
 }
 
+// isUnknownMethod: a systemd older than 238, without the ...WithFlags methods.
+func isUnknownMethod(err error) bool {
+	var de dbus.Error
+	return errors.As(err, &de) && de.Name == "org.freedesktop.DBus.Error.UnknownMethod"
+}
+
 func writeSystemdErr(rw http.ResponseWriter, err error) {
 	var de dbus.Error
 	if errors.As(err, &de) {
@@ -339,4 +352,204 @@ func writeSystemdErr(rw http.ResponseWriter, err error) {
 		}
 	}
 	writeJSON(rw, http.StatusBadGateway, apiError{Error: err.Error(), Code: "systemd_error"})
+}
+
+// JournalEntry is one line of a service's journal.
+type JournalEntry struct {
+	// Time in Unix milliseconds.
+	Time int64 `json:"time"`
+	// Priority is syslog's: 0 emergency ... 3 error, 4 warning ... 7 debug.
+	Priority int    `json:"priority"`
+	Ident    string `json:"ident,omitempty"`
+	PID      int    `json:"pid,omitempty"`
+	Message  string `json:"message"`
+}
+
+// journalCommand is journalctl; tests replace it.
+var journalCommand = "journalctl"
+
+// journalLines is how far back the details pane reads.
+const journalLines = 200
+
+// limitedHint is what journalctl prints when the user may read only their
+// own logs (only to a terminal, in recent versions).
+const limitedHint = "not seeing messages from other users and the system"
+
+// journalGroups may read the system journal: Debian's and Ubuntu's adm,
+// systemd's own group, and Fedora's wheel.
+var journalGroups = []string{"adm", "systemd-journal", "wheel"}
+
+// readsSystemJournal: root, or in a group journald lets read every log.
+func readsSystemJournal() bool {
+	if os.Geteuid() == 0 {
+		return true
+	}
+	gids, err := os.Getgroups()
+	if err != nil {
+		return false
+	}
+	gids = append(gids, os.Getegid())
+	for _, gid := range gids {
+		if g, err := user.LookupGroupId(strconv.Itoa(gid)); err == nil && slices.Contains(journalGroups, g.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseJournal reads journalctl's JSON lines. MESSAGE is a string, or an
+// array of bytes when it is not valid UTF-8.
+func parseJournal(out []byte) []JournalEntry {
+	entries := []JournalEntry{}
+	for _, line := range bytes.Split(out, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(line, &raw) != nil {
+			continue
+		}
+		str := func(k string) string {
+			var s string
+			if json.Unmarshal(raw[k], &s) == nil {
+				return s
+			}
+			var b []byte
+			var nums []int
+			if json.Unmarshal(raw[k], &nums) == nil {
+				for _, n := range nums {
+					b = append(b, byte(n))
+				}
+				return strings.ToValidUTF8(string(b), "�")
+			}
+			return ""
+		}
+		us, _ := strconv.ParseInt(str("__REALTIME_TIMESTAMP"), 10, 64)
+		prio := 6
+		if p, err := strconv.Atoi(str("PRIORITY")); err == nil {
+			prio = p
+		}
+		pid, _ := strconv.Atoi(str("_PID"))
+		entries = append(entries, JournalEntry{
+			Time: us / 1000, Priority: prio, Ident: str("SYSLOG_IDENTIFIER"), PID: pid, Message: str("MESSAGE"),
+		})
+	}
+	return entries
+}
+
+// handleServiceJournal returns a service's last journal lines, read by
+// journalctl as the user: journald decides what they may see (only their
+// own logs unless they are in adm or systemd-journal), and `limited` says
+// when it held some back.
+func (w *Worker) handleServiceJournal(rw http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	scope, err := serviceScope(q.Get("scope"))
+	if err != nil {
+		writeErr(rw, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	name := q.Get("name")
+	if err := w.knownService(ctx, scope, name); err != nil {
+		writeErr(rw, err)
+		return
+	}
+	args := []string{"--no-pager", "-o", "json", "-n", strconv.Itoa(journalLines), "-u", name}
+	if scope == "user" {
+		args = append([]string{"--user"}, args...)
+	}
+	cmd := exec.CommandContext(ctx, journalCommand, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	limited := strings.Contains(stderr.String(), limitedHint) || strings.Contains(stderr.String(), "insufficient permissions") ||
+		scope == "system" && !readsSystemJournal()
+	if err != nil && len(out) == 0 && !limited {
+		writeJSON(rw, http.StatusBadGateway, apiError{Error: "journalctl: " + strings.TrimSpace(firstNonEmpty(stderr.String(), err.Error())), Code: "journal_error"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"entries": parseJournal(out), "limited": limited})
+}
+
+// knownService checks that name is a service the manager lists.
+func (w *Worker) knownService(ctx context.Context, scope, name string) error {
+	list, ok, err := w.listServices(ctx, scope)
+	if err != nil {
+		return err
+	}
+	if ok {
+		for _, s := range list {
+			if s.Name == name {
+				return nil
+			}
+		}
+	}
+	return badRequest{"no such service"}
+}
+
+// handleServiceBoot enables or disables a service at boot. It does not
+// reload systemd afterwards, as systemctl does: the setting is on disk and
+// the next boot reads it, and a reload is one more administrator's
+// password from a web session.
+//
+// It uses the ...WithFlags methods, as systemctl does. systemd lets polkit
+// ask for a password here only when the call says it may (unlike starting
+// and stopping, which always may), so the flag must reach the bus
+// (dbuscall.go).
+func (w *Worker) handleServiceBoot(rw http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Scope   string `json:"scope"`
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(rw, err)
+		return
+	}
+	scope, err := serviceScope(req.Scope)
+	if err != nil {
+		writeErr(rw, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), authTimeout+time.Minute)
+	defer cancel()
+	if err := w.knownService(ctx, scope, req.Name); err != nil {
+		writeErr(rw, err)
+		return
+	}
+	src := w.services.source(scope)
+	interactive := scope == "system" && w.polkit.running()
+	files := []string{req.Name}
+	if req.Enabled {
+		err = src.call(ctx, "EnableUnitFilesWithFlags", interactive, files, uint64(0))
+		if isUnknownMethod(err) {
+			err = src.call(ctx, "EnableUnitFiles", interactive, files, false, false)
+		}
+	} else {
+		err = src.call(ctx, "DisableUnitFilesWithFlags", interactive, files, uint64(0))
+		if isUnknownMethod(err) {
+			err = src.call(ctx, "DisableUnitFiles", interactive, files, false)
+		}
+	}
+	if err != nil {
+		writeSystemdErr(rw, err)
+		return
+	}
+	boot := ""
+	if files, err := src.unitFiles(ctx); err == nil {
+		for _, f := range files {
+			if filepath.Base(f.Path) == req.Name {
+				boot = f.State
+			}
+		}
+	}
+	if scope == "system" {
+		ev := "service_disable"
+		if req.Enabled {
+			ev = "service_enable"
+		}
+		w.audit(r, protocol.AuditEvent{Event: ev, Name: req.Name, Result: boot})
+	}
+	writeJSON(rw, http.StatusOK, map[string]string{"boot": boot})
 }

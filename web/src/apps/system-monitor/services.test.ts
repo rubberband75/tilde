@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { Service } from '@/api/types'
-import { bootLabel, canStart, canStop, serviceName, serviceState, visibleServices } from './services'
+import {
+  bootLabel,
+  bootNote,
+  canStart,
+  canStop,
+  canSwitchBoot,
+  journalTime,
+  serviceName,
+  serviceState,
+  visibleServices,
+} from './services'
 
 const svc = (name: string, active: string, sub: string, boot?: string, description = ''): Service => ({
   name,
@@ -39,5 +49,27 @@ describe('services', () => {
     expect(names(visibleServices(list, '', 'name', false))).toEqual(['apparmor', 'broken', 'cups', 'ssh'])
     expect(names(visibleServices(list, '', 'state', false))).toEqual(['broken', 'apparmor', 'ssh', 'cups'])
     expect(names(visibleServices(list, '', 'name', true))).toEqual(['ssh', 'cups', 'broken', 'apparmor'])
+  })
+})
+
+describe('service details', () => {
+  it('switch boot only for services with an [Install] section, and say why not', () => {
+    const at = (boot?: string) => svc('x.service', 'inactive', 'dead', boot)
+    expect(['enabled', 'disabled', 'static', 'masked', undefined].map((b) => canSwitchBoot(at(b)))).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+    ])
+    expect(bootNote(at('static'))).toMatch(/not at boot by itself/)
+    expect(bootNote(at())).toMatch(/no unit file/)
+    expect(bootNote(at('enabled'))).toBe('')
+  })
+
+  it('show the date only for lines from another day', () => {
+    const now = new Date(2026, 9, 28, 15, 0)
+    expect(journalTime(new Date(2026, 9, 28, 9, 5, 7).getTime(), now)).not.toMatch(/Oct/)
+    expect(journalTime(new Date(2026, 9, 27, 9, 5, 7).getTime(), now)).toMatch(/Oct/)
   })
 })

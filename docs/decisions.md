@@ -932,6 +932,33 @@ graphs. Rejected: each browser polling once a second (the applet shows
 all day, and every browser would sample on its own); changes instead of
 snapshots.
 
+**D62 — A service's journal and its boot setting, in a details pane** (2026-10-28, accepted)
+Selecting a service in System Monitor's Services tab shows a pane under
+the list: its state, a Start at Boot switch, and its last 200 journal
+lines, errors in red, reloaded when the service changes state (not on
+each refresh of the list). A reader at the end follows new lines; one
+who has scrolled up keeps the line they were reading at the top, found
+again by its time and text as older lines drop off. The
+journal comes from `journalctl -u <service> -o json` (`--user` for the
+user's own services), run as the user with the name as its own argument
+and only for a service the manager lists, so journald decides what the
+user may read: their own logs, and the system's only in `adm` or
+`systemd-journal`; when it held some back the pane says so rather than
+looking empty. The switch calls systemd's `EnableUnitFiles` and
+`DisableUnitFiles`, for services with an `[Install]` section (the pane
+says why the others cannot be switched: static, masked, generated...);
+system ones ask polkit, and both go to the audit log. Unlike `systemctl
+enable`, systemd is not reloaded afterwards: the setting is on disk and
+the next boot reads it, and a reload is a second administrator's
+password from a web session. Here systemd lets polkit ask only when the
+call carries D-Bus's interactive-authorization flag (starting and
+stopping always may), and godbus's `Object.Call` drops that flag: it
+keeps only NoAutoStart and NoReplyExpected. The worker now builds such
+calls itself (`dbuscall.go`) for systemd and NetworkManager, and uses
+`EnableUnitFilesWithFlags`, as systemctl does. Not yet: masking, following the journal
+live, timers. Rejected: reading the journal files directly (journalctl
+already applies journald's access rules and formats).
+
 ---
 
 ## Open decisions

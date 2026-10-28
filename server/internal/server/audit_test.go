@@ -146,6 +146,8 @@ func TestAuditNetworkFromWorker(t *testing.T) {
 		{protocol.AuditEvent{Event: "wifi_on"}, `alice turned Wi-Fi on from 192.0.2.1`, false},
 		{protocol.AuditEvent{Event: "service_restart", Name: "cups.service", Result: "active"},
 			`alice restarted system service cups.service (now active) from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "service_enable", Name: "cups.service", Result: "enabled"},
+			`alice enabled system service cups.service at boot (now enabled) from 192.0.2.1`, false},
 		{protocol.AuditEvent{Event: "service_start", Name: "broken.service", Result: "failed"},
 			`alice started system service broken.service (now failed) from 192.0.2.1`, true},
 	} {

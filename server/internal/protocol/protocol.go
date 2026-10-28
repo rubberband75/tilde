@@ -124,7 +124,8 @@ const ClientHeader = "X-Tilde-Client"
 type AuditEvent struct {
 	// Event: terminal_open, terminal_close, trash, delete, empty_trash,
 	// mount, unmount, eject, polkit, network_connect, network_disconnect,
-	// wifi_on, wifi_off, service_start, service_stop, service_restart.
+	// wifi_on, wifi_off, service_start, service_stop, service_restart,
+	// service_enable, service_disable.
 	Event string `json:"event"`
 	// Rhost is the browser's address (ClientHeader); empty for what no
 	// request caused, such as a shell that exited.
@@ -140,7 +141,8 @@ type AuditEvent struct {
 	// Action, Identity and Result describe a polkit request: what for,
 	// whose password, and granted, failed or cancelled. Result is also how
 	// a network connection went: connected, wrong_password, failed, timeout;
-	// and the state a system service settled in (active, failed...).
+	// the state a system service settled in (active, failed...), or its
+	// unit file's state after enabling or disabling it.
 	Action   string `json:"action,omitempty"`
 	Identity string `json:"identity,omitempty"`
 	Result   string `json:"result,omitempty"`

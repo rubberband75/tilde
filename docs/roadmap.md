@@ -96,7 +96,7 @@ to; tick items off as they land.
 - [x] Image viewer (D50): opened from Files for the image types browsers draw; the folder's images in order, Best Fit, zoom and drag, turning the view, Move to Trash, fullscreen and a slideshow
 - [x] Process manager (D59): System Monitor's Processes tab: every user's processes from `/proc`, views, search, sorting; Stop, Continue, End, Kill as the user, named by PID and start time
 - [x] System Monitor: Services tab (D60): the system's and the user's systemd services, Start, Stop, Restart (polkit for system ones), audited
-- [ ] System Monitor: enable and disable services at boot, a service's journal
+- [x] System Monitor: enable and disable services at boot, a service's journal (D62): a details pane under the Services list
 - [x] System monitor tray applet (D61): CPU and memory graphs in the panel, System Monitor's Resources tab (CPU, memory and swap, network, disk); whole snapshots once a second while watched
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
 - [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`; recent logins and failed attempts from the audit log (D46), served by the server

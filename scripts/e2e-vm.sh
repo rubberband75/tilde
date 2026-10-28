@@ -236,6 +236,10 @@ polkit.addRule(function (action, subject) {
       action.lookup("unit") == "$TEST_SERVICE.service") {
     return polkit.Result.AUTH_SELF;
   }
+  // Enabling and disabling at boot (D62): polkit is not told which unit.
+  if (action.id == "org.freedesktop.systemd1.manage-unit-files") {
+    return polkit.Result.AUTH_SELF;
+  }
   // Network changes from the test user's web session; Wi-Fi on and off
   // asks for the user's own password, to go through Tilde's agent too.
   if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
@@ -314,12 +318,16 @@ EOF
 Description=Tilde e2e test service
 [Service]
 ExecStart=/usr/bin/sleep infinity
+[Install]
+WantedBy=multi-user.target
 EOF
+  # It logs 300 lines (to scroll through in the journal) and then waits.
+  # The unit gets "$$", systemd's "$"; each "\$" here is the heredoc's "$".
   vm_ssh "sudo tee /etc/systemd/user/$TEST_USER_SERVICE.service >/dev/null" <<EOF
 [Unit]
 Description=Tilde e2e test user service
 [Service]
-ExecStart=/usr/bin/sleep infinity
+ExecStart=/bin/sh -c 'for i in \$\$(seq 1 300); do echo "line \$\$i"; done; exec sleep infinity'
 EOF
   vm_ssh "set -e
     sudo systemctl daemon-reload
@@ -393,6 +401,7 @@ reset_wifi() {
 # the user service.
 reset_services() {
   vm_ssh "sudo systemctl stop $TEST_SERVICE.service
+    sudo systemctl disable $TEST_SERVICE.service 2>/dev/null
     uid=\$(id -u $TEST_USER)
     if [ -S /run/user/\$uid/bus ]; then
       sudo -u $TEST_USER XDG_RUNTIME_DIR=/run/user/\$uid systemctl --user daemon-reload || true

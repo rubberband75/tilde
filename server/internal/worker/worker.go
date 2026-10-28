@@ -168,6 +168,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/processes/signal", w.handleProcessSignal)
 	m.HandleFunc("GET /api/v1/services", w.handleServices)
 	m.HandleFunc("POST /api/v1/services/action", w.handleServiceAction)
+	m.HandleFunc("GET /api/v1/services/journal", w.handleServiceJournal)
+	m.HandleFunc("POST /api/v1/services/boot", w.handleServiceBoot)
 	m.HandleFunc("GET /api/v1/network", w.handleNetwork)
 	m.HandleFunc("POST /api/v1/network/wifi", w.handleWifiSwitch)
 	m.HandleFunc("POST /api/v1/network/scan", w.handleNetworkScan)

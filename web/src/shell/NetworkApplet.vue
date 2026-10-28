@@ -263,32 +263,4 @@ async function run(key: string, fn: () => Promise<void>) {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.network-menu .switch {
-  position: relative;
-  flex: none;
-  width: 42px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 11px;
-  background: var(--switch-bg);
-}
-.network-menu .switch[data-state='checked'] {
-  background: var(--switch-on-bg);
-}
-.network-menu .switch:disabled {
-  opacity: 0.5;
-}
-.network-menu .thumb {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--switch-thumb);
-  transform: translateX(2px);
-  transition: transform 0.12s ease-out;
-}
-.network-menu .thumb[data-state='checked'] {
-  transform: translateX(22px);
-}
 </style>

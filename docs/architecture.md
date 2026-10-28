@@ -94,7 +94,8 @@ could already do.
 - Lists processes from `/proc` with CPU shares between samples, and sends
   them signals as the user, by PID and start time (`processes.go`, D59).
 - Lists the system's and the user's systemd services and starts, stops and
-  restarts them over D-Bus (`services.go`, D60).
+  restarts them over D-Bus (`services.go`, D60), enables and disables them
+  at boot, and reads their journal with `journalctl` as the user (D62).
 - Lists the host's wired and Wi-Fi devices and networks, connects and
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is

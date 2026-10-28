@@ -9,6 +9,7 @@ import { ApiError } from '@/api/client'
 import { servicesApi } from '@/api/services'
 import type { Service, ServiceAction, ServiceScope } from '@/api/types'
 import type { AppContext } from '@/apps/types'
+import ServiceDetails from './ServiceDetails.vue'
 import {
   bootLabel,
   canStart,
@@ -214,6 +215,14 @@ const columns: { key: ServiceSortKey | null; label: string }[] = [
         </ContextMenuContent>
       </ContextMenuPortal>
     </ContextMenuRoot>
+    <ServiceDetails
+      v-if="current && available && !error"
+      class="details-pane"
+      :ctx="ctx"
+      :scope="scope"
+      :service="current"
+      @changed="refresh"
+    />
     <footer class="status">
       <span v-if="loaded && available">
         {{ rows.length }} of {{ list.length }} services<template v-if="failed">, {{ failed }} failed</template>
@@ -357,6 +366,9 @@ tr.failed .state {
 tr.selected td {
   background: var(--selection-bg);
   color: var(--selection-fg);
+}
+.details-pane {
+  flex: 0 0 45%;
 }
 .status {
   display: flex;

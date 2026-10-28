@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Service, ServiceAction, ServiceScope } from './types'
+import type { JournalEntry, Service, ServiceAction, ServiceScope } from './types'
 
 /** systemd's services through the worker (D60): the system's, or the user's own. */
 export const servicesApi = {
@@ -12,4 +12,14 @@ export const servicesApi = {
    */
   act: (scope: ServiceScope, name: string, action: ServiceAction) =>
     api.post<{ active: string; sub: string }>('/api/v1/services/action', { scope, name, action }),
+  /**
+   * The last 200 journal lines, oldest first, read as the user: `limited`
+   * when journald held back what they may not read (not in adm or
+   * systemd-journal).
+   */
+  journal: (scope: ServiceScope, name: string) =>
+    api.get<{ entries: JournalEntry[]; limited: boolean }>('/api/v1/services/journal', { scope, name }),
+  /** Enables or disables a service at boot; resolves with its unit file's state now. */
+  setBoot: (scope: ServiceScope, name: string, enabled: boolean) =>
+    api.post<{ boot: string }>('/api/v1/services/boot', { scope, name, enabled }),
 }

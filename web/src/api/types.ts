@@ -424,6 +424,17 @@ export interface Service {
   boot?: string
 }
 
+/** GET /api/v1/services/journal: one of a service's journal lines. */
+export interface JournalEntry {
+  /** Unix milliseconds. */
+  time: number
+  /** syslog's: 0 emergency … 3 error, 4 warning … 7 debug. */
+  priority: number
+  ident?: string
+  pid?: number
+  message: string
+}
+
 export type ServiceScope = 'system' | 'user'
 export type ServiceAction = 'start' | 'stop' | 'restart'
 
