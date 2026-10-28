@@ -1,4 +1,4 @@
-import { expect, test, windowNamed } from './fixtures'
+import { expect, password, test, windowNamed } from './fixtures'
 
 // System Monitor (D59): every user's processes, and signals that only reach
 // the user's own.
@@ -42,4 +42,57 @@ test('System Monitor lists every process and ends the user’s own', async ({ de
   await expect(sleep).toHaveCount(0)
   // The shell says so.
   await expect(term.locator('.xterm-rows')).toContainText('Terminated')
+})
+
+// D60: services that do nothing, which the e2e VM installs: a system one
+// polkit lets the test user start with their own password, and a user one.
+const service = process.env.TILDE_SERVICE
+const userService = process.env.TILDE_USER_SERVICE
+
+test('the Services tab starts and stops system and user services', async ({ desktop: page }) => {
+  test.skip(!service || !userService, 'set TILDE_SERVICE and TILDE_USER_SERVICE (the e2e VM does)')
+  test.setTimeout(90_000)
+  await page.keyboard.press('Alt+F1')
+  await page.getByRole('searchbox', { name: 'Search applications' }).fill('System Monitor')
+  await page.keyboard.press('Enter')
+  const mon = windowNamed(page, 'System Monitor')
+  await mon.getByRole('tab', { name: 'Services' }).click()
+  const table = mon.getByRole('table', { name: 'Services' })
+  const search = mon.getByRole('searchbox', { name: 'Search services' })
+  const row = (name: string) => table.getByRole('row').filter({ hasText: name })
+  const state = (name: string) => row(name).getByRole('cell').nth(2)
+  const button = (name: string) => mon.locator('footer').getByRole('button', { name, exact: true })
+
+  // The system's services, and the test one stopped.
+  await expect(mon.getByRole('radio', { name: 'System' })).toBeChecked()
+  await search.fill('ssh')
+  await expect(table.getByRole('row').nth(1)).toBeVisible()
+  await search.fill(service!)
+  await expect(state(service!)).toHaveText('Inactive')
+  await row(service!).click()
+
+  // Starting a system service asks polkit, which the VM's rule makes ask
+  // for the user's own password, through Tilde's agent.
+  const auth = page.getByRole('alertdialog', { name: 'Authentication Required' })
+  for (const [action, after] of [
+    ['Start', 'Running'],
+    ['Stop', 'Inactive'],
+  ] as const) {
+    await button(action).click()
+    await expect(auth).toBeVisible()
+    await auth.getByLabel('Password', { exact: true }).fill(password)
+    await auth.getByRole('button', { name: 'Authenticate' }).click()
+    await expect(state(service!)).toHaveText(after, { timeout: 20_000 })
+  }
+
+  // The user's own: no password.
+  await mon.getByRole('radio', { name: 'My Services' }).click()
+  await search.fill(userService!)
+  await expect(state(userService!)).toHaveText('Inactive')
+  await row(userService!).click()
+  await button('Start').click()
+  await expect(state(userService!)).toHaveText('Running', { timeout: 20_000 })
+  await button('Stop').click()
+  await expect(state(userService!)).toHaveText('Inactive', { timeout: 20_000 })
+  await expect(auth).toHaveCount(0)
 })

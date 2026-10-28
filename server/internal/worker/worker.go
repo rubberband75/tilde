@@ -51,6 +51,7 @@ type Worker struct {
 	drives    *driveService
 	network   *networkService
 	procs     *processSampler
+	services  *serviceManagers
 	jobs      *jobManager
 	logind    *logindConn
 	polkit    *polkitAgent
@@ -107,6 +108,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
 		network:    newNetworkService(func() { events.publish(event{Type: "network"}) }),
 		procs:      &processSampler{},
+		services:   &serviceManagers{},
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
 		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
@@ -162,6 +164,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
 	m.HandleFunc("GET /api/v1/processes", w.handleProcesses)
 	m.HandleFunc("POST /api/v1/processes/signal", w.handleProcessSignal)
+	m.HandleFunc("GET /api/v1/services", w.handleServices)
+	m.HandleFunc("POST /api/v1/services/action", w.handleServiceAction)
 	m.HandleFunc("GET /api/v1/network", w.handleNetwork)
 	m.HandleFunc("POST /api/v1/network/wifi", w.handleWifiSwitch)
 	m.HandleFunc("POST /api/v1/network/scan", w.handleNetworkScan)
@@ -244,6 +248,7 @@ func (w *Worker) Shutdown() {
 	w.watcher.close()
 	w.drives.close()
 	w.network.close()
+	w.services.close()
 	w.polkit.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()

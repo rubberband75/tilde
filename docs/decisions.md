@@ -885,6 +885,28 @@ tabs (with the system monitor applet). Rejected: streaming changes over
 the events socket (a full list every three seconds is simple and small,
 and only while the window is open); signalling by PID alone.
 
+**D60 — Services tab: the system's and the user's systemd, start, stop and restart** (2026-10-28, accepted)
+System Monitor has a second tab, Services, as Cockpit's: the system's
+services from systemd on the system bus, and the user's own from their
+user manager on the session bus (pam_systemd's address, or
+`$XDG_RUNTIME_DIR/bus`), with a switch between them, a search, and each
+service's state and whether it starts at boot. The list merges the
+loaded units with the unit files, so services not loaded now show as
+inactive; templates (`getty@.service`) are left out, since they cannot
+be started as they are. Start, Stop and Restart wait until the service
+has settled and say if it failed. systemd and polkit decide: a system
+service's calls carry D-Bus's interactive-authorization flag while
+Tilde's polkit agent runs, so polkit can ask for an administrator's
+password in Tilde's dialog; the user's own manager asks nobody. Stopping
+or restarting `tilde.service` asks first, as it ends every session.
+Actions on system services go to the audit log (D46), with the state the
+service settled in; the user's own are like their own processes and are
+not. Each tab of System Monitor lists only while shown: processes every
+three seconds, services every five. Not yet: enabling and disabling at
+boot, masking, a unit's journal (`journalctl -u`, which journald limits
+to what the user may read), timers. Rejected: `systemctl` from the
+worker (parsing its output for what two D-Bus calls answer).
+
 ---
 
 ## Open decisions

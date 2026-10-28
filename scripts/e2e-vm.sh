@@ -63,6 +63,10 @@ TEST_2FA_SECRET=3132333435363738393031323334353637383930
 TEST_WIFI_SECURE=TildeSecure
 TEST_WIFI_OPEN=TildeOpen
 TEST_WIFI_PASS=tilde-wifi-pass
+# Services for the System Monitor's Services tab (D60): a system one the
+# test user may start and stop with their own password, and a user one.
+TEST_SERVICE=tilde-e2e-service
+TEST_USER_SERVICE=tilde-e2e-user
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*" >&2; }
 die() { printf 'e2e-vm: %s\n' "$*" >&2; exit 1; }
@@ -226,6 +230,12 @@ polkit.addRule(function (action, subject) {
     } catch (e) {}
     return type == "web" ? polkit.Result.AUTH_SELF : polkit.Result.YES;
   }
+  // The test system service, with the user's own password, through
+  // Tilde's agent (D44); other services stay an administrator's.
+  if (action.id == "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("unit") == "$TEST_SERVICE.service") {
+    return polkit.Result.AUTH_SELF;
+  }
   // Network changes from the test user's web session; Wi-Fi on and off
   // asks for the user's own password, to go through Tilde's agent too.
   if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
@@ -297,6 +307,20 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+  # Services that do nothing, to start and stop (D60). The user one is
+  # everyone's, in /etc/systemd/user, so the test user's manager has it.
+  vm_ssh "sudo tee /etc/systemd/system/$TEST_SERVICE.service >/dev/null" <<EOF
+[Unit]
+Description=Tilde e2e test service
+[Service]
+ExecStart=/usr/bin/sleep infinity
+EOF
+  vm_ssh "sudo tee /etc/systemd/user/$TEST_USER_SERVICE.service >/dev/null" <<EOF
+[Unit]
+Description=Tilde e2e test user service
+[Service]
+ExecStart=/usr/bin/sleep infinity
+EOF
   vm_ssh "set -e
     sudo systemctl daemon-reload
     sudo systemctl disable --now NetworkManager-wait-online.service >/dev/null 2>&1 || true
@@ -364,6 +388,18 @@ reset_wifi() {
     sudo nmcli device wifi rescan ifname wlan2 >/dev/null 2>&1 || true"
 }
 
+# Starts the Services test with both test services stopped. The user's
+# manager runs while the test user has a session; reload it so it knows
+# the user service.
+reset_services() {
+  vm_ssh "sudo systemctl stop $TEST_SERVICE.service
+    uid=\$(id -u $TEST_USER)
+    if [ -S /run/user/\$uid/bus ]; then
+      sudo -u $TEST_USER XDG_RUNTIME_DIR=/run/user/\$uid systemctl --user daemon-reload || true
+      sudo -u $TEST_USER XDG_RUNTIME_DIR=/run/user/\$uid systemctl --user stop $TEST_USER_SERVICE.service || true
+    fi"
+}
+
 # The Playwright suite (web/e2e) in Chromium on the host, against the VM
 # through its own SSH tunnel. Reports land in web/playwright-report.
 run_ui_tests() {
@@ -376,6 +412,7 @@ run_ui_tests() {
   reset_oath
   mount_test_usb
   reset_wifi
+  reset_services
 
   vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
   local tunnel=$!
@@ -393,6 +430,7 @@ run_ui_tests() {
   (cd "$ROOT/web" && TILDE_URL="https://localhost:$UI_TEST_PORT" TILDE_USER=$TEST_USER TILDE_PASS=$TEST_PASS \
     TILDE_DRIVE=$TEST_DRIVE TILDE_USB=$TEST_USB TILDE_2FA_USER=$TEST_2FA_USER TILDE_2FA_SECRET=$TEST_2FA_SECRET \
     TILDE_WIFI_SECURE=$TEST_WIFI_SECURE TILDE_WIFI_OPEN=$TEST_WIFI_OPEN TILDE_WIFI_PASS=$TEST_WIFI_PASS \
+    TILDE_SERVICE=$TEST_SERVICE TILDE_USER_SERVICE=$TEST_USER_SERVICE \
     npx playwright test "$@") 2>&1 | tee "$DIR/last-ui-test.log" || status=$?
   kill "$tunnel" 2>/dev/null || true
   trap - EXIT

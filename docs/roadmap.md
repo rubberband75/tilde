@@ -95,7 +95,8 @@ to; tick items off as they land.
 - [x] Media player (D51): sound and video from Files in one `<video>` element over `fs/content` Range requests; the folder as the playlist, the position kept through reloads and locks, media keys, fullscreen
 - [x] Image viewer (D50): opened from Files for the image types browsers draw; the folder's images in order, Best Fit, zoom and drag, turning the view, Move to Trash, fullscreen and a slideshow
 - [x] Process manager (D59): System Monitor's Processes tab: every user's processes from `/proc`, views, search, sorting; Stop, Continue, End, Kill as the user, named by PID and start time
-- [ ] System Monitor: Services tab (systemd units over D-Bus: list, start, stop, restart; polkit for system units)
+- [x] System Monitor: Services tab (D60): the system's and the user's systemd services, Start, Stop, Restart (polkit for system ones), audited
+- [ ] System Monitor: enable and disable services at boot, a service's journal
 - [ ] System monitor tray applet (CPU, memory, disk, network). Always send full snapshots.
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**
 - [ ] Settings app: theme, wallpaper, lock timeout (follow Cinnamon, the default, or Tilde's own; D40), saved per user in `~/.config/tilde/`; recent logins and failed attempts from the audit log (D46), served by the server

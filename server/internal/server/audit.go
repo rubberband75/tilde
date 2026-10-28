@@ -228,6 +228,11 @@ func workerRecord(user string, ev protocol.AuditEvent) (auditRecord, bool) {
 	case "network_disconnect":
 		r.Fields = append(r.Fields, [2]string{"INTERFACE", ev.Device}, [2]string{"CONNECTION", ev.Name})
 		r.Text = fmt.Sprintf("disconnected %s from %q", ev.Device, ev.Name)
+	case "service_start", "service_stop", "service_restart":
+		verb := map[string]string{"service_start": "started", "service_stop": "stopped", "service_restart": "restarted"}[ev.Event]
+		r.Fields = append(r.Fields, [2]string{"UNIT", ev.Name}, [2]string{"RESULT", ev.Result})
+		r.Text = fmt.Sprintf("%s system service %s (now %s)", verb, ev.Name, ev.Result)
+		r.Failed = ev.Result == "failed"
 	case "wifi_on":
 		r.Text = "turned Wi-Fi on"
 	case "wifi_off":

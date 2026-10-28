@@ -144,6 +144,10 @@ func TestAuditNetworkFromWorker(t *testing.T) {
 			`alice disconnected enp3s0 from "Wired connection 1" from 192.0.2.1`, false},
 		{protocol.AuditEvent{Event: "wifi_off"}, `alice turned Wi-Fi off from 192.0.2.1`, false},
 		{protocol.AuditEvent{Event: "wifi_on"}, `alice turned Wi-Fi on from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "service_restart", Name: "cups.service", Result: "active"},
+			`alice restarted system service cups.service (now active) from 192.0.2.1`, false},
+		{protocol.AuditEvent{Event: "service_start", Name: "broken.service", Result: "failed"},
+			`alice started system service broken.service (now failed) from 192.0.2.1`, true},
 	} {
 		tc.ev.Rhost = "192.0.2.1"
 		r, ok := workerRecord("alice", tc.ev)

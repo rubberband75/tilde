@@ -387,6 +387,23 @@ export interface ProcessList {
 
 export type ProcessSignal = 'TERM' | 'KILL' | 'STOP' | 'CONT' | 'HUP' | 'INT'
 
+/** GET /api/v1/services (D60): a systemd service. */
+export interface Service {
+  name: string
+  description?: string
+  /** loaded, not-found, masked...; missing for a unit file not loaded now. */
+  load?: string
+  /** active, inactive, failed, activating, deactivating, reloading */
+  active: string
+  /** running, exited, dead, failed, start... */
+  sub: string
+  /** The unit file's state: enabled, disabled, static, masked...; missing without one. */
+  boot?: string
+}
+
+export type ServiceScope = 'system' | 'user'
+export type ServiceAction = 'start' | 'stop' | 'restart'
+
 /** GET /api/v1/drafts without a key (D58): a draft without its text. */
 export interface DraftInfo {
   key: string

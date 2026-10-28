@@ -103,14 +103,20 @@ bug in Tilde can never give more than the account already has.
   and logs none, and the browser's field is a password entry with no
   autocomplete. A new connection whose password was refused is deleted.
   Turning off what the browser may be using asks first.
+- Services (D60): the worker starts, stops and restarts systemd services
+  only over D-Bus, as the user: systemd asks polkit for the system's
+  (usually an administrator's password, through Tilde's agent), and the
+  user's own manager is theirs. Requests can only name services the
+  manager lists. Stopping `tilde.service` asks first.
 - Audit log (D46): root writes to the system journal, tagged
   `tilde-audit` with the facility authpriv (so rsyslog also files it in
   `/var/log/auth.log`): logins and failed logins, the rate limit, locks
   (by the user, idle or logind), unlocks, signing out, sessions starting
   and ending, terminals, deletions (move to trash, delete permanently,
   empty trash; the first 20 paths and a count), mounts, unmounts, ejects,
-  polkit authentications, network connections, disconnections and the
-  Wi-Fi switch. Fields: `TILDE_EVENT`, `TILDE_USER`,
+  polkit authentications, network connections, disconnections, the
+  Wi-Fi switch, and starting, stopping and restarting system services.
+  Fields: `TILDE_EVENT`, `TILDE_USER`,
   `TILDE_RHOST`, and per event `TILDE_PATH`, `TILDE_COUNT`,
   `TILDE_REASON`, `TILDE_ACTION`... Read it with `journalctl -t
   tilde-audit` (`TILDE_USER=alice` to filter). The worker reports its
