@@ -862,6 +862,29 @@ as opening one file twice. Rejected: reopening such windows by itself
 (windows would appear in every browser that loads the layout, and
 drafts a user meant to drop would keep coming back).
 
+**D59 — System Monitor: every user's processes from /proc, signals as the user** (2026-10-28, accepted)
+A System Monitor app as GNOME's that Mint ships, starting with its
+Processes tab: every process `/proc` shows the user, which is all of them
+unless `/proc` is mounted with `hidepid` (the kernel's call), with All
+Processes the default view and My Processes and Active Processes beside
+it, a search over names, users, PIDs and command lines, and sortable
+columns: name, user, CPU (a share of all CPUs since the last list, as
+GNOME divides it), PID, resident memory and priority. The worker reads
+`/proc/<pid>/stat`, `cmdline` and the directory's owner on each list;
+the app lists every three seconds while the page is visible and the
+worker keeps one sample, so two browsers a moment apart share it rather
+than measure a sliver of time. Stop, Continue, End and Kill are sent as
+the user, so the kernel lets them reach only the user's own processes;
+the menu offers them for those only, End and Kill ask first, and ending
+the worker itself says it ends the session. A signal names the process
+by PID and start time, so a PID that ended and came back as another
+process is never signalled. Not yet: services (systemd units, a second
+tab: list, start, stop and restart, polkit for system ones), Change
+Priority, Properties and open files, the Resources and File Systems
+tabs (with the system monitor applet). Rejected: streaming changes over
+the events socket (a full list every three seconds is simple and small,
+and only while the window is open); signalling by PID alone.
+
 ---
 
 ## Open decisions

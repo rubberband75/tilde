@@ -50,6 +50,7 @@ type Worker struct {
 	watcher   *dirWatcher
 	drives    *driveService
 	network   *networkService
+	procs     *processSampler
 	jobs      *jobManager
 	logind    *logindConn
 	polkit    *polkitAgent
@@ -105,6 +106,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		watcher:    newDirWatcher(func(dirs []string) { events.publish(event{Type: "fs", Dirs: dirs}) }),
 		drives:     newDriveService(func() { events.publish(event{Type: "drives"}) }),
 		network:    newNetworkService(func() { events.publish(event{Type: "network"}) }),
+		procs:      &processSampler{},
 		jobs:       newJobManager(events, trash),
 		logind:     newLogindConn(opt),
 		polkit:     newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
@@ -158,6 +160,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/processes", w.handleProcesses)
+	m.HandleFunc("POST /api/v1/processes/signal", w.handleProcessSignal)
 	m.HandleFunc("GET /api/v1/network", w.handleNetwork)
 	m.HandleFunc("POST /api/v1/network/wifi", w.handleWifiSwitch)
 	m.HandleFunc("POST /api/v1/network/scan", w.handleNetworkScan)

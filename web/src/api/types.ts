@@ -353,6 +353,40 @@ export interface SavedText {
 }
 
 /** The editor's unsaved changes, kept by the worker (D48). */
+/** GET /api/v1/processes (D59): one process from /proc. */
+export interface Process {
+  pid: number
+  ppid: number
+  /** The kernel's name (at most 15 bytes). */
+  name: string
+  /** The command line; missing for kernel threads and when unreadable. */
+  command?: string
+  uid: number
+  user: string
+  /** The kernel's state letter: R, S, D, Z, T, I, ... */
+  state: string
+  /** Percent of all CPUs since the previous list. */
+  cpu: number
+  /** Resident memory, in bytes. */
+  memory: number
+  nice: number
+  threads: number
+  /** Start time in clock ticks after boot: with the PID, names this process. */
+  start: number
+  kernel?: boolean
+}
+
+export interface ProcessList {
+  processes: Process[]
+  /** The user's own uid. */
+  uid: number
+  /** The worker's PID: ending it ends the session. */
+  self: number
+  cpus: number
+}
+
+export type ProcessSignal = 'TERM' | 'KILL' | 'STOP' | 'CONT' | 'HUP' | 'INT'
+
 /** GET /api/v1/drafts without a key (D58): a draft without its text. */
 export interface DraftInfo {
   key: string

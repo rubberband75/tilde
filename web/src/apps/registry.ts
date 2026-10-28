@@ -119,6 +119,17 @@ export const apps: AppManifest[] = [
     component: () => import('./backgrounds/BackgroundsApp.vue'),
   },
   {
+    id: 'system-monitor',
+    name: 'System Monitor',
+    comment: 'View current processes and monitor system state',
+    icon: 'utilities-system-monitor',
+    category: 'Administration',
+    singleInstance: true,
+    defaultSize: { w: 780, h: 540 },
+    minSize: { w: 480, h: 300 },
+    component: () => import('./system-monitor/SystemMonitorApp.vue'),
+  },
+  {
     id: 'system-info',
     name: 'System Info',
     comment: 'View information about this computer',

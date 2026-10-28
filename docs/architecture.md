@@ -88,6 +88,8 @@ could already do.
   (`network.go`, D55).
 - Lists, mounts, unmounts and ejects drives through udisks2 on the system
   bus, as the user (`drives.go`).
+- Lists processes from `/proc` with CPU shares between samples, and sends
+  them signals as the user, by PID and start time (`processes.go`, D59).
 - Lists the host's wired and Wi-Fi devices and networks, connects and
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is
