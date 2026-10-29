@@ -33,11 +33,12 @@ func TestSettingsAndTheLockDelay(t *testing.T) {
 	lockSettingsInterval = time.Hour
 
 	type got struct {
-		Settings    Settings
-		DesktopLock LockSettings
+		Settings     Settings
+		DesktopLock  LockSettings
+		DesktopTheme DesktopTheme
 	}
 	g := decode[got](t, mustGet(t, c, api("/api/v1/settings", nil)), http.StatusOK)
-	if g.Settings != defaultSettings() || g.DesktopLock != defaultLockSettings() {
+	if g.Settings != defaultSettings() || g.DesktopLock != defaultLockSettings() || g.DesktopTheme != defaultDesktopTheme() {
 		t.Fatalf("defaults: %+v", g)
 	}
 
@@ -104,7 +105,8 @@ func TestSettingsAndTheLockDelay(t *testing.T) {
 		t.Fatalf("desktop again: %+v", got)
 	}
 
-	for _, bad := range []string{`{"lock":{"own":true,"enabled":true,"minutes":0}}`, `{"lock":{"minutes":99999}}`, `not json`} {
+	for _, bad := range []string{`{"lock":{"own":true,"enabled":true,"minutes":0}}`, `{"lock":{"minutes":99999}}`, `not json`,
+		`{"lock":{"minutes":5},"appearance":{"mode":"neon","accent":"green"}}`, `{"lock":{"minutes":5},"appearance":{"mode":"dark","accent":"beige"}}`} {
 		decode[apiError](t, putSettings(t, c, bad), http.StatusBadRequest)
 	}
 }

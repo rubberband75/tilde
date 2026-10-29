@@ -1,0 +1,362 @@
+/*
+ * Mint-Y design tokens (D77): Mint's modes and accent colours.
+ *
+ * <html> carries three attributes (lib/theme.ts):
+ *   data-shell  dark | light   the panel, menus, login and lock screens
+ *                              (Mint's Cinnamon theme)
+ *   data-apps   dark | light   windows and what is in them (Mint's GTK
+ *                              theme); Mint's "mixed" is a dark shell with
+ *                              light apps
+ *   data-accent green | aqua | blue | grey | orange | pink | purple | red |
+ *               sand | teal
+ *
+ * Values come from linuxmint/mint-themes (src/Mint-Y), as installed:
+ * cinnamon/cinnamon.css of Mint-Y and Mint-Y-Dark for the shell,
+ * gtk-3.0/gtk.css and gtk-dark.css for windows, and each Mint-Y-<Colour>
+ * theme's theme_selected_bg_color and #Tooltip for the accents
+ * (docs/theming.md). Components use these variables only, never raw
+ * colors.
+ */
+
+/* Shared: type, sizes, the desktop. */
+:root {
+  /* Type: Mint's Ubuntu 10 (bundled as Tilde UI, styles/fonts.css; D56),
+     then fallbacks scaled to take its space. Title bars are Ubuntu Medium,
+     monospace is Mint's DejaVu Sans Mono 10. */
+  --font-ui: 'Tilde UI', 'Tilde UI Fallback', 'Tilde UI Fallback DejaVu', system-ui, sans-serif;
+  --font-size-ui: 13.333px;
+  --font-size-small: 12px;
+  --font-mono: 'DejaVu Sans Mono', 'Ubuntu Mono', 'Noto Sans Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* Desktop */
+  --desktop-bg:
+    radial-gradient(120% 90% at 70% 15%, #2c4a3a 0%, transparent 60%),
+    radial-gradient(90% 80% at 10% 90%, #1d3a3a 0%, transparent 55%),
+    linear-gradient(160deg, #1b2a26 0%, #15191c 55%, #101214 100%);
+  --desktop-icon-fg: #ffffff;
+  --desktop-icon-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5);
+  --desktop-icon-hover-bg: rgba(255, 255, 255, 0.1);
+  --desktop-icon-selected-bg: color-mix(in srgb, var(--accent) 55%, transparent);
+  --desktop-icon-size: 48px;
+  --thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  --desktop-cell-w: 96px;
+  --desktop-cell-h: 92px;
+
+  --panel-height: 40px;
+  --panel-icon-size: 24px;
+  --menu-radius: 6px;
+  --wm-titlebar-height: 32px;
+  --wm-title-weight: 500;
+  --wm-radius: 6px;
+  --wm-button-size: 24px;
+  --wm-resize-handle: 6px;
+  --radius: 3px;
+
+  /* Graphs (System Monitor, its applet; D61): categorical slots validated
+     against both the dark and the light surfaces (dataviz palette). */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+
+  /* Lock screen clock, over the desktop background: cinnamon-screensaver
+     does not follow the theme. */
+  --lock-clock-fg: #ffffff;
+  --lock-clock-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+
+  /* What follows the accent */
+  --accent-fg: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 35%, transparent);
+  --panel-item-active-border: var(--accent);
+  --switch-on-bg: var(--accent);
+  --wm-close-hover-bg: var(--accent);
+  --wm-close-hover-fg: #ffffff;
+  /* Edge tiling preview (Muffin's tile preview takes the selection color). */
+  --wm-snap-preview-bg: color-mix(in srgb, var(--accent) 22%, transparent);
+  --wm-snap-preview-border: color-mix(in srgb, var(--accent) 75%, transparent);
+  --selection-bg: var(--accent);
+  --selection-fg: #ffffff;
+  --selection-unfocused-bg: color-mix(in srgb, var(--accent) 45%, transparent);
+  --tooltip-bg: var(--accent-tooltip);
+  --tooltip-fg: #ffffff;
+  --editor-selection-bg: color-mix(in srgb, var(--accent) 40%, transparent);
+
+  /* Mint-Y's accents: theme_selected_bg_color, and #Tooltip (the same in
+     the dark and light Cinnamon themes). The swatches in System Settings
+     use --accent-<name>. */
+  --accent-green: #35a854;
+  --accent-aqua: #1f9ede;
+  --accent-blue: #0c75de;
+  --accent-grey: #70737a;
+  --accent-orange: #ff7139;
+  --accent-pink: #e54980;
+  --accent-purple: #8c5dd9;
+  --accent-red: #e82127;
+  --accent-sand: #c5a07c;
+  --accent-teal: #199ca8;
+  --accent: var(--accent-green);
+  --accent-tooltip: rgba(50, 160, 80, 0.95);
+}
+
+:root[data-accent='aqua'] {
+  --accent: var(--accent-aqua);
+  --accent-tooltip: rgba(29, 150, 211, 0.95);
+}
+:root[data-accent='blue'] {
+  --accent: var(--accent-blue);
+  --accent-tooltip: rgba(11, 111, 211, 0.95);
+}
+:root[data-accent='grey'] {
+  --accent: var(--accent-grey);
+  --accent-tooltip: rgba(106, 109, 116, 0.95);
+}
+:root[data-accent='orange'] {
+  --accent: var(--accent-orange);
+  --accent-tooltip: rgba(242, 107, 54, 0.95);
+}
+:root[data-accent='pink'] {
+  --accent: var(--accent-pink);
+  --accent-tooltip: rgba(218, 69, 122, 0.95);
+}
+:root[data-accent='purple'] {
+  --accent: var(--accent-purple);
+  --accent-tooltip: rgba(133, 88, 206, 0.95);
+}
+:root[data-accent='red'] {
+  --accent: var(--accent-red);
+  --accent-tooltip: rgba(220, 31, 37, 0.95);
+}
+:root[data-accent='sand'] {
+  --accent: var(--accent-sand);
+  --accent-tooltip: rgba(187, 152, 118, 0.95);
+}
+:root[data-accent='teal'] {
+  --accent: var(--accent-teal);
+  --accent-tooltip: rgba(24, 148, 160, 0.95);
+}
+
+/* The shell, dark: Mint-Y-Dark's Cinnamon theme. */
+:root,
+:root[data-shell='dark'] {
+  /* Panel (.panel-bottom, .window-list-item-box, .applet-box) */
+  --panel-bg: rgba(29, 29, 33, 0.99);
+  --panel-fg: #e1e1e1;
+  --panel-item-fg: rgba(225, 225, 225, 0.8);
+  --panel-item-hover-bg: rgba(225, 225, 225, 0.2);
+  --panel-item-active-bg: rgba(225, 225, 225, 0.2);
+  --panel-item-hover-fg: #ffffff;
+  --panel-edge-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
+
+  /* Cinnamon menu and popups (.menu, .menu-favorites-box, StEntry) */
+  --menu-bg: #222226;
+  --menu-fg: #e1e1e1;
+  --menu-dim-fg: #a8a8a8;
+  --menu-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  --menu-item-hover-bg: #303036;
+  --menu-item-hover-fg: #ffffff;
+  --menu-box-bg: #303036;
+  --menu-entry-bg: #303036;
+  --menu-entry-fg: #d3d3d3;
+  /* GtkSwitch (the network applet's Wi-Fi switch) */
+  --switch-bg: #3b3b41;
+  --switch-thumb: #e6e6e6;
+
+  /* Modal dialogs */
+  --dialog-overlay: rgba(0, 0, 0, 0.35);
+
+  /* Login dialog, also the lock screen's unlock box */
+  --login-bg: rgba(34, 34, 38, 0.92);
+  --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* The shell, light: Mint-Y's Cinnamon theme, a light panel. */
+:root[data-shell='light'] {
+  --panel-bg: rgba(243, 243, 244, 0.99);
+  --panel-fg: #303030;
+  --panel-item-fg: rgba(48, 48, 48, 0.8);
+  --panel-item-hover-bg: rgba(48, 48, 48, 0.2);
+  --panel-item-active-bg: rgba(48, 48, 48, 0.2);
+  --panel-item-hover-fg: #303030;
+  --panel-edge-shadow: 0 -1px 0 #ebebed;
+
+  --menu-bg: #ebebed;
+  --menu-fg: #303030;
+  --menu-dim-fg: rgba(48, 48, 48, 0.55);
+  --menu-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  --menu-item-hover-bg: #d3d3d7;
+  --menu-item-hover-fg: #303030;
+  --menu-box-bg: #d3d3d7;
+  --menu-entry-bg: #d3d3d7;
+  --menu-entry-fg: #303030;
+  --switch-bg: #cfcfcf;
+  --switch-thumb: #ffffff;
+
+  --dialog-overlay: rgba(0, 0, 0, 0.35);
+
+  --login-bg: rgba(235, 235, 237, 0.92);
+  --login-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Windows, dark: Mint-Y-Dark's GTK theme. */
+:root,
+:root[data-apps='dark'] {
+  color-scheme: dark;
+
+  --graph-grid: rgba(255, 255, 255, 0.07);
+  --graph-crosshair: rgba(255, 255, 255, 0.35);
+
+  /* GTK popup menus (context menus inside apps) */
+  --popup-bg: #2e2e33;
+  --popup-border: #202023;
+  --popup-item-hover-bg: var(--accent);
+  --popup-item-hover-fg: #ffffff;
+
+  /* Window decorations */
+  --wm-titlebar-bg: #222226;
+  --wm-titlebar-bg-unfocused: #26262a;
+  --wm-title-fg: #dadada;
+  --wm-title-fg-unfocused: #8a8a8e;
+  --wm-border: #1a1a1d;
+  --wm-shadow: 0 3px 14px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  --wm-shadow-unfocused: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  --wm-button-fg: #c8c8cc;
+  --wm-button-hover-bg: rgba(255, 255, 255, 0.12);
+
+  /* Application chrome (gtk-dark.css) */
+  --window-bg: #2e2e33;
+  --window-fg: #dadada;
+  --headerbar-bg: #222226;
+  --view-bg: #333339;
+  --view-fg: #dadada;
+  --view-dim-fg: #9a9aa0;
+  --sidebar-bg: #2c2c31;
+  --sidebar-fg: rgba(255, 255, 255, 0.87);
+  --border: #202023;
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --button-bg: #38383e;
+  --button-hover-bg: #414148;
+  --button-active-bg: #2a2a2f;
+  --button-fg: rgba(255, 255, 255, 0.87);
+  --button-border: #202023;
+  --entry-bg: #333339;
+  --entry-border: #202023;
+  --entry-fg: #dadada;
+  --scrollbar-thumb: rgba(117, 117, 120, 0.95);
+  --scrollbar-thumb-hover: rgba(150, 150, 154, 0.95);
+  --danger: #f04a50;
+  --danger-fg: #ffffff;
+  --warning: #f27835;
+  --warning-fg: #000000;
+  --progress-bg: #202023;
+
+  /* Text editor (D48) */
+  --editor-bg: #2a2a2e;
+  --editor-fg: #dadada;
+  --editor-gutter-bg: #26262a;
+  --editor-gutter-fg: #75757a;
+  --editor-active-line-bg: rgba(255, 255, 255, 0.04);
+  --editor-match-bg: rgba(242, 120, 53, 0.35);
+  --editor-cursor: #ffffff;
+  --editor-infobar-bg: #3a3a40;
+  --syntax-keyword: #c792ea;
+  --syntax-string: #a5d66f;
+  --syntax-number: #f78c6c;
+  --syntax-comment: #7c7c84;
+  --syntax-type: #ffcb6b;
+  --syntax-function: #82aaff;
+  --syntax-property: #89ddff;
+  --syntax-heading: #8fd19e;
+  --syntax-link: #82aaff;
+  --syntax-invalid: #f04a50;
+
+  /* Image viewer: xviewer's dark background, black in fullscreen */
+  --image-viewer-bg: #222226;
+  --image-viewer-fullscreen-bg: #000000;
+
+  /* Media player: a black screen, controls over it in fullscreen */
+  --media-screen-bg: #000000;
+  --media-screen-fg: #dadada;
+  --media-osd-bg: rgba(20, 20, 23, 0.85);
+
+  /* Terminal (vte-terminal) */
+  --terminal-bg: #222226;
+  --terminal-fg: #ffffff;
+}
+
+/* Windows, light: Mint-Y's GTK theme (gtk.css; window borders from its
+   wm_* colours). The terminal stays dark, as in Mint-Y. */
+:root[data-apps='light'] {
+  color-scheme: light;
+
+  --graph-grid: rgba(0, 0, 0, 0.08);
+  --graph-crosshair: rgba(0, 0, 0, 0.35);
+
+  --popup-bg: #ffffff;
+  --popup-border: #c8c8ce;
+  --popup-item-hover-bg: rgba(0, 0, 0, 0.1);
+  --popup-item-hover-fg: rgba(0, 0, 0, 0.87);
+
+  --wm-titlebar-bg: #ebebed;
+  --wm-titlebar-bg-unfocused: #f3f3f4;
+  --wm-title-fg: rgba(0, 0, 0, 0.87);
+  --wm-title-fg-unfocused: #9d9d9f;
+  --wm-border: #bdbdbd;
+  --wm-shadow: 0 3px 14px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  --wm-shadow-unfocused: 0 2px 8px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.15);
+  --wm-button-fg: #404040;
+  --wm-button-hover-bg: #fdfdff;
+
+  --window-bg: #f8f8f9;
+  --window-fg: rgba(0, 0, 0, 0.87);
+  --headerbar-bg: #ebebed;
+  --view-bg: #ffffff;
+  --view-fg: #303030;
+  --view-dim-fg: rgba(0, 0, 0, 0.52);
+  --sidebar-bg: #f6f6f7;
+  --sidebar-fg: rgba(0, 0, 0, 0.87);
+  --border: #c8c8ce;
+  --hover-bg: rgba(0, 0, 0, 0.05);
+  --button-bg: #fefefe;
+  --button-hover-bg: #ffffff;
+  --button-active-bg: #d3d3d4;
+  --button-fg: rgba(0, 0, 0, 0.87);
+  --button-border: #c8c8ce;
+  --entry-bg: #ffffff;
+  --entry-border: #bababa;
+  --entry-fg: #303030;
+  --scrollbar-thumb: rgba(164, 164, 165, 0.95);
+  --scrollbar-thumb-hover: rgba(140, 140, 142, 0.95);
+  --danger: #f04a50;
+  --danger-fg: #ffffff;
+  --warning: #f27835;
+  --warning-fg: #000000;
+  --progress-bg: #e4e4e7;
+
+  /* Text editor: xed's default scheme on Mint-Y's text colours */
+  --editor-bg: #ffffff;
+  --editor-fg: #303030;
+  --editor-gutter-bg: #fcfcfc;
+  --editor-gutter-fg: #9d9d9f;
+  --editor-active-line-bg: #eeeeec;
+  --editor-match-bg: #fce94f;
+  --editor-cursor: #303030;
+  --editor-infobar-bg: #fefefe;
+  --syntax-keyword: #8b3fa8;
+  --syntax-string: #4e8a1e;
+  --syntax-number: #c4541c;
+  --syntax-comment: #8a8a8f;
+  --syntax-type: #a36a00;
+  --syntax-function: #2a5db0;
+  --syntax-property: #127a8c;
+  --syntax-heading: #2f7d3f;
+  --syntax-link: #2a5db0;
+  --syntax-invalid: #d6222a;
+
+  --image-viewer-bg: #f8f8f9;
+  --image-viewer-fullscreen-bg: #000000;
+
+  --media-screen-bg: #000000;
+  --media-screen-fg: #dadada;
+  --media-osd-bg: rgba(20, 20, 23, 0.85);
+
+  --terminal-bg: #222226;
+  --terminal-fg: #ffffff;
+}

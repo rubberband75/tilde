@@ -12,7 +12,7 @@ test('a local web app opens in a window, from another origin', async ({ desktop:
     `${site}/index.html`,
     '<html><head><title>Tilde Test App</title></head><body>hello from the app</body>',
   )
-  await api.remove(probe)
+  if (await api.exists(probe)) await api.remove(probe)
 
   await page.getByRole('navigation', { name: 'Panel' }).getByTitle('Terminal').click()
   const term = windowNamed(page, /Terminal|@/)

@@ -55,7 +55,7 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
                         settings/, web-apps/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus,
                         folderSiblings (a file's folder, for viewers)
-  src/styles/           base.css + themes/mint-y-dark.css (design tokens)
+  src/styles/           base.css + themes/mint-y.css (design tokens: modes, accents; D77)
   e2e/                  Playwright UI tests (run by make e2e-vm)
   public/icons/         bundled Mint-Y icons (scripts/fetch-icons.sh)
   src/assets/fonts/     bundled Ubuntu font and its licence (scripts/build-fonts.py)
@@ -125,7 +125,7 @@ and ask.
   permission decisions and the API just reports them (403, 404, 409...).
 - Frontend: Vue 3 `<script setup lang="ts">`, Pinia setup stores, strict
   TypeScript (no `any`). Components use theme tokens only (`var(--...)`), never
-  raw colors; add a token to `styles/themes/mint-y-dark.css` instead.
+  raw colors; add a token to `styles/themes/mint-y.css` instead (in each mode).
 - Apps receive the shell API as the `ctx` prop (`src/apps/types.ts`) and must
   not reach into the window store directly. New apps register in
   `src/apps/registry.ts`.

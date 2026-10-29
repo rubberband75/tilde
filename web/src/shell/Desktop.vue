@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { applyLook } from '@/lib/theme'
 import { useBackground } from '@/stores/background'
 import { useSettings } from '@/stores/settings'
 import DesktopIcons from './DesktopIcons.vue'
@@ -20,6 +21,13 @@ let ro: ResizeObserver | undefined
 let removeShortcuts: (() => void) | undefined
 
 const settings = useSettings()
+// The look follows the settings once they have come (until then, what this
+// browser showed last), and changes with them in every browser (D77).
+watch(
+  () => (settings.desktopTheme ? settings.look : null),
+  (look) => look && applyLook(look),
+  { immediate: true },
+)
 
 onMounted(() => {
   void background.load()

@@ -40,6 +40,21 @@ test('System Settings: the panel, the lock delay and recent logins', async ({ de
     await again.getByRole('radio', { name: /Follow/ }).check()
     await expect.poll(lockAfter).toBe(desktopDelay)
 
+    // Themes (D77): Mint's mixed mode is light windows and a dark panel;
+    // the colour is the accent. Kept across a reload.
+    await again.getByRole('button', { name: 'Themes' }).click()
+    await again.getByRole('radio', { name: /^Mixed/ }).check()
+    await again.getByRole('radio', { name: 'Teal' }).click()
+    const look = () =>
+      page.evaluate(() => {
+        const d = document.documentElement.dataset
+        return `${d.shell} ${d.apps} ${d.accent}`
+      })
+    await expect.poll(look).toBe('dark light teal')
+    await page.reload()
+    await expect(page.locator('.panel')).toBeVisible()
+    await expect.poll(look).toBe('dark light teal')
+
     // This test's own login is in the audit log.
     await again.getByRole('button', { name: 'Recent Logins' }).click()
     await expect(

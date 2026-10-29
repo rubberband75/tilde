@@ -118,7 +118,8 @@ onMounted(async () => {
       background: cssVar('--terminal-bg', '#222226'),
       foreground: cssVar('--terminal-fg', '#ffffff'),
       cursor: cssVar('--terminal-fg', '#ffffff'),
-      selectionBackground: 'rgba(53, 168, 84, 0.45)',
+      // The accent (D77) at 45%: xterm takes #rrggbbaa, not color-mix().
+      selectionBackground: `${cssVar('--accent', '#35a854')}73`,
       // Tango, the GNOME Terminal default palette.
       black: '#2e3436',
       red: '#cc0000',

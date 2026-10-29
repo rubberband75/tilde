@@ -1,10 +1,10 @@
 import { api } from './client'
-import type { LockSettings, LoginRecord, Settings } from './types'
+import type { DesktopTheme, LockSettings, LoginRecord, Settings } from './types'
 
 /** Tilde's settings (D72), kept by the worker in ~/.config/tilde. */
 export const settingsApi = {
   /** The settings, and what the desktop (Cinnamon, GNOME) says about locking. */
-  get: () => api.get<{ settings: Settings; desktopLock: LockSettings }>('/api/v1/settings'),
+  get: () => api.get<{ settings: Settings; desktopLock: LockSettings; desktopTheme: DesktopTheme }>('/api/v1/settings'),
   /** Replaces them all; every browser is told. */
   save: (s: Settings) => api.put<Settings>('/api/v1/settings', s),
   /**

@@ -7,7 +7,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { SwitchRoot, SwitchThumb } from 'reka-ui'
 import { settingsApi } from '@/api/settings'
-import type { LoginRecord, Settings } from '@/api/types'
+import type { LoginRecord, Settings, ThemeAccent, ThemeMode } from '@/api/types'
+import { themeAccents, themeModes } from '@/lib/theme'
 import type { AppContext } from '@/apps/types'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import { useSettings } from '@/stores/settings'
@@ -17,8 +18,9 @@ const ctx = props.ctx
 const store = useSettings()
 const s = computed(() => store.settings)
 
-type Section = 'lock' | 'effects' | 'panel' | 'background' | 'logins'
+type Section = 'themes' | 'lock' | 'effects' | 'panel' | 'background' | 'logins'
 const sections: { id: Section; name: string; icon: string[] }[] = [
+  { id: 'themes', name: 'Themes', icon: ['preferences-desktop-theme', 'preferences-desktop'] },
   { id: 'lock', name: 'Screen Lock', icon: ['preferences-desktop-screensaver', 'system-lock-screen'] },
   { id: 'effects', name: 'Effects', icon: ['preferences-desktop-effects', 'preferences-desktop'] },
   { id: 'panel', name: 'Panel', icon: ['preferences-desktop-panel', 'preferences-desktop'] },
@@ -37,6 +39,22 @@ async function change(fn: (next: Settings) => void) {
     ctx.notify(`Could not save the settings: ${(e as Error).message}`, 'error')
   }
 }
+
+// Themes (D77), as Mint's Themes module: a mode and a colour.
+const modeNames: Record<ThemeMode, string> = { dark: 'Dark', mixed: 'Mixed', light: 'Light' }
+const modeNotes: Record<ThemeMode, string> = {
+  dark: 'Dark windows, panel and menus.',
+  mixed: 'Light windows with a dark panel and menus.',
+  light: 'Light windows, panel and menus.',
+}
+const accentName = (a: ThemeAccent) => a[0].toUpperCase() + a.slice(1)
+const desktopThemeName = computed(() => {
+  const d = store.desktopTheme
+  if (!d) return ''
+  const who = d.source === 'cinnamon' ? 'Cinnamon' : d.source === 'gnome' ? 'GNOME' : null
+  const what = `${modeNames[d.mode]}, ${accentName(d.accent)}`
+  return who ? `${who}’s: ${what}.` : `No desktop settings here: ${what} (Tilde’s default).`
+})
 
 /** The lock delays offered, in minutes, as Cinnamon's screensaver offers. */
 const delays = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120]
@@ -101,7 +119,59 @@ const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
       </button>
     </nav>
 
-    <section v-if="section === 'lock'" class="pane" aria-labelledby="h-lock">
+    <section v-if="section === 'themes'" class="pane" aria-labelledby="h-themes">
+      <h2 id="h-themes">Themes</h2>
+      <p class="note">{{ desktopThemeName }}</p>
+      <div class="group" role="radiogroup" aria-label="Mode">
+        <label class="row">
+          <input
+            type="radio"
+            name="theme-mode"
+            :checked="s.appearance.mode === 'desktop'"
+            @change="change((n) => (n.appearance.mode = 'desktop'))"
+          />
+          <span class="what"><strong>Follow the desktop</strong></span>
+        </label>
+        <label v-for="m in themeModes" :key="m" class="row">
+          <input
+            type="radio"
+            name="theme-mode"
+            :checked="s.appearance.mode === m"
+            @change="change((n) => (n.appearance.mode = m))"
+          />
+          <span class="what">
+            <strong>{{ modeNames[m] }}</strong>
+            <span class="note">{{ modeNotes[m] }}</span>
+          </span>
+        </label>
+      </div>
+      <h3>Colour</h3>
+      <div class="swatches" role="radiogroup" aria-label="Colour">
+        <button
+          class="swatch follow"
+          role="radio"
+          :aria-checked="s.appearance.accent === 'desktop'"
+          title="Follow the desktop"
+          aria-label="Follow the desktop"
+          @click="change((n) => (n.appearance.accent = 'desktop'))"
+        >
+          Desktop
+        </button>
+        <button
+          v-for="a in themeAccents"
+          :key="a"
+          class="swatch"
+          role="radio"
+          :data-swatch="a"
+          :aria-checked="s.appearance.accent === a"
+          :title="accentName(a)"
+          :aria-label="accentName(a)"
+          @click="change((n) => (n.appearance.accent = a))"
+        />
+      </div>
+    </section>
+
+    <section v-else-if="section === 'lock'" class="pane" aria-labelledby="h-lock">
       <h2 id="h-lock">Screen Lock</h2>
       <p class="note">
         A browser left without input locks, and asks for your password again. Every browser you are signed in on follows
@@ -269,6 +339,64 @@ const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
 h2 {
   margin: 0 0 8px;
   font-size: 1.2em;
+}
+h3 {
+  margin: 4px 0 8px;
+  font-size: 1em;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.swatch[data-swatch='green'] {
+  --swatch: var(--accent-green);
+}
+.swatch[data-swatch='aqua'] {
+  --swatch: var(--accent-aqua);
+}
+.swatch[data-swatch='blue'] {
+  --swatch: var(--accent-blue);
+}
+.swatch[data-swatch='grey'] {
+  --swatch: var(--accent-grey);
+}
+.swatch[data-swatch='orange'] {
+  --swatch: var(--accent-orange);
+}
+.swatch[data-swatch='pink'] {
+  --swatch: var(--accent-pink);
+}
+.swatch[data-swatch='purple'] {
+  --swatch: var(--accent-purple);
+}
+.swatch[data-swatch='red'] {
+  --swatch: var(--accent-red);
+}
+.swatch[data-swatch='sand'] {
+  --swatch: var(--accent-sand);
+}
+.swatch[data-swatch='teal'] {
+  --swatch: var(--accent-teal);
+}
+.swatch[aria-checked='true'] {
+  border-color: var(--window-fg);
+}
+.swatch.follow {
+  width: auto;
+  padding: 0 10px;
+  border-radius: 16px;
+  background: var(--button-bg);
+  color: var(--button-fg);
 }
 .note {
   margin: 0 0 12px;

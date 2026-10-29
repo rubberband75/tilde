@@ -14,13 +14,13 @@ export interface DesktopStyle {
   buttons: { left: WindowButton[]; right: WindowButton[] }
 }
 
-export const mintYDark: DesktopStyle = {
-  id: 'mint-y-dark',
-  name: 'Mint-Y Dark',
-  theme: 'mint-y-dark',
+export const mintY: DesktopStyle = {
+  id: 'mint-y',
+  name: 'Mint-Y',
+  theme: 'mint-y',
   panelPosition: 'bottom',
   buttons: { left: [], right: ['minimize', 'maximize', 'close'] },
 }
 
-/** v1 ships one style; saving a choice per user comes later. */
-export const currentStyle: DesktopStyle = mintYDark
+/** One layout; Mint-Y's modes and colours are tokens (D77, lib/theme.ts). */
+export const currentStyle: DesktopStyle = mintY

@@ -291,7 +291,7 @@ App.vue ── LoginScreen (logged out)
 - **Font** (D56): the bundled Ubuntu font in `src/assets/fonts`, its
   `@font-face` rules and size-adjusted fallbacks in `src/styles/fonts.css`
   (both made by `make fonts`), used through `--font-ui`.
-- **Theme**: design tokens in `src/styles/themes/mint-y-dark.css`, layout in
+- **Theme**: design tokens in `src/styles/themes/mint-y.css` (modes and accents, D77), layout in
   `src/theme/desktopStyle.ts`. See `docs/theming.md`.
 - **Icons**: bundled Mint-Y PNGs resolved by freedesktop name through
   `/icons/index.json`, with generic built-in glyphs as a fallback.

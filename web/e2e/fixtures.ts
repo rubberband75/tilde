@@ -93,6 +93,7 @@ export class Api {
     const res = await this.request.put('/api/v1/settings', {
       data: {
         lock: { own: false, enabled: true, minutes: 15 },
+        appearance: { mode: 'desktop', accent: 'desktop' },
         effects: { animations: true },
         panel: { resources: true, network: true, notifications: true, fullscreen: true },
       },

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"syscall"
 )
 
@@ -19,9 +21,17 @@ import (
 
 // Settings are the System Settings app's.
 type Settings struct {
-	Lock    LockPrefs  `json:"lock"`
-	Effects Effects    `json:"effects"`
-	Panel   PanelPrefs `json:"panel"`
+	Lock       LockPrefs  `json:"lock"`
+	Appearance Appearance `json:"appearance"`
+	Effects    Effects    `json:"effects"`
+	Panel      PanelPrefs `json:"panel"`
+}
+
+// Appearance is the look (D77): a mode (dark, light, mixed) and an accent,
+// each "desktop" to follow the desktop's.
+type Appearance struct {
+	Mode   string `json:"mode"`
+	Accent string `json:"accent"`
 }
 
 // LockPrefs say when an idle browser locks (D40).
@@ -50,9 +60,10 @@ type PanelPrefs struct {
 // defaultSettings: the desktop's lock delay, animations, every applet.
 func defaultSettings() Settings {
 	return Settings{
-		Lock:    LockPrefs{Enabled: true, Minutes: 15},
-		Effects: Effects{Animations: true},
-		Panel:   PanelPrefs{Resources: true, Network: true, Notifications: true, Fullscreen: true},
+		Lock:       LockPrefs{Enabled: true, Minutes: 15},
+		Appearance: Appearance{Mode: "desktop", Accent: "desktop"},
+		Effects:    Effects{Animations: true},
+		Panel:      PanelPrefs{Resources: true, Network: true, Notifications: true, Fullscreen: true},
 	}
 }
 
@@ -62,6 +73,12 @@ const maxLockMinutes = 24 * 60
 func (s Settings) valid() error {
 	if s.Lock.Minutes < 1 || s.Lock.Minutes > maxLockMinutes {
 		return badRequest{"the lock delay must be between 1 minute and a day"}
+	}
+	if s.Appearance.Mode != "desktop" && !slices.Contains(themeModes, s.Appearance.Mode) {
+		return badRequest{"unknown mode " + strconv.Quote(s.Appearance.Mode)}
+	}
+	if s.Appearance.Accent != "desktop" && !slices.Contains(accents, s.Appearance.Accent) {
+		return badRequest{"unknown accent " + strconv.Quote(s.Appearance.Accent)}
 	}
 	return nil
 }
@@ -113,8 +130,9 @@ func (w *Worker) lockSettings(ctx context.Context) LockSettings {
 // locking, for "follow the desktop".
 func (w *Worker) handleSettings(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"settings":    w.loadSettings(),
-		"desktopLock": readLockSettings(r.Context()),
+		"settings":     w.loadSettings(),
+		"desktopLock":  readLockSettings(r.Context()),
+		"desktopTheme": readDesktopTheme(r.Context()),
 	})
 }
 

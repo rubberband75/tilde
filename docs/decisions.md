@@ -1098,8 +1098,7 @@ logins come from the audit log (D46), which only root may read, so the
 server serves them, filtered to the session's own user and the login
 events, and to entries the server itself wrote (`_UID`, which journald
 sets): anyone may send the journal an entry tagged `tilde-audit`. The
-worker could not read the log. The theme waits until there is a
-second one.
+worker could not read the log. Themes came later (D77).
 
 **D73 — Packages: built on Debian 12, installed in `/usr/bin`, tested in the VM** (2026-10-28, accepted; carries out D65, D68, D69)
 The release workflow builds each package natively (GitHub's amd64 and
@@ -1184,6 +1183,21 @@ with a reverse-proxy setup. Rejected: putting the code in
 the URL (rule 6); the server dialling apps as root (it could reach other
 users' apps); the main cookie on the app port (it would not work for an
 app port on another host name behind a proxy).
+
+**D77 — Themes: Mint-Y's modes and colours, following the desktop** (2026-10-28, accepted)
+System Settings offers what Mint's Themes settings do for Mint-Y: dark,
+mixed (light windows with a dark panel and menus) and light, and the ten
+colours. Each defaults to following the desktop at the machine (D67):
+Cinnamon's GTK and desktop themes by name (`Mint-Y-Dark-Aqua`), else
+GNOME's colour scheme and accent (yellow and slate become Mint's sand and
+grey), else Mint-Y Dark in green, Tilde's look so far. One token file
+with blocks for the shell, the windows and the accent, selected by
+attributes on `<html>`, rather than a file per combination (thirty);
+light values from the installed mint-themes. The browser remembers the
+last look so the login screen shows it. The panel's hover and active
+items became a neutral highlight with an accent underline, as Mint-Y has
+them, instead of a green-tinted one. Not done: accent-coloured folder
+icons (another ten icon sets), Mint-L and Mint-X.
 
 ---
 

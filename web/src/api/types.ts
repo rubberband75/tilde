@@ -389,8 +389,25 @@ export interface Settings {
     /** 1 to 1440. */
     minutes: number
   }
+  appearance: Appearance
   effects: { animations: boolean }
   panel: { resources: boolean; network: boolean; notifications: boolean; fullscreen: boolean }
+}
+
+export type ThemeMode = 'dark' | 'light' | 'mixed'
+export type ThemeAccent = 'green' | 'aqua' | 'blue' | 'grey' | 'orange' | 'pink' | 'purple' | 'red' | 'sand' | 'teal'
+
+/** The look (D77): each "desktop" to follow the desktop at the machine. */
+export interface Appearance {
+  mode: ThemeMode | 'desktop'
+  accent: ThemeAccent | 'desktop'
+}
+
+/** What the desktop says about the look (Cinnamon's themes, GNOME's scheme). */
+export interface DesktopTheme {
+  source: 'cinnamon' | 'gnome' | 'default'
+  mode: ThemeMode
+  accent: ThemeAccent
 }
 
 /** When idle browsers lock, and where that came from (D40). */
