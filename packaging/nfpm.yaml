@@ -1,0 +1,67 @@
+# Tilde's packages (D65), built by "make deb" with nfpm from the files
+# "make install" puts in place. TILDE_VERSION and TILDE_ARCH come from the
+# Makefile, as does TILDE_BIN, the binary: built for TILDE_ARCH (cgo, for
+# PAM).
+name: tilde
+arch: ${TILDE_ARCH}
+platform: linux
+version: ${TILDE_VERSION}
+version_schema: semver
+section: admin
+priority: optional
+maintainer: Chandler Childs <tilde@rubberband75.com>
+homepage: https://github.com/rubberband75/tilde
+license: AGPL-3.0-or-later
+description: |-
+  Browser-based Linux desktop
+  Tilde looks and works like Cinnamon on Linux Mint, in a web page: log in
+  with an account on this machine, and the desktop, file manager and
+  terminals act as that Linux user, so the kernel enforces its
+  permissions.
+
+depends:
+  - libc6
+  - libpam0g
+  - systemd
+  - dbus
+# Used when present (docs/development.md, "Host requirements").
+recommends:
+  - dbus-user-session
+  - polkitd | policykit-1
+  - udisks2
+  - libglib2.0-bin
+  - xdg-user-dirs
+
+contents:
+  - src: ${TILDE_BIN}
+    dst: /usr/bin/tilde
+    expand: true
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/tilde.service
+    dst: /usr/lib/systemd/system/tilde.service
+    file_info:
+      mode: 0644
+  - src: packaging/pam.d/tilde
+    dst: /etc/pam.d/tilde
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  - src: packaging/default/tilde
+    dst: /etc/default/tilde
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  - src: packaging/deb/copyright
+    dst: /usr/share/doc/tilde/copyright
+    file_info:
+      mode: 0644
+  - src: README.md
+    dst: /usr/share/doc/tilde/README.md
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: packaging/deb/postinst
+  preremove: packaging/deb/prerm
+  postremove: packaging/deb/postrm

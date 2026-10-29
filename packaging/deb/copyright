@@ -1,0 +1,18 @@
+Tilde, a browser-based Linux desktop
+https://github.com/rubberband75/tilde
+
+Tilde: Copyright Chandler Childs and contributors.
+License: AGPL-3.0-or-later. The full text is in LICENSE in the source,
+and in /usr/share/common-licenses/AGPL-3 where installed.
+
+Bundled with it, inside /usr/bin/tilde:
+
+Mint-Y icons, from https://github.com/linuxmint/mint-y-icons
+License: CC BY-SA 4.0 (some icons GPL-3.0)
+
+The Ubuntu font, as "Ubuntu derivative Tilde" (a subset)
+License: Ubuntu Font Licence 1.0
+
+The frontend's JavaScript libraries (Vue, Pinia, Reka UI, CodeMirror,
+xterm.js and others) keep their own licenses, mostly MIT; they are listed
+in web/package.json in the source.

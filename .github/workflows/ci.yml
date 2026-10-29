@@ -35,8 +35,8 @@ jobs:
       - run: make deps
       - run: make test
 
-      - name: Build with the UI embedded
-        run: make build && ./bin/tilde version
+      - name: Build with the UI embedded, and the package
+        run: make deb && ./bin/tilde version && dpkg-deb --info dist/*.deb
 
       - name: Build without PAM, and compile the e2e tests
         run: |

@@ -1,0 +1,75 @@
+# Packages for a release (D65): pushing a tag vX.Y.Z builds the .deb for
+# amd64 and arm64 and attaches them to a GitHub release of that tag.
+#
+# Each architecture builds natively (cgo, for PAM), on Debian 12, so the
+# binary needs no newer glibc than Debian 12 and Raspberry Pi OS bookworm
+# have (2.36); Ubuntu 24.04 and Mint 22 have newer.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    container: debian:bookworm
+    steps:
+      - name: Install build tools and libpam headers
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential ca-certificates git libpam0g-dev make
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the tag, for the version
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # No "make test": the container runs as root, where the worker's
+      # permission tests cannot pass; CI runs them on every push.
+      - run: make deps
+      - run: make deb && ./bin/tilde version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.runner }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: deb
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: dist
+          merge-multiple: true
+
+      - name: Attach the packages to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/*.deb --repo "$GITHUB_REPOSITORY" --clobber

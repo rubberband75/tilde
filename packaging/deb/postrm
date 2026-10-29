@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = remove ]; then
+	deb-systemd-helper mask tilde.service >/dev/null || true
+fi
+if [ "$1" = purge ]; then
+	deb-systemd-helper purge tilde.service >/dev/null || true
+	deb-systemd-helper unmask tilde.service >/dev/null || true
+	# The self-signed certificate.
+	rm -rf /var/lib/tilde
+fi

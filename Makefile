@@ -6,8 +6,10 @@
 #   make test         gofmt/Prettier checks, Go vet + tests, frontend type check + tests
 #   make fmt          format Go and frontend code
 #   make e2e-vm       end-to-end tests in a disposable QEMU VM (scripts/e2e-vm.sh)
+#   make e2e-pi PI=user@host   a part of them on a spare Raspberry Pi (scripts/e2e-pi.sh)
 #   make e2e          end-to-end tests against a running server (use a VM)
 #   make e2e-ui       Playwright UI tests against a running server (use a VM)
+#   make deb          a .deb of the build in dist/ (nfpm, D65)
 #   make install      install binary, PAM file and systemd unit (sudo)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -16,8 +18,14 @@ WEBUI   := server/internal/webui/dist
 LDFLAGS := -s -w -X tilde/internal/buildinfo.Version=$(VERSION)
 DEV_LISTEN ?= 127.0.0.1:8443
 
+# Packages (D65): the version from a vX.Y.Z tag (commits since it as
+# +N.gHASH), else 0.0.0+gitDATE.HASH; the architecture of the build.
+PKG_VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed -e 's/^v//' -e 's/-\([0-9]*\)-g/+\1.g/'),0.0.0+git$(shell date -u +%Y%m%d).$(shell git rev-parse --short HEAD))
+PKG_ARCH    ?= $(shell cd server && go env GOARCH)
+NFPM        := go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+
 .PHONY: all build deps web server server-nopam test test-go test-web check \
-        fmt e2e-vm dev dev-server dev-server-root dev-web icons fonts e2e e2e-ui install uninstall clean
+        fmt deb e2e-vm e2e-pi dev dev-server dev-server-root dev-web icons fonts e2e e2e-ui install uninstall clean
 
 all: build
 
@@ -88,6 +96,12 @@ fonts:
 e2e-vm:
 	./scripts/e2e-vm.sh test
 
+# On a Raspberry Pi you can wipe, marked with /etc/tilde-e2e-disposable
+# (D74); only when asked for, not part of e2e-vm.
+e2e-pi:
+	@[ -n "$(PI)" ] || { echo "usage: make e2e-pi PI=user@host (see scripts/e2e-pi.sh)" >&2; exit 2; }
+	./scripts/e2e-pi.sh $(PI) test
+
 # Needs a running server and a throwaway account, e.g. in a VM:
 #   make e2e TILDE_URL=http://127.0.0.1:8443 TILDE_USER=tester TILDE_PASS=secret
 e2e:
@@ -99,10 +113,17 @@ e2e:
 e2e-ui:
 	cd web && TILDE_URL=$(TILDE_URL) TILDE_USER=$(TILDE_USER) TILDE_PASS=$(TILDE_PASS) npx playwright test
 
+# Packages what "make build" made: bin/tilde must be for PKG_ARCH.
+deb: build
+	mkdir -p dist
+	TILDE_VERSION=$(PKG_VERSION) TILDE_ARCH=$(PKG_ARCH) TILDE_BIN=$(BIN) $(NFPM) package -f packaging/nfpm.yaml -p deb -t dist/
+
+# Without a package: under /usr/local, the unit pointed there.
 install: build
 	sudo install -D -m 0755 $(BIN) /usr/local/bin/tilde
 	sudo install -D -m 0644 packaging/pam.d/tilde /etc/pam.d/tilde
-	sudo install -D -m 0644 packaging/systemd/tilde.service /etc/systemd/system/tilde.service
+	sed 's|/usr/bin/tilde|/usr/local/bin/tilde|' packaging/systemd/tilde.service | \
+		sudo install -D -m 0644 /dev/stdin /etc/systemd/system/tilde.service
 	[ -f /etc/default/tilde ] || sudo install -D -m 0644 packaging/default/tilde /etc/default/tilde
 	sudo systemctl daemon-reload
 	@echo "Installed. Start with: sudo systemctl enable --now tilde"
@@ -113,5 +134,5 @@ uninstall:
 	sudo systemctl daemon-reload
 
 clean:
-	rm -rf bin web/dist
+	rm -rf bin dist web/dist
 	find $(WEBUI) -mindepth 1 ! -name .gitkeep -exec rm -rf {} +

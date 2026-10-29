@@ -1,0 +1,44 @@
+#!/bin/sh
+# Enables and starts Tilde on localhost (D68), as debhelper's systemd
+# snippets would, and says how to open it from elsewhere.
+set -e
+
+if [ "$1" = configure ] || [ "$1" = abort-upgrade ] || [ "$1" = abort-deconfigure ] || [ "$1" = abort-remove ]; then
+	deb-systemd-helper unmask tilde.service >/dev/null || true
+	# True for a new installation; false if the administrator disabled it.
+	if deb-systemd-helper --quiet was-enabled tilde.service; then
+		deb-systemd-helper enable tilde.service >/dev/null || true
+	else
+		deb-systemd-helper update-state tilde.service >/dev/null || true
+	fi
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+		# An upgrade restarts it, which ends the sessions running now.
+		if [ -n "$2" ]; then action=restart; else action=start; fi
+		deb-systemd-invoke "$action" tilde.service >/dev/null || true
+	fi
+fi
+
+if [ "$1" = configure ] && [ -z "$2" ]; then
+	addr=$(hostname -I 2>/dev/null | cut -d' ' -f1)
+	[ -n "$addr" ] || addr=192.168.1.20
+	cat <<MSG
+
+Tilde is running at https://localhost:8443 on this machine only.
+Log in with an account on this machine. The certificate is self-signed, so
+the browser warns the first time; its fingerprint is in journalctl -u tilde.
+
+To open it from other machines:
+  - On your network, or a VPN (WireGuard, Tailscale): in /etc/default/tilde set
+      TILDE_OPTS="--listen $addr:8443"
+    then run: sudo systemctl restart tilde
+    and open https://$addr:8443
+  - Through an SSH tunnel, with nothing changed here:
+      ssh -L 8443:127.0.0.1:8443 ${SUDO_USER:-you}@$addr
+    then open https://localhost:8443
+  - From the internet: behind a reverse proxy with its own certificate, and
+    with two-factor login. See
+    https://github.com/rubberband75/tilde/blob/main/docs/security.md
+
+MSG
+fi

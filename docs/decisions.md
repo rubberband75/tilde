@@ -992,7 +992,7 @@ Ctrl+Alt+W, and Alt+1 to Alt+9 pick a tab. Rejected: hiding the tab bar's
 reorder and move behind menus only (xed drags them); keeping one window
 per file (the user chose xed's way).
 
-**D64 — Hosts: systemd Linux, the Debian family first, Raspberry Pi included** (2026-10-28, accepted)
+**D64 — Hosts: systemd Linux, the Debian family first, Raspberry Pi included** (2026-10-28, accepted; the Pi run is on a real Pi, D74)
 Tilde needs Linux with systemd and logind (pam_systemd makes the web
 session, its runtime folder and session bus; the Services tab is
 systemd's), PAM, and a D-Bus system bus; polkit, udisks2 and
@@ -1100,6 +1100,36 @@ events, and to entries the server itself wrote (`_UID`, which journald
 sets): anyone may send the journal an entry tagged `tilde-audit`. The
 worker could not read the log. The theme waits until there is a
 second one.
+
+**D73 — Packages: built on Debian 12, installed in `/usr/bin`, tested in the VM** (2026-10-28, accepted; carries out D65, D68, D69)
+The release workflow builds each package natively (GitHub's amd64 and
+arm64 runners) in a Debian 12 container: a cgo binary needs the glibc it
+was built against or newer, and Debian 12's (2.36) is the oldest of the
+targets (D64), Raspberry Pi OS bookworm included; one built on Ubuntu
+24.04 would not start there. The package installs `/usr/bin/tilde` and
+the unit in `/usr/lib/systemd/system`; `make install`, outside the
+package manager, keeps `/usr/local`. Its scripts follow debhelper's:
+enable and start on a new install unless the administrator disabled it,
+restart on an upgrade (which ends the sessions running; an upgrade is
+the administrator's choice of when), mask on removal, delete
+`/var/lib/tilde` on purge. The e2e VM installs the `.deb` instead of
+copying files, so every run tests the package. The session lifetime
+(D69) is `--session-lifetime` in `/etc/default/tilde`, 10 minutes to a
+week; the bounds are there to catch a mistyped value, the user's own
+limit being 12 hours (D69).
+
+**D74 — The Raspberry Pi tests run on a spare Pi, not under QEMU** (2026-10-28, accepted; amends D64)
+`make e2e-pi PI=user@host` runs a small part of the suite on a real
+Raspberry Pi over SSH, which the user has (Pi 4s), instead of an arm64 VM:
+Raspberry Pi OS's kernel is built for the Pi's hardware and does not boot
+on QEMU's generic `virt` machine, so a VM would test either a plain Debian
+arm64 image (Pi OS's base, not Pi OS) or Pi OS with another kernel put in
+(fragile), and emulated, slowly. A real Pi tests Pi OS's own kernel,
+packages and hardware, natively and fast. It must be one that can be
+wiped, as the e2e VM is (D29): the script refuses a Pi without
+`/etc/tilde-e2e-disposable`. Tilde is built on the Pi (cgo for PAM is
+native there) and packaged here, and the Pi installs the `.deb` with apt.
+Rejected: both QEMU ways above.
 
 ---
 

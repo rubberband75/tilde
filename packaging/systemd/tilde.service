@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/tilde
-ExecStart=/usr/local/bin/tilde serve $TILDE_OPTS
+ExecStart=/usr/bin/tilde serve $TILDE_OPTS
 StateDirectory=tilde
 StateDirectoryMode=0700
 Restart=on-failure

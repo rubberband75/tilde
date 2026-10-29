@@ -118,7 +118,8 @@ to; tick items off as they land.
 
 - [x] systemd unit without sandboxing, `/etc/default/tilde`, PAM file, `make install`
 - [x] CI on GitHub Actions: format checks, Go and frontend tests, builds (D30)
-- [ ] Packages with nfpm (D65): `.deb` for amd64 and arm64, a release workflow attaching them to GitHub releases; then `.rpm` and Arch, each with its family's PAM file
-- [ ] Installing enables and starts Tilde on localhost and prints how to open it to the LAN, a VPN, an SSH tunnel or a reverse proxy (D68)
-- [ ] Session lifetime as a server setting, 12 hours by default (D69)
-- [ ] Raspberry Pi OS e2e run (D64): arm64 under QEMU, a small part of the suite, only on request (`make e2e-pi`)
+- [x] Packages with nfpm (D65, D73): `.deb` for amd64 and arm64 (`make deb`), built on Debian 12 by a release workflow that attaches them to the tag's GitHub release; the e2e VM installs the `.deb`
+- [ ] `.rpm` and Arch packages, each with its family's PAM file (D65)
+- [x] Installing enables and starts Tilde on localhost and prints how to open it to the LAN, a VPN, an SSH tunnel or a reverse proxy (D68)
+- [x] Session lifetime as a server setting, 12 hours by default (D69): `--session-lifetime`
+- [ ] Raspberry Pi OS e2e run (D64, D74): a small part of the suite on a spare Pi 4 over SSH, only on request (`make e2e-pi PI=user@host`); scripted, not yet run on a Pi

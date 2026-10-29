@@ -59,8 +59,20 @@ in. Use `make dev-server-root` to try other accounts.
 
 ## Install
 
+On Debian, Ubuntu, Mint or Raspberry Pi OS (64-bit), install the `.deb` for
+your machine (amd64 or arm64) from the
+[releases](https://github.com/rubberband75/tilde/releases), or build one
+with `make deb`:
+
 ```bash
-make install                      # binary, PAM file, systemd unit
+sudo apt install ./tilde_*_arm64.deb
+```
+
+The package starts Tilde and says how to open it. From a source tree
+instead:
+
+```bash
+make install                      # binary, PAM file, systemd unit, under /usr/local
 sudo systemctl enable --now tilde
 ```
 

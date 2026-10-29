@@ -5,8 +5,9 @@
 #
 # The VM is the Ubuntu 24.04 cloud image (Linux Mint 22's base: same PAM,
 # systemd and glibc) under QEMU/KVM, set up by cloud-init. Tilde is built
-# on the host and installed in the VM the way "make install" does, with the
-# real PAM file and systemd unit, so the packaging is tested too.
+# on the host, packaged as a .deb (D65) and installed in the VM with dpkg,
+# with the real PAM file, systemd unit and install scripts, so the
+# packaging is tested too.
 #
 # Usage: scripts/e2e-vm.sh [command]
 #   test     start the VM if needed, install the current build, run the Go
@@ -179,18 +180,27 @@ install_build() {
   # Built here, not into bin/, so a running "make dev-server" is untouched.
   (cd "$ROOT/server" && CGO_ENABLED=1 go build -trimpath -o "$out/tilde" ./cmd/tilde)
   (cd "$ROOT/server" && go test -c -tags e2e -o "$out/e2e.test" ./e2e)
-  cp "$ROOT/packaging/pam.d/tilde" "$out/pam-tilde"
-  cp "$ROOT/packaging/systemd/tilde.service" "$out/tilde.service"
+  # The package (D65), so the run tests it too: a newer version each run,
+  # so each install is an upgrade, which restarts Tilde.
+  rm -f "$out"/tilde_*.deb
+  (cd "$ROOT" && TILDE_VERSION="0.0.0+e2e.$(date +%s)" TILDE_ARCH=amd64 TILDE_BIN="$out/tilde" \
+    go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0 package -f packaging/nfpm.yaml -p deb -t "$out/" >/dev/null)
 
-  log "Installing into the VM"
-  vm_scp "$out/tilde" "$out/e2e.test" "$out/pam-tilde" "$out/tilde.service" ubuntu@127.0.0.1:
-  # Same steps as "make install", but serving HTTPS on loopback in the VM.
+  log "Installing the package into the VM"
+  vm_scp "$out/e2e.test" "$out"/tilde_*.deb ubuntu@127.0.0.1:
+  # The package's own files, every time: the two-factor setup below edits
+  # /etc/pam.d/tilde, and confmiss puts back what is removed here. The rest
+  # is what "make install" left in earlier VMs.
   vm_ssh 'set -e
-    sudo install -D -m 0755 tilde /usr/local/bin/tilde
-    sudo install -D -m 0644 pam-tilde /etc/pam.d/tilde
-    sudo install -D -m 0644 tilde.service /etc/systemd/system/tilde.service
-    echo "TILDE_OPTS=\"--listen 127.0.0.1:8443\"" | sudo tee /etc/default/tilde >/dev/null
-    sudo systemctl daemon-reload
+    sudo rm -f /etc/pam.d/tilde /etc/default/tilde /usr/local/bin/tilde /etc/systemd/system/tilde.service
+    wants=/etc/systemd/system/multi-user.target.wants/tilde.service
+    [ -e $wants ] || sudo rm -f $wants
+    sudo DEBIAN_FRONTEND=noninteractive dpkg -i --force-confnew,confmiss tilde_*.deb >/dev/null
+    rm -f tilde_*.deb
+    systemctl is-enabled --quiet tilde || { echo "the package did not enable tilde" >&2; exit 1; }
+    # Installed over a Tilde that "make install" started, the package only
+    # starts it, which leaves that one running; and a fresh server forgets
+    # the login rate limit of earlier runs.
     sudo systemctl restart tilde
     for i in $(seq 1 20); do
       curl -ksf -o /dev/null https://127.0.0.1:8443/ && exit 0

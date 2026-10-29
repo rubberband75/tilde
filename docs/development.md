@@ -45,11 +45,31 @@ theme, icons and font are bundled.
 Architectures: anything Go and cgo build for; the build must be native
 or use a C cross-compiler with that architecture's `libpam`. Raspberry
 Pi OS (arm64, Raspberry Pi 4 and later) is a target; 32-bit armhf is
-not; its e2e run is still to come (`make e2e-pi`,
-on request).
+not. Part of the suite runs on a spare Pi on request (`make e2e-pi`,
+below).
 
 Tested so far: Linux Mint 22 (development) and Ubuntu 24.04 server, on
 x86-64.
+
+## Packages
+
+`make deb` packages the build (`bin/tilde`, with the UI) as
+`dist/tilde_<version>_<arch>.deb`, with nfpm (`packaging/nfpm.yaml`, run
+through `go run`, so nothing to install). The version is the latest
+`vX.Y.Z` tag, with `+N.gHASH` for commits since it, or
+`0.0.0+gitDATE.HASH` without a tag. The package puts the binary in
+`/usr/bin`, the unit in `/usr/lib/systemd/system`, and
+`/etc/pam.d/tilde` and `/etc/default/tilde` as configuration files kept
+across upgrades; its scripts (`packaging/deb/`) enable and start Tilde on
+a new install, restart it on an upgrade (which ends the sessions running),
+stop it on removal, and delete `/var/lib/tilde` on purge. The e2e VM
+installs it, so every run tests it.
+
+Releases: pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`,
+which builds the amd64 and arm64 packages natively (cgo, for PAM) in a
+Debian 12 container, so the binary needs no newer glibc than Debian 12
+and Raspberry Pi OS bookworm have, and attaches them to the tag's
+release (D73).
 
 ## Day to day
 
@@ -119,9 +139,10 @@ make e2e-vm
 
 `scripts/e2e-vm.sh` boots the Ubuntu 24.04 cloud image (Mint 22's base) under
 QEMU/KVM with cloud-init, creates a `tester` account (password
-`tester-pass`, not in sudo), builds Tilde on the host, installs it in the VM
-the way `make install` does (real PAM file, real systemd unit, HTTPS with a
-self-signed certificate) and runs the suite there. The VM keeps running
+`tester-pass`, not in sudo), builds Tilde on the host, packages it as a `.deb` and
+installs that in the VM with dpkg (real PAM file, real systemd unit, the
+package's install scripts, HTTPS with a self-signed certificate) and runs
+the suite there. The VM keeps running
 between runs, so the next `make e2e-vm` takes seconds.
 
 ```bash
@@ -174,6 +195,31 @@ password (give `tester` sudo first: `scripts/e2e-vm.sh ssh -- sudo usermod
 
 The VM has no desktop, so Cinnamon-specific behavior (gsettings, the GNOME
 keyring) still needs a real Mint install to check by hand.
+
+### On a Raspberry Pi
+
+`make e2e-pi PI=user@host` runs part of the suite on a real Raspberry Pi
+(D74): 64-bit Raspberry Pi OS, its kernel and hardware. It is not part of
+`make e2e-vm`; run it when a change could behave differently there (the
+build, the package, PAM, logind, ARM). It needs:
+
+- a Pi you can wipe, marked once with `sudo touch
+  /etc/tilde-e2e-disposable` (the script stops before changing anything
+  without it): the run installs Tilde and adds the `tester` account, and
+  leaves both;
+- ssh to it with a key (`ssh-copy-id user@host`), as a user with
+  passwordless sudo (Raspberry Pi OS's first user has it), and internet
+  on the Pi the first time.
+
+It builds Tilde on the Pi (cgo, for PAM, is native there; Go, the version
+this machine has, is kept in `~/tilde-e2e`), packages the binary here as
+the arm64 `.deb` and installs that with apt, so the package's dependencies
+and scripts are tested on Raspberry Pi OS. Then it runs the Go tests that
+need only an account (sessions, the privilege drop, locking, jobs, the
+audit log) and the UI specs for login, the desktop, windows, Terminal,
+Files, the editor and System Settings, in Chromium here through an SSH
+tunnel. `scripts/e2e-pi.sh user@host ui` reruns the UI part, `logs` shows
+the service log, `tunnel` opens it at https://localhost:9445.
 
 ## Debugging
 
