@@ -57,7 +57,7 @@ bug in Tilde can never give more than the account already has.
   proxy appended, not those the client wrote.
 - Session tokens: 32 random bytes, stored by SHA-256 hash in memory, cookie
   `__Host-tilde` with `HttpOnly; Secure; SameSite=Strict; Path=/`, 12-hour
-  absolute lifetime from the last time the password was typed (login or
+  absolute lifetime (`--session-lifetime`, 10 minutes to a week; D69) from the last time the password was typed (login or
   unlock), all revoked on logout and when the session ends.
 - Lock screen (D40): the server locks a browser's token after the user's
   idle delay without input (Cinnamon's screensaver settings) or when any of

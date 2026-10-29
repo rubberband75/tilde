@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"tilde/internal/buildinfo"
 	"tilde/internal/helper"
@@ -73,6 +74,14 @@ Run "tilde serve -h" for server flags.
 `, buildinfo.Version)
 }
 
+// The session lifetime an administrator may set (D69): long enough to get
+// something done, and no longer than a week, as a login is a password
+// typed once on some browser.
+const (
+	minSessionLifetime = 10 * time.Minute
+	maxSessionLifetime = 7 * 24 * time.Hour
+)
+
 func serve(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	listen := fs.String("listen", "127.0.0.1:8443", "address to listen on (host:port)")
@@ -82,10 +91,16 @@ func serve(args []string) int {
 	stateDir := fs.String("state-dir", "/var/lib/tilde", "directory for server state (TLS certificate)")
 	origins := fs.String("allowed-origins", "", "comma-separated extra origins to accept, e.g. https://tilde.example.com")
 	trustProxy := fs.Bool("trust-proxy", false, "trust X-Forwarded-For (only behind your own reverse proxy)")
+	lifetime := fs.Duration("session-lifetime", 12*time.Hour,
+		"how long a login lasts, however active, before logging in again (e.g. 8h; 10m to 168h)")
 	debug := fs.Bool("debug", false, "verbose logging")
 	fs.Parse(args)
 
 	setupLogging("server", *debug)
+	if *lifetime < minSessionLifetime || *lifetime > maxSessionLifetime {
+		slog.Error("tilde serve: --session-lifetime must be between 10m and 168h", "got", *lifetime)
+		return 2
+	}
 
 	var extra []string
 	for _, o := range strings.Split(*origins, ",") {
@@ -103,6 +118,7 @@ func serve(args []string) int {
 		StateDir:       *stateDir,
 		AllowedOrigins: extra,
 		TrustProxy:     *trustProxy,
+		SessionMaxAge:  *lifetime,
 		Web:            webui.FS(),
 	})
 	if err != nil {

@@ -60,7 +60,7 @@ reports on their way. `lockAfter` is Tilde's own delay if the user set
 one in System Settings (D72), else follows the user's Cinnamon screensaver
 settings (`idle-delay` + `lock-delay`, when `idle-activation-enabled` and
 `lock-enabled`), else GNOME's, else 900. The token lives 12 hours from
-login or the last unlock.
+login or the last unlock (`tilde serve --session-lifetime`, D69).
 
 ## Worker API (`/api/v1/*`)
 

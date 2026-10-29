@@ -45,7 +45,8 @@ type Config struct {
 	// TrustProxy uses X-Forwarded-For for rate limiting. Only enable it
 	// behind a reverse proxy you control.
 	TrustProxy bool
-	// SessionMaxAge is the absolute token lifetime (D16: 12h).
+	// SessionMaxAge is the absolute token lifetime: --session-lifetime,
+	// 12 hours by default (D16, D69).
 	SessionMaxAge time.Duration
 	// Web is the built frontend.
 	Web fs.FS
