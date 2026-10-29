@@ -1131,12 +1131,29 @@ wiped, as the e2e VM is (D29): the script refuses a Pi without
 native there) and packaged here, and the Pi installs the `.deb` with apt.
 Rejected: both QEMU ways above.
 
+**D75 — Notifications: queued for the name, text only, kept in memory** (2026-10-28, accepted; carries out D70)
+The worker asks for `org.freedesktop.Notifications` on the session bus
+with replacement allowed and without "do not queue": while a desktop has
+the name, the worker waits in the bus's queue and gets it if the desktop
+lets go, and a desktop starting later takes it back. Notifications are
+shown as text: the worker offers no `body-markup` and removes markup
+programs send anyway, so nothing a program sends becomes HTML (rule 11).
+The last 50 are kept in the worker's memory, not on disk, and are gone
+when the session ends, as Cinnamon's are when it restarts. A
+notification that leaves the timeout to the server closes after 6
+seconds; a critical one stays until dismissed. Every browser shows the
+same toasts (whole lists over the events socket, as polkit's requests,
+D44), and a click in one closes it in all. The panel gets Cinnamon's
+notifications applet, a bell with the count and the list, which System
+Settings can hide. Showing a desktop's notifications in Tilde as well is
+still open.
+
 ---
 
 ## Open decisions
 
 | Question | Options | Leaning | Needed by |
 | --- | --- | --- | --- |
-| Notifications in both places | mirror the desktop's notifications into Tilde by watching the session bus (D70) | view-only mirror, a setting | When notifications are built |
+| Notifications in both places | mirror the desktop's notifications into Tilde by watching the session bus (D70, D75) | view-only mirror, a setting | Later, at the user's choice |
 | Game streaming | WebRTC video from the host GPU (capture, hardware encode, input), alongside Xpra (D71) | explore after Xpra | Phase 7 |
 | Multi-machine | third-party tunnel vs own relay; E2E encryption | worker over SSH first | Phase 8 |

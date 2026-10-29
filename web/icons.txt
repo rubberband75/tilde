@@ -64,3 +64,6 @@ system-search
 
 # dialogs
 dialog-password
+dialog-information
+dialog-warning
+preferences-system-notifications

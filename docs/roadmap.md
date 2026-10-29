@@ -99,7 +99,8 @@ to; tick items off as they land.
 - [x] System Monitor: enable and disable services at boot, a service's journal (D62): a details pane under the Services list
 - [x] System monitor tray applet (D61): CPU and memory graphs in the panel, System Monitor's Resources tab (CPU, memory and swap, network, disk); whole snapshots once a second while watched
 - [ ] Local web apps: list listening ports from `/proc/net/tcp`, open code-server/Jupyter in a window, **served from a separate origin**: a second port (D66)
-- [ ] Notifications: Tilde takes `org.freedesktop.Notifications` when no other program has it, and shows them as toasts (D70)
+- [x] Notifications (D70, D75): Tilde takes `org.freedesktop.Notifications` when no other program has it, and shows them as toasts with their buttons in every browser; the panel's notifications applet lists them
+- [ ] Notifications in both places: mirror a desktop's notifications into Tilde (open decision)
 - [x] System Settings app (D72): screen lock (follow Cinnamon's or GNOME's delay, or Tilde's own; D40), window animations, the panel's applets, Backgrounds, saved per user in `~/.config/tilde/settings.json` (D67), the desktop's own settings read, never written; recent logins and failed attempts from the audit log (D46), served by the server
 - [ ] Settings: theme (a light Mint-Y, and the accent colours) once there is more than one
 

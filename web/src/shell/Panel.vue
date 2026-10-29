@@ -13,6 +13,7 @@ import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
 import ClientsApplet from './ClientsApplet.vue'
 import NetworkApplet from './NetworkApplet.vue'
+import NotificationsApplet from './NotificationsApplet.vue'
 import ResourcesApplet from './ResourcesApplet.vue'
 import { useSession } from '@/stores/session'
 import { useWindows } from '@/stores/windows'
@@ -51,6 +52,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
       </button>
       <ResourcesApplet v-if="settings.settings.panel.resources" />
       <NetworkApplet v-if="settings.settings.panel.network" />
+      <NotificationsApplet v-if="settings.settings.panel.notifications" />
       <ClientsApplet />
       <div class="applet user" :title="`Logged in as ${session.info?.user}`">{{ session.info?.user }}</div>
       <PanelClock />

@@ -214,8 +214,8 @@ install_build() {
   # without it, D43). pam_oath goes after common-auth, as docs/security.md
   # says, so the password is asked first.
   vm_ssh "set -e
-    dpkg -s libpam-oath oathtool >/dev/null 2>&1 ||
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q libpam-oath oathtool >/dev/null
+    dpkg -s libpam-oath oathtool libnotify-bin >/dev/null 2>&1 ||
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q libpam-oath oathtool libnotify-bin >/dev/null
     id $TEST_2FA_USER >/dev/null 2>&1 || sudo useradd -m -s /bin/bash $TEST_2FA_USER
     echo '$TEST_2FA_USER:$TEST_PASS' | sudo chpasswd
     sudo sed -i '/^@include common-auth/a auth [success=1 default=ignore] pam_succeed_if.so user notin $TEST_2FA_USER quiet\\nauth required pam_oath.so usersfile=/etc/users.oath window=5' /etc/pam.d/tilde"

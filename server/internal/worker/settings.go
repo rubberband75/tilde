@@ -41,9 +41,10 @@ type Effects struct {
 
 // PanelPrefs: which applets the panel shows.
 type PanelPrefs struct {
-	Resources  bool `json:"resources"`
-	Network    bool `json:"network"`
-	Fullscreen bool `json:"fullscreen"`
+	Resources     bool `json:"resources"`
+	Network       bool `json:"network"`
+	Notifications bool `json:"notifications"`
+	Fullscreen    bool `json:"fullscreen"`
 }
 
 // defaultSettings: the desktop's lock delay, animations, every applet.
@@ -51,7 +52,7 @@ func defaultSettings() Settings {
 	return Settings{
 		Lock:    LockPrefs{Enabled: true, Minutes: 15},
 		Effects: Effects{Animations: true},
-		Panel:   PanelPrefs{Resources: true, Network: true, Fullscreen: true},
+		Panel:   PanelPrefs{Resources: true, Network: true, Notifications: true, Fullscreen: true},
 	}
 }
 

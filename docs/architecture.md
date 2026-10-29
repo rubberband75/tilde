@@ -100,6 +100,11 @@ could already do.
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is
   `web/src/shell/NetworkApplet.vue`.
+- Is the user's notification server while no other program is
+  (`notifications.go`, D70): it waits in the session bus's queue for
+  `org.freedesktop.Notifications`, keeps the last 50 in memory, and
+  passes clicked buttons back; the browser shows them as toasts
+  (`web/src/shell/NotificationToast.vue`) and in the panel's applet.
 - Is the polkit authentication agent of Tilde's web session (`polkit.go`,
   D44): polkit's requests for a password go to a dialog in every browser,
   and polkit's setuid `polkit-agent-helper-1` checks the answers.

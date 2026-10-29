@@ -34,7 +34,7 @@ server/                 Go module "tilde" (one binary, three roles)
   internal/worker/      per-user API: fs, jobs, events + inotify, search, thumbnails,
                         bookmarks, trash, places, drives (udisks), terminals,
                         idle lock settings, logind, polkit agent, audit events,
-                        text files and editor drafts
+                        text files and editor drafts, settings, notifications
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages

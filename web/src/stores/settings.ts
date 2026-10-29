@@ -8,7 +8,7 @@ export function defaultSettings(): Settings {
   return {
     lock: { own: false, enabled: true, minutes: 15 },
     effects: { animations: true },
-    panel: { resources: true, network: true, fullscreen: true },
+    panel: { resources: true, network: true, notifications: true, fullscreen: true },
   }
 }
 

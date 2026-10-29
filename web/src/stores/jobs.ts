@@ -9,6 +9,7 @@ import { setWatchSender, watchedDirs } from '@/lib/fswatch'
 import { setResourcesSender } from '@/lib/resources'
 import { useResources } from './resources'
 import { useSettings } from './settings'
+import { useNotifications } from './notifications'
 import { usePolkit } from './polkit'
 
 /** Folders whose listing a job changes. */
@@ -48,6 +49,7 @@ export const useJobs = defineStore('jobs', () => {
         byId.value = Object.fromEntries(ev.jobs.map((j) => [j.id, j]))
         // Requests that came while the socket was down were not reported.
         void usePolkit().refresh()
+        void useNotifications().refresh()
         break
       case 'job':
         apply(ev.job)
@@ -69,6 +71,9 @@ export const useJobs = defineStore('jobs', () => {
         break
       case 'polkit':
         void usePolkit().refresh()
+        break
+      case 'notifications':
+        void useNotifications().refresh()
         break
       case 'resources':
         useResources().add(ev.resources)
@@ -104,6 +109,7 @@ export const useJobs = defineStore('jobs', () => {
     stream = undefined
     byId.value = {}
     usePolkit().reset()
+    useNotifications().reset()
   }
 
   /** Starts a job; progress arrives over the events socket. */

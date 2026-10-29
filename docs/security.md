@@ -110,6 +110,13 @@ bug in Tilde can never give more than the account already has.
   manager lists. Stopping `tilde.service` asks first. A service's journal
   is read by `journalctl` as the user, the name passed as its own
   argument, so journald's own access rules apply (D62).
+- Notifications (D70): any program the user runs may send one, and every
+  browser of the user shows it, so the worker bounds them (50 kept, 512
+  bytes of summary, 4 KiB of body, 8 buttons, pictures up to 512×512) and
+  the browser shows them as text only, never as HTML: markup is removed.
+  A picture sent with one is decoded and re-encoded as a PNG by the
+  worker and served with the sandbox CSP; a picture file named by one is
+  read through the file API, as the user. A locked browser shows none.
 - Audit log (D46): root writes to the system journal, tagged
   `tilde-audit` with the facility authpriv (so rsyslog also files it in
   `/var/log/auth.log`): logins and failed logins, the rate limit, locks

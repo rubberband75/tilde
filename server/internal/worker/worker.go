@@ -58,6 +58,7 @@ type Worker struct {
 	jobs            *jobManager
 	logind          *logindConn
 	polkit          *polkitAgent
+	notifications   *notificationService
 	auditQ          *auditQueue
 }
 
@@ -117,6 +118,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		jobs:            newJobManager(events, trash),
 		logind:          newLogindConn(opt),
 		polkit:          newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
+		notifications:   newNotificationService(func() { events.publish(event{Type: "notifications"}) }),
 		auditQ:          newAuditQueue(),
 	}
 	w.terms.exited = func(id string) { w.audit(nil, protocol.AuditEvent{Event: "terminal_close", Terminal: id}) }
@@ -167,6 +169,11 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/notifications", w.handleNotifications)
+	m.HandleFunc("GET /api/v1/notifications/image", w.handleNotificationImage)
+	m.HandleFunc("POST /api/v1/notifications/action", w.handleNotificationAction)
+	m.HandleFunc("POST /api/v1/notifications/close", w.handleNotificationClose)
+	m.HandleFunc("POST /api/v1/notifications/clear", w.handleNotificationClear)
 	m.HandleFunc("GET /api/v1/settings", w.handleSettings)
 	m.HandleFunc("PUT /api/v1/settings", w.handleSettingsSave)
 	m.HandleFunc("GET /api/v1/processes", w.handleProcesses)
@@ -260,6 +267,7 @@ func (w *Worker) Shutdown() {
 	w.services.close()
 	w.resources.close()
 	w.polkit.close()
+	w.notifications.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 	select {
@@ -327,6 +335,9 @@ func Run() int {
 			}
 		}()
 	}
+
+	// The user's session bus, which pam_systemd's session has (D70).
+	go w.notifications.start(sessionBusAddress())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer stop()

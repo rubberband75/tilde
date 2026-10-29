@@ -82,13 +82,19 @@ export class Api {
     expect(res.status(), await res.text()).toBe(200)
   }
 
+  /** Removes every notification from the list (D70). */
+  async clearNotifications() {
+    const res = await this.request.post('/api/v1/notifications/clear', { data: {}, headers: this.headers })
+    expect(res.status(), await res.text()).toBe(204)
+  }
+
   /** Puts System Settings back to the defaults (D72). */
   async resetSettings() {
     const res = await this.request.put('/api/v1/settings', {
       data: {
         lock: { own: false, enabled: true, minutes: 15 },
         effects: { animations: true },
-        panel: { resources: true, network: true, fullscreen: true },
+        panel: { resources: true, network: true, notifications: true, fullscreen: true },
       },
       headers: this.headers,
     })

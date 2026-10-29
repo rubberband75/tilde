@@ -187,6 +187,8 @@ export type WorkerEvent =
   | { type: 'network' }
   /** polkit's authentication requests changed: fetch /api/v1/polkit again (D44). */
   | { type: 'polkit' }
+  /** Notifications changed: fetch /api/v1/notifications again (D70). */
+  | { type: 'notifications' }
   /** The settings were saved, in this browser or another (D72): fetch them again. */
   | { type: 'settings' }
   /** While asked for (D61): the latest whole snapshot, every second. */
@@ -388,7 +390,7 @@ export interface Settings {
     minutes: number
   }
   effects: { animations: boolean }
-  panel: { resources: boolean; network: boolean; fullscreen: boolean }
+  panel: { resources: boolean; network: boolean; notifications: boolean; fullscreen: boolean }
 }
 
 /** When idle browsers lock, and where that came from (D40). */
@@ -487,4 +489,34 @@ export interface Draft {
   /** The file's version the changes started from. */
   base?: string
   updated: string
+}
+
+/** A program's notification (D70), from the user's session bus. */
+export interface Notification {
+  id: number
+  /** The program's name, as it gave it. */
+  app: string
+  /** An icon name; or `iconPath`, a picture file; or `image`, a picture sent with it. */
+  icon?: string
+  iconPath?: string
+  image?: boolean
+  summary: string
+  /** Plain text: markup is removed by the worker. */
+  body?: string
+  /** Buttons; the "default" one is a click on the notification itself. */
+  actions?: { key: string; label: string }[]
+  /** 0 low, 1 normal, 2 critical. */
+  urgency: number
+  /** When it came, in Unix milliseconds. */
+  time: number
+  /** Shown as a toast; closed ones stay in the list. */
+  open: boolean
+}
+
+/** GET /api/v1/notifications */
+export interface NotificationsState {
+  /** Programs' notifications come to Tilde: no other program shows them. */
+  active: boolean
+  /** Newest first. */
+  notifications: Notification[]
 }

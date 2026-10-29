@@ -175,6 +175,11 @@ const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
           v-for="a in [
             { key: 'resources', name: 'System monitor', note: 'CPU and memory graphs; a click opens System Monitor.' },
             { key: 'network', name: 'Network', note: 'Shown only where NetworkManager runs.' },
+            {
+              key: 'notifications',
+              name: 'Notifications',
+              note: 'Programs’ notifications, while Tilde shows them; toasts show either way.',
+            },
             { key: 'fullscreen', name: 'Fullscreen button', note: 'Fullscreen also stays in the menu.' },
           ] as const"
           :key="a.key"

@@ -100,7 +100,7 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/desktop/background` | `{source, picture, options, primary, secondary, shading}`: Tilde's own background if one was picked (`source: "tilde"`, `~/.config/tilde/desktop-background.json`), else Cinnamon's (`"cinnamon"`, `org.cinnamon.desktop.background` read with `gsettings`), else `"default"` (the theme's). `picture` is a path (empty: colors only); `options` is `none`, `wallpaper` (tiled), `centered`, `scaled`, `stretched`, `zoom` or `spanned`; colors are `#rrggbb`; `shading` is `solid`, `vertical` or `horizontal` |
 | PUT | `/api/v1/desktop/background` | The same fields without `source` → the background now shown. Unknown options and bad colors fall back to defaults; `picture` must be absolute. `{reset: true}` drops Tilde's background. Cinnamon's settings are never written |
 | GET | `/api/v1/desktop/backgrounds` | `{collections: [{name, images: Entry[]}]}`: Cinnamon's wallpaper lists (`cinnamon-background-properties/*.xml` in `$XDG_DATA_DIRS`), the Pictures folder, and folders from `~/.cinnamon/backgrounds/user-folders.lst`; images only, top level, at most 1000 each |
-| GET | `/api/v1/settings` | `{settings: Settings, desktopLock: {source, lockAfter}}`. `Settings` (D72), from `~/.config/tilde/settings.json`, defaults for anything missing: `{lock: {own, enabled, minutes}, effects: {animations}, panel: {resources, network, fullscreen}}`. `lock.own`: Tilde's own delay (`enabled`, `minutes` 1–1440) rather than the desktop's. `desktopLock` is what the desktop says (`source`: `cinnamon`, `gnome` or `default`; `lockAfter` in seconds, 0 never) |
+| GET | `/api/v1/settings` | `{settings: Settings, desktopLock: {source, lockAfter}}`. `Settings` (D72), from `~/.config/tilde/settings.json`, defaults for anything missing: `{lock: {own, enabled, minutes}, effects: {animations}, panel: {resources, network, notifications, fullscreen}}`. `lock.own`: Tilde's own delay (`enabled`, `minutes` 1–1440) rather than the desktop's. `desktopLock` is what the desktop says (`source`: `cinnamon`, `gnome` or `default`; `lockAfter` in seconds, 0 never) |
 | PUT | `/api/v1/settings` | A whole `Settings` → the saved settings; `400` for a delay out of range. Every client gets a `settings` event, and the server the new lock delay at once. The desktop's settings are never written |
 | POST | `/api/v1/desktop/layout` | `{positions: {key: {col, row} \| null}, replace?}` → layout. Merges (`null` removes a key) or, with `replace`, starts from nothing. Stored in `~/.config/tilde/desktop-layout.json`; cells up to 1000, at most 5000 icons |
 
@@ -182,6 +182,28 @@ first answer ends it. Unanswered requests are cancelled after 5 minutes.
 | GET | `/api/v1/polkit` | `{agent, requests: PolkitRequest[]}`, oldest first. `agent`: registered with polkit. `PolkitRequest`: `{id, action, message, icon?, identities, prompt?}`. `identities` are the users whose password polkit accepts, the user first when listed; `prompt` (`{text, echo, info?}`, as at login) is a question PAM asked after the password, waiting for its answer |
 | POST | `/api/v1/polkit/respond` | `{id, identity?, answer}`. With no `prompt` waiting, `answer` is the password of `identity` (default: the first). `204` authorized (the request ends), `200 {prompt}` another question, `401 auth_failed` wrong (the request stays open; `error` carries PAM's message if it gave one), `404 not_found` the request ended, `409 busy` an answer is being checked. Answers: at most 511 bytes, no line breaks |
 | POST | `/api/v1/polkit/cancel` | `{id}` → `204`; the program that asked is told it was dismissed. `404` if it already ended |
+
+### Notifications (D70)
+
+The worker is the notification server (`org.freedesktop.Notifications`,
+specification 1.2) on the user's session bus while no other program is:
+it waits in the bus's queue while one is (Cinnamon at the machine) and
+allows replacement, so a desktop starting later takes the name back.
+`notify-send`, apt and other programs' notifications then show in every
+browser; the events socket sends `{"type":"notifications"}` whenever the
+list changes. It offers `actions`, `body`, `icon-static` and
+`persistence`, not `body-markup`: markup sent anyway is removed. The last
+50 are kept, in memory; a notification without its own timeout closes
+after 6 seconds, a critical one stays until dismissed, and closed ones
+stay listed (transient ones do not).
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/notifications` | `{active, notifications: Notification[]}`, newest first. `active`: Tilde has the name. `Notification`: `{id, app, icon?, iconPath?, image?, summary, body?, actions?: [{key, label}], urgency, time, open}`: `icon` an icon name, `iconPath` a picture file, `image` a picture sent with it (below); `urgency` 0 low, 1 normal, 2 critical; `time` in Unix ms; `open`: shown as a toast |
+| GET | `/api/v1/notifications/image?id=` | The picture sent with notification `id` (`image-data`, at most 512×512), as a PNG, with a sandbox CSP. `404` if none |
+| POST | `/api/v1/notifications/action` | `{id, key}` → `204`: the program gets `ActionInvoked`; the notification then closes (`NotificationClosed`, reason 2) unless it is resident. `"default"` is a click on the notification itself. `404` if it closed or has no such action |
+| POST | `/api/v1/notifications/close` | `{id}` → `204`: dismisses the toast (reason 2); it stays listed. `404` if unknown |
+| POST | `/api/v1/notifications/clear` | `{ids?}` → `204`: removes those from the list, or all of them, closing any still open |
 
 ### Text editor (D48)
 
@@ -283,6 +305,9 @@ unwatched: ask again.
 
 `{"type":"settings"}` says the user saved System Settings in some
 browser (D72): fetch `/api/v1/settings` again.
+
+`{"type":"notifications"}` says programs' notifications changed (D70):
+fetch `/api/v1/notifications` again, and after each snapshot too.
 
 `{"type":"polkit"}` says polkit's authentication requests changed (D44):
 fetch `/api/v1/polkit` again. Requests made while the socket was down are
