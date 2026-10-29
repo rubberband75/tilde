@@ -29,7 +29,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${TILDE_PI_DIR:-$HOME/.cache/tilde-e2e-pi}"
 UI_PORT="${TILDE_PI_UI_PORT:-9450}"
 UI_TEST_PORT="${TILDE_PI_UI_TEST_PORT:-9453}"
-NFPM=github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+NFPM=github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1
 
 # The throwaway account the tests log in as. Not in sudo.
 TEST_USER=tester

@@ -194,7 +194,7 @@ install_build() {
   # so each install is an upgrade, which restarts Tilde.
   rm -f "$out"/tilde_*.deb
   (cd "$ROOT" && TILDE_VERSION="0.0.0+e2e.$(date +%s)" TILDE_ARCH=amd64 TILDE_BIN="$out/tilde" \
-    go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0 package -f packaging/nfpm.yaml -p deb -t "$out/" >/dev/null)
+    go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1 package -f packaging/nfpm.yaml -p deb -t "$out/" >/dev/null)
 
   log "Installing the package into the VM"
   vm_scp "$out/e2e.test" "$out"/tilde_*.deb ubuntu@127.0.0.1:

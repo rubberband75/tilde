@@ -22,7 +22,9 @@ DEV_LISTEN ?= 127.0.0.1:8443
 # +N.gHASH), else 0.0.0+gitDATE.HASH; the architecture of the build.
 PKG_VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed -e 's/^v//' -e 's/-\([0-9]*\)-g/+\1.g/'),0.0.0+git$(shell date -u +%Y%m%d).$(shell git rev-parse --short HEAD))
 PKG_ARCH    ?= $(shell cd server && go env GOARCH)
-NFPM        := go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+# nfpm v2.43.1: the last that builds with the Go of go.mod (1.24), which CI
+# installs and does not upgrade.
+NFPM        := go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1
 
 .PHONY: all build deps web server server-nopam test test-go test-web check \
         fmt deb e2e-vm e2e-pi dev dev-server dev-server-root dev-web icons fonts e2e e2e-ui install uninstall clean
