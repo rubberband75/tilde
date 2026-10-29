@@ -95,7 +95,7 @@ export class Api {
         lock: { own: false, enabled: true, minutes: 15 },
         appearance: { mode: 'desktop', accent: 'desktop' },
         effects: { animations: true },
-        panel: { resources: true, network: true, notifications: true, fullscreen: true },
+        panel: { resources: true, network: true, sound: true, notifications: true, fullscreen: true },
       },
       headers: this.headers,
     })

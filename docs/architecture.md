@@ -107,6 +107,8 @@ could already do.
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is
   `web/src/shell/NetworkApplet.vue`.
+- Follows the user's sound server for the sound applet (`sound.go`, D79):
+  `pactl -f json` for outputs and streams, `pactl subscribe` for changes.
 - Runs the user's Xpra session for host apps (`xpra.go`, `hostapps.go`,
   D78): lists the host's `.desktop` apps, starts Xpra on a socket in the
   runtime folder when the desktop asks, runs apps on its display, all in

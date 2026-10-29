@@ -210,7 +210,10 @@ func (x *xpraSession) start() error {
 		// Only the user: peer credentials on a socket in a 0700 folder.
 		"--bind=" + sock + ",auth=peercred", "--html=on", "--daemon=no", "--displayfd=3",
 		// The user's session bus, so apps' notifications come to Tilde (D70).
-		"--dbus-launch=no", "--mdns=no", "--notifications=no", "--pulseaudio=no",
+		"--dbus-launch=no", "--mdns=no", "--notifications=no",
+		// A sound server of the session's own, which the apps play to and
+		// Xpra sends to the browser (D79); no microphone.
+		"--pulseaudio=yes", "--speaker=on", "--microphone=off",
 		// Nothing a page could ask of the server besides showing windows:
 		// no commands (the worker starts apps), files, URLs, printing,
 		// webcam, server scripts, or a system proxy.
@@ -272,6 +275,12 @@ func (x *xpraSession) launch(ctx context.Context, argv []string) error {
 	cmd := exec.Command(full[0], full[1:]...)
 	cmd.Dir = os.Getenv("HOME")
 	cmd.Env = append(os.Environ(), "DISPLAY="+display, "XDG_SESSION_TYPE=x11", "GDK_BACKEND=x11", "QT_QPA_PLATFORM=xcb")
+	// Their sound to the browser, through the session's own sound server,
+	// when Xpra could start one (it needs PulseAudio's pulseaudio).
+	pulse := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "xpra", strings.TrimPrefix(display, ":"), "pulse", "native")
+	if _, err := os.Stat(pulse); err == nil {
+		cmd.Env = append(cmd.Env, "PULSE_SERVER=unix:"+pulse)
+	}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {

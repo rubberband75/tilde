@@ -53,6 +53,7 @@ type Effects struct {
 type PanelPrefs struct {
 	Resources     bool `json:"resources"`
 	Network       bool `json:"network"`
+	Sound         bool `json:"sound"`
 	Notifications bool `json:"notifications"`
 	Fullscreen    bool `json:"fullscreen"`
 }
@@ -63,7 +64,7 @@ func defaultSettings() Settings {
 		Lock:       LockPrefs{Enabled: true, Minutes: 15},
 		Appearance: Appearance{Mode: "desktop", Accent: "desktop"},
 		Effects:    Effects{Animations: true},
-		Panel:      PanelPrefs{Resources: true, Network: true, Notifications: true, Fullscreen: true},
+		Panel:      PanelPrefs{Resources: true, Network: true, Sound: true, Notifications: true, Fullscreen: true},
 	}
 }
 

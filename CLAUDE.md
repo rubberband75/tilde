@@ -36,7 +36,8 @@ server/                 Go module "tilde" (one binary, three roles)
                         bookmarks, trash, places, drives (udisks), terminals,
                         idle lock settings, logind, polkit agent, audit events,
                         text files and editor drafts, settings, notifications,
-                        local web apps (listening ports, the server's dial), host apps (Xpra)
+                        local web apps (listening ports, the server's dial), host apps (Xpra),
+                        sound (pactl)
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages

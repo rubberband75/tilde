@@ -189,6 +189,8 @@ export type WorkerEvent =
   | { type: 'polkit' }
   /** Notifications changed: fetch /api/v1/notifications again (D70). */
   | { type: 'notifications' }
+  /** The sound server's outputs or streams changed: fetch /api/v1/sound again (D79). */
+  | { type: 'sound' }
   /** The settings were saved, in this browser or another (D72): fetch them again. */
   | { type: 'settings' }
   /** While asked for (D61): the latest whole snapshot, every second. */
@@ -391,7 +393,7 @@ export interface Settings {
   }
   appearance: Appearance
   effects: { animations: boolean }
-  panel: { resources: boolean; network: boolean; notifications: boolean; fullscreen: boolean }
+  panel: { resources: boolean; network: boolean; sound: boolean; notifications: boolean; fullscreen: boolean }
 }
 
 export type ThemeMode = 'dark' | 'light' | 'mixed'
@@ -561,4 +563,31 @@ export interface HostApp {
   iconPath?: string
   /** The menu's category: Tilde's, or Programming or Other. */
   category: string
+}
+
+/** A sound output (a sink): speakers, headphones, HDMI (D79). */
+export interface SoundOutput {
+  name: string
+  description: string
+  /** Percent, 0 to 150. */
+  volume: number
+  muted: boolean
+  default: boolean
+}
+
+/** An app playing sound (a stream). */
+export interface SoundApp {
+  id: number
+  name: string
+  icon?: string
+  volume: number
+  muted: boolean
+}
+
+/** GET /api/v1/sound */
+export interface SoundState {
+  /** A sound server answers (PipeWire or PulseAudio). */
+  available: boolean
+  outputs: SoundOutput[]
+  apps: SoundApp[]
 }

@@ -109,7 +109,7 @@ to; tick items off as they land.
 
 - [x] Xpra, stage 1 (D78): the host's `.desktop` apps in the menu, run in the user's Xpra session (started on first use, on a socket in the runtime folder, stopped at logout) and shown by Xpra's own HTML5 client in the Host Apps window, from the app port
 - [ ] Xpra, stage 2 (D78): Tilde's own Xpra client, so each host window is a Tilde window (title bar, snapping, window list)
-- [ ] Sound applet: host volume through PipeWire, with Xpra's audio (moved from phase 2, D55)
+- [x] Sound applet (D55, D79): the host's outputs, volume, mute and the apps playing, through PipeWire's or PulseAudio's `pactl`; host apps' sound plays in the browser through Xpra
 - [ ] Explore game streaming (Steam): WebRTC from the host GPU, gamepad and pointer lock (open decision)
 
 ## Phase 8 — Multi-machine

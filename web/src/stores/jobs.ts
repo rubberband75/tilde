@@ -11,6 +11,7 @@ import { useResources } from './resources'
 import { useSettings } from './settings'
 import { useNotifications } from './notifications'
 import { usePolkit } from './polkit'
+import { useSound } from './sound'
 
 /** Folders whose listing a job changes. */
 export function affectedDirs(job: Job): string[] {
@@ -50,6 +51,7 @@ export const useJobs = defineStore('jobs', () => {
         // Requests that came while the socket was down were not reported.
         void usePolkit().refresh()
         void useNotifications().refresh()
+        void useSound().refresh()
         break
       case 'job':
         apply(ev.job)
@@ -74,6 +76,9 @@ export const useJobs = defineStore('jobs', () => {
         break
       case 'notifications':
         void useNotifications().refresh()
+        break
+      case 'sound':
+        void useSound().refresh()
         break
       case 'resources':
         useResources().add(ev.resources)
@@ -110,6 +115,7 @@ export const useJobs = defineStore('jobs', () => {
     byId.value = {}
     usePolkit().reset()
     useNotifications().reset()
+    useSound().reset()
   }
 
   /** Starts a job; progress arrives over the events socket. */

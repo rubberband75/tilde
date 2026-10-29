@@ -13,6 +13,7 @@ import WindowList from './WindowList.vue'
 import PanelClock from './PanelClock.vue'
 import ClientsApplet from './ClientsApplet.vue'
 import NetworkApplet from './NetworkApplet.vue'
+import SoundApplet from './SoundApplet.vue'
 import NotificationsApplet from './NotificationsApplet.vue'
 import ResourcesApplet from './ResourcesApplet.vue'
 import { useSession } from '@/stores/session'
@@ -51,6 +52,7 @@ const launchers = computed(() => ['files', 'terminal'].map(getApp).filter((a): a
         <SymbolicIcon name="fullscreen" :size="16" />
       </button>
       <ResourcesApplet v-if="settings.settings.panel.resources" />
+      <SoundApplet v-if="settings.settings.panel.sound" />
       <NetworkApplet v-if="settings.settings.panel.network" />
       <NotificationsApplet v-if="settings.settings.panel.notifications" />
       <ClientsApplet />

@@ -101,7 +101,7 @@ Paths in query strings and bodies are absolute.
 | GET | `/api/v1/desktop/background` | `{source, picture, options, primary, secondary, shading}`: Tilde's own background if one was picked (`source: "tilde"`, `~/.config/tilde/desktop-background.json`), else Cinnamon's (`"cinnamon"`, `org.cinnamon.desktop.background` read with `gsettings`), else `"default"` (the theme's). `picture` is a path (empty: colors only); `options` is `none`, `wallpaper` (tiled), `centered`, `scaled`, `stretched`, `zoom` or `spanned`; colors are `#rrggbb`; `shading` is `solid`, `vertical` or `horizontal` |
 | PUT | `/api/v1/desktop/background` | The same fields without `source` → the background now shown. Unknown options and bad colors fall back to defaults; `picture` must be absolute. `{reset: true}` drops Tilde's background. Cinnamon's settings are never written |
 | GET | `/api/v1/desktop/backgrounds` | `{collections: [{name, images: Entry[]}]}`: Cinnamon's wallpaper lists (`cinnamon-background-properties/*.xml` in `$XDG_DATA_DIRS`), the Pictures folder, and folders from `~/.cinnamon/backgrounds/user-folders.lst`; images only, top level, at most 1000 each |
-| GET | `/api/v1/settings` | `{settings: Settings, desktopLock: {source, lockAfter}, desktopTheme: {source, mode, accent}}`. `Settings` (D72), from `~/.config/tilde/settings.json`, defaults for anything missing: `{lock: {own, enabled, minutes}, appearance: {mode, accent}, effects: {animations}, panel: {resources, network, notifications, fullscreen}}`. `appearance` (D77): `mode` `dark`, `light`, `mixed` or `desktop`; `accent` `green`, `aqua`, `blue`, `grey`, `orange`, `pink`, `purple`, `red`, `sand`, `teal` or `desktop`. `lock.own`: Tilde's own delay (`enabled`, `minutes` 1–1440) rather than the desktop's. `desktopLock` is what the desktop says (`source`: `cinnamon`, `gnome` or `default`; `lockAfter` in seconds, 0 never); `desktopTheme` `{source, mode, accent}` likewise, from Cinnamon's GTK and desktop themes or GNOME's colour scheme and accent |
+| GET | `/api/v1/settings` | `{settings: Settings, desktopLock: {source, lockAfter}, desktopTheme: {source, mode, accent}}`. `Settings` (D72), from `~/.config/tilde/settings.json`, defaults for anything missing: `{lock: {own, enabled, minutes}, appearance: {mode, accent}, effects: {animations}, panel: {resources, network, sound, notifications, fullscreen}}`. `appearance` (D77): `mode` `dark`, `light`, `mixed` or `desktop`; `accent` `green`, `aqua`, `blue`, `grey`, `orange`, `pink`, `purple`, `red`, `sand`, `teal` or `desktop`. `lock.own`: Tilde's own delay (`enabled`, `minutes` 1–1440) rather than the desktop's. `desktopLock` is what the desktop says (`source`: `cinnamon`, `gnome` or `default`; `lockAfter` in seconds, 0 never); `desktopTheme` `{source, mode, accent}` likewise, from Cinnamon's GTK and desktop themes or GNOME's colour scheme and accent |
 | PUT | `/api/v1/settings` | A whole `Settings` → the saved settings; `400` for a delay out of range. Every client gets a `settings` event, and the server the new lock delay at once. The desktop's settings are never written |
 | POST | `/api/v1/desktop/layout` | `{positions: {key: {col, row} \| null}, replace?}` → layout. Merges (`null` removes a key) or, with `replace`, starts from nothing. Stored in `~/.config/tilde/desktop-layout.json`; cells up to 1000, at most 5000 icons |
 
@@ -228,6 +228,13 @@ Xpra port (after a handoff `for: "xpra"`), which reaches the socket
 through the worker; only these two endpoints start it. It ends when the
 session does.
 
+### Sound (D79)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/sound` | `{available, outputs: SoundOutput[], apps: SoundApp[]}` from the user's sound server (`pactl -f json`). `SoundOutput`: `{name, description, volume, muted, default}`; `SoundApp`: `{id, name, icon?, volume, muted}`; volumes in percent, the channels' average. `available` is false without a sound server. Asking starts following the server: the events socket then sends `{"type":"sound"}` on changes |
+| POST | `/api/v1/sound` | `{output, volume?, muted?, default?}` or `{app, volume?, muted?}` → `200` the state after. Only outputs and apps the server lists; volume 0 to 150. `404 not_found`, `502 sound_failed` |
+
 ### Notifications (D70)
 
 The worker is the notification server (`org.freedesktop.Notifications`,
@@ -350,6 +357,9 @@ unwatched: ask again.
 
 `{"type":"settings"}` says the user saved System Settings in some
 browser (D72): fetch `/api/v1/settings` again.
+
+`{"type":"sound"}` says the sound server's outputs or streams changed
+(D79), once a client has asked for `/api/v1/sound`: fetch it again.
 
 `{"type":"notifications"}` says programs' notifications changed (D70):
 fetch `/api/v1/notifications` again, and after each snapshot too.

@@ -16,12 +16,12 @@ const frame = `tilde-xpra-${ctx.windowId}`
 const error = ref('')
 
 // Xpra's client options: connect at once, no floating menu (Tilde's menu
-// launches apps), no sound yet (D55), the clipboard on, and take the
+// launches apps), the apps' sound (D79), the clipboard on, and take the
 // session over from a browser that had it.
 const options = new URLSearchParams({
   submit: 'true',
   floating_menu: 'false',
-  sound: 'false',
+  sound: 'true',
   clipboard: 'true',
   printing: 'false',
   file_transfer: 'false',
@@ -60,7 +60,7 @@ onMounted(connect)
       title="Host apps"
       src="about:blank"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
-      allow="clipboard-write; fullscreen"
+      allow="autoplay; clipboard-write; fullscreen"
       referrerpolicy="no-referrer"
     />
   </div>

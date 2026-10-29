@@ -245,6 +245,7 @@ const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
           v-for="a in [
             { key: 'resources', name: 'System monitor', note: 'CPU and memory graphs; a click opens System Monitor.' },
             { key: 'network', name: 'Network', note: 'Shown only where NetworkManager runs.' },
+            { key: 'sound', name: 'Sound', note: 'The host’s volume; shown only where a sound server runs.' },
             {
               key: 'notifications',
               name: 'Notifications',

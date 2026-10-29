@@ -304,16 +304,24 @@ func dialOwn(ctx context.Context, port int) (net.Conn, error) {
 }
 
 // acceptedByUser reports whether the socket at local, connected to remote,
-// is uid's.
+// is uid's. Right after connecting, the far end may not be listed yet:
+// it is looked for a few times.
 func acceptedByUser(local, remote netip.AddrPort, uid int) bool {
 	norm := func(a netip.AddrPort) netip.AddrPort { return netip.AddrPortFrom(a.Addr().Unmap(), a.Port()) }
 	local, remote = norm(local), norm(remote)
-	for _, s := range procSockets() {
-		a, _ := netip.AddrFromSlice(s.ip)
-		if !s.listen && netip.AddrPortFrom(a.Unmap(), uint16(s.port)) == local && s.remote == remote {
-			return s.uid == uid
+	for try := 0; try < 10; try++ {
+		for _, s := range procSockets() {
+			a, _ := netip.AddrFromSlice(s.ip)
+			if !s.listen && netip.AddrPortFrom(a.Unmap(), uint16(s.port)) == local && s.remote == remote {
+				if s.uid != uid {
+					slog.Info("worker: the app's end of the connection is another user's", "local", local, "uid", s.uid)
+				}
+				return s.uid == uid
+			}
 		}
+		time.Sleep(20 * time.Millisecond)
 	}
+	slog.Info("worker: the app's end of the connection is not listed", "local", local, "remote", remote)
 	return false
 }
 

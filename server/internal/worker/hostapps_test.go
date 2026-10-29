@@ -102,6 +102,7 @@ start)
   for a; do case "$a" in --bind=*) sock="${a#--bind=}"; sock="${sock%%,*}";; esac; done
   echo 7 >&3
   exec 3>&-
+  mkdir -p "$XDG_RUNTIME_DIR/xpra/7/pulse" && touch "$XDG_RUNTIME_DIR/xpra/7/pulse/native"
   exec python3 -c 'import socket,sys
 s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(8)
 while True:
@@ -129,7 +130,7 @@ func TestHostAppsLaunch(t *testing.T) {
 	t.Setenv("XDG_DATA_DIRS", t.TempDir())
 	out := filepath.Join(t.TempDir(), "ran")
 	app := filepath.Join(t.TempDir(), "my app")
-	os.WriteFile(app, []byte("#!/bin/sh\necho \"$DISPLAY $*\" >> '"+out+"'\n"), 0o755)
+	os.WriteFile(app, []byte("#!/bin/sh\necho \"$DISPLAY ${PULSE_SERVER##*/xpra/} $*\" >> '"+out+"'\n"), 0o755)
 	writeDesktop(t, data, "eyes.desktop", "Type=Application\nName=Eyes\nExec=\""+app+"\" -geometry \"1x1 two\" %U\nCategories=Utility;")
 
 	w := driveWorker(t, nil)
@@ -171,7 +172,7 @@ func TestHostAppsLaunch(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if string(ran) != ":7 -geometry 1x1 two\n:7 -geometry 1x1 two\n" {
+	if string(ran) != ":7 7/pulse/native -geometry 1x1 two\n:7 7/pulse/native -geometry 1x1 two\n" {
 		t.Fatalf("the app ran as %q", ran)
 	}
 	b, _ := os.ReadFile(log)

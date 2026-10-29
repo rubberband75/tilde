@@ -170,6 +170,10 @@ bug in Tilde can never give more than the account already has.
   xpra.org's package enables a system proxy listening on TCP 14500 on
   every address; Tilde does not use it: turn it off (`sudo systemctl
   disable --now xpra-server.socket`).
+- Sound (D79): the worker runs `pactl` as the user, with only output
+  names and stream ids the sound server has just listed, as arguments of
+  their own. Host apps play to the Xpra session's own sound server, sent
+  to the browser; Xpra's microphone is off.
 - Notifications (D70): any program the user runs may send one, and every
   browser of the user shows it, so the worker bounds them (50 kept, 512
   bytes of summary, 4 KiB of body, 8 buttons, pictures up to 512×512) and

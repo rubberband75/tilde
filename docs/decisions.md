@@ -1232,6 +1232,24 @@ which Tilde does not use and the docs say to turn off. Rejected for now:
 going straight to stage 2 (weeks before anything shows), Broadway (GTK
 apps only).
 
+**D79 — Sound: the host's through pactl, host apps' through Xpra** (2026-10-29, accepted; carries out D55)
+The panel gets Cinnamon's sound applet: the default output's volume and
+mute, the outputs to choose from, and the apps playing, each with its
+own slider; scrolling over it changes the volume. The worker talks to
+the user's sound server's PulseAudio interface with `pactl` (`-f json`),
+which PipeWire (pipewire-pulse) and PulseAudio both answer, as the user;
+only names and ids the server has just listed are passed on, as
+arguments of their own, and volumes go up to 150%. `pactl subscribe`
+tells every browser of changes made anywhere. Without a sound server
+(a headless server) the applet is hidden. Host apps in Xpra (D78) play
+to a sound server of the session's own, which Xpra starts and sends to
+the browser (Opus), so their sound plays where the user is, not on the
+host's speakers; no microphone yet. That needs PulseAudio's
+`pulseaudio` program, which xpra.org's packages bring; without it host
+apps are silent. Rejected: `wpctl` (no machine-readable output), the
+host's own sound server for host apps (their sound would play at the
+machine).
+
 ---
 
 ## Open decisions

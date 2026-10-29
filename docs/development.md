@@ -38,6 +38,8 @@ Used when present, with a fallback otherwise:
 | `~/.config/user-dirs.dirs` (xdg-user-dirs) | Documents, Downloads, Music and the other places in Files | Home and `~/Desktop` only |
 | freedesktop thumbnailers | thumbnails of other types | PNG, JPEG and GIF only, with the built-in scaler |
 | `journalctl` | a service's log lines | an error in their place |
+| PipeWire (pipewire-pulse) or PulseAudio, and `pactl` (pulseaudio-utils) | the sound applet (D79) | the applet is hidden |
+| PulseAudio's `pulseaudio` (xpra.org's packages bring it) | host apps' sound in the browser (D79) | host apps are silent |
 | Xpra 6 and xpra-html5, from [xpra.org](https://xpra.org)'s repositories | host apps in the menu, in the Host Apps window (D78); its package also enables a system proxy on TCP 14500 that Tilde does not use: `sudo systemctl disable --now xpra-server.socket` | no host apps in the menu |
 
 Not needed: a desktop at the machine, Cinnamon, Mint, X or Wayland. The

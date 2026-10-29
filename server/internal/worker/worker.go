@@ -60,6 +60,7 @@ type Worker struct {
 	polkit          *polkitAgent
 	notifications   *notificationService
 	xpra            *xpraSession
+	sound           *soundService
 	auditQ          *auditQueue
 }
 
@@ -121,6 +122,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		polkit:          newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
 		notifications:   newNotificationService(func() { events.publish(event{Type: "notifications"}) }),
 		xpra:            newXpraSession(),
+		sound:           newSoundService(func() { events.publish(event{Type: "sound"}) }),
 		auditQ:          newAuditQueue(),
 	}
 	w.terms.exited = func(id string) { w.audit(nil, protocol.AuditEvent{Event: "terminal_close", Terminal: id}) }
@@ -171,6 +173,8 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/sound", w.handleSound)
+	m.HandleFunc("POST /api/v1/sound", w.handleSoundSet)
 	m.HandleFunc("GET /api/v1/apps", w.handleApps)
 	m.HandleFunc("GET /api/v1/host-apps", w.handleHostApps)
 	m.HandleFunc("POST /api/v1/host-apps/launch", w.handleHostAppLaunch)
@@ -276,6 +280,7 @@ func (w *Worker) Shutdown() {
 	w.polkit.close()
 	w.notifications.close()
 	w.xpra.stop()
+	w.sound.close()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 	select {
