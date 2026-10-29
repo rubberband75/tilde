@@ -17,6 +17,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Whose desktop this tab is (D76). Requests say so, and the server refuses
+ * one whose cookie is another user's: a page that swapped Tilde's cookie
+ * for another session's (cookies are per host, so a local web app's page
+ * could try) gets nothing through, and the tab goes back to the login.
+ */
+let sessionUser = ''
+
+export function setSessionUser(user: string) {
+  sessionUser = user
+}
+
+/** The header that says whose desktop this is, once logged in. */
+export function userHeaders(): Record<string, string> {
+  return sessionUser ? { 'X-Tilde-User': sessionUser } : {}
+}
+
 type ExpiredListener = (code: string) => void
 const expiredListeners = new Set<ExpiredListener>()
 
@@ -60,7 +77,7 @@ export function buildUrl(path: string, query?: Query): string {
 }
 
 export async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  const headers: Record<string, string> = { Accept: 'application/json', ...userHeaders() }
   let body: BodyInit | undefined
   if (opts.json !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -83,7 +100,11 @@ export async function handleResponse<T>(res: Response, path: string): Promise<T>
   if (!res.ok) {
     const err = (isJSON ? data : {}) as { error?: string; code?: string }
     const code = err.code ?? 'error'
-    if (res.status === 401 && path.startsWith('/api/v1/') && (code === 'session_ended' || code === 'not_logged_in')) {
+    if (
+      res.status === 401 &&
+      path.startsWith('/api/v1/') &&
+      (code === 'session_ended' || code === 'not_logged_in' || code === 'session_changed')
+    ) {
       reportExpired(code)
     }
     if (res.status === 423 && code === 'locked') lockedListeners.forEach((fn) => fn())
@@ -102,5 +123,7 @@ export const api = {
 /** Absolute ws:// or wss:// URL for a same-origin path. */
 export function wsUrl(path: string): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}${path}`
+  // A WebSocket cannot carry headers: the user goes in the query.
+  const user = sessionUser ? `${path.includes('?') ? '&' : '?'}tilde-user=${encodeURIComponent(sessionUser)}` : ''
+  return `${proto}//${location.host}${path}${user}`
 }

@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -91,6 +92,10 @@ func serve(args []string) int {
 	stateDir := fs.String("state-dir", "/var/lib/tilde", "directory for server state (TLS certificate)")
 	origins := fs.String("allowed-origins", "", "comma-separated extra origins to accept, e.g. https://tilde.example.com")
 	trustProxy := fs.Bool("trust-proxy", false, "trust X-Forwarded-For (only behind your own reverse proxy)")
+	appsListen := fs.String("apps-listen", "",
+		`where local web apps are served, a second origin (default: the port after --listen's; "off" for none)`)
+	appsOrigin := fs.String("apps-origin", "",
+		"the app port's address as browsers reach it, behind a reverse proxy (e.g. https://apps.example.com)")
 	lifetime := fs.Duration("session-lifetime", 12*time.Hour,
 		"how long a login lasts, however active, before logging in again (e.g. 8h; 10m to 168h)")
 	debug := fs.Bool("debug", false, "verbose logging")
@@ -108,6 +113,22 @@ func serve(args []string) int {
 			extra = append(extra, o)
 		}
 	}
+	if o := *appsOrigin; o != "" {
+		if u, err := url.Parse(o); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
+			(u.Path != "" && u.Path != "/") || u.RawQuery != "" {
+			slog.Error("tilde serve: --apps-origin must be like https://apps.example.com", "got", o)
+			return 2
+		}
+		*appsOrigin = strings.TrimSuffix(o, "/")
+		// Never Tilde's own origin (rule 8): apps would run as Tilde.
+		au, _ := url.Parse(*appsOrigin)
+		for _, x := range extra {
+			if xu, err := url.Parse(x); err == nil && strings.EqualFold(xu.Host, au.Host) {
+				slog.Error("tilde serve: --apps-origin must be another origin than Tilde's own", "got", o)
+				return 2
+			}
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	err := server.Run(ctx, server.Config{
@@ -119,6 +140,8 @@ func serve(args []string) int {
 		AllowedOrigins: extra,
 		TrustProxy:     *trustProxy,
 		SessionMaxAge:  *lifetime,
+		AppsListen:     *appsListen,
+		AppsOrigin:     *appsOrigin,
 		Web:            webui.FS(),
 	})
 	if err != nil {

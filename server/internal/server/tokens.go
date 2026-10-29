@@ -167,7 +167,11 @@ func (s *TokenStore) get(tok string, now time.Time) (*tokenInfo, string, bool) {
 	if tok == "" {
 		return nil, "", false
 	}
-	h := hashToken(tok)
+	return s.getHash(hashToken(tok), now)
+}
+
+// getHash is get by the token's hash. s.mu must be held.
+func (s *TokenStore) getHash(h string, now time.Time) (*tokenInfo, string, bool) {
 	ti, ok := s.m[h]
 	if !ok {
 		return nil, "", false
@@ -219,6 +223,30 @@ func (s *TokenStore) Lookup(tok string) (Token, bool) {
 	}
 	ti.lastSeen = now
 	return ti.view(), true
+}
+
+// LookupHash is Lookup by the token's hash, for what holds a token's hash
+// rather than the token (the app port's cookies, D76).
+func (s *TokenStore) LookupHash(h string) (Token, bool) {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ti, _, ok := s.getHash(h, now)
+	if !ok {
+		return Token{}, false
+	}
+	ti.lastSeen = now
+	return ti.view(), true
+}
+
+// ValidHash reports whether a token with this hash is live, without
+// counting as a use.
+func (s *TokenStore) ValidHash(h string) bool {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _, ok := s.getHash(h, now)
+	return ok
 }
 
 // Touch records keyboard or pointer input from the token's client. Input

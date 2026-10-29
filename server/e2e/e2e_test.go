@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -796,6 +797,55 @@ func TestRecentLoginsIgnoreForgeries(t *testing.T) {
 		if strings.Contains(r.Text, "forged") {
 			t.Fatalf("a forged record is listed: %+v", r)
 		}
+	}
+}
+
+// TestAppPort: Tilde's app port (D76) lets in only a browser the desktop
+// handed off to, and reaches only that user's own ports: one another
+// account listens on (this test's, which does not run as the test user)
+// is not reachable through it.
+func TestAppPort(t *testing.T) {
+	e := setup(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "another account's secret")
+	}))
+	port := ln.Addr().(*net.TCPAddr).Port
+	mainPort, _ := strconv.Atoi(e.base.Port())
+	apps := e.base.Scheme + "://" + net.JoinHostPort(e.base.Hostname(), strconv.Itoa(mainPort+1))
+	page := fmt.Sprintf("/proxy/%d/", port)
+
+	resp, err := e.client.Get(apps + page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without a handoff: %d", resp.StatusCode)
+	}
+
+	var h struct{ Code, Origin string }
+	decode(t, e.do(t, http.MethodPost, "/api/auth/apps/handoff", map[string]any{}), http.StatusOK, &h)
+	if h.Origin != apps {
+		t.Fatalf("apps origin %q, want %q", h.Origin, apps)
+	}
+	form := url.Values{"code": {h.Code}, "next": {page}}
+	req, _ := http.NewRequest(http.MethodPost, apps+"/_tilde/enter", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", e.base.Scheme+"://"+e.base.Host)
+	// The redirect goes on to the app with the app cookie.
+	resp, err = e.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway || strings.Contains(string(body), "secret") {
+		t.Fatalf("another account's port: %d %s", resp.StatusCode, body)
 	}
 }
 

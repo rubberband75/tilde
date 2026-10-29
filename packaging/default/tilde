@@ -8,6 +8,13 @@
 # Use your own certificate instead of the self-signed one:
 #   TILDE_OPTS="--listen 0.0.0.0:8443 --tls-cert /etc/tilde/cert.pem --tls-key /etc/tilde/key.pem"
 #
+# Local web apps (Jupyter, code-server) open from the port after --listen's
+# (8444 here), another origin; open both in a firewall. To move or turn it off:
+#   TILDE_OPTS="--listen 127.0.0.1:8443 --apps-listen 127.0.0.1:9000"
+#   TILDE_OPTS="--listen 127.0.0.1:8443 --apps-listen off"
+# Behind a reverse proxy, give the address browsers reach it at:
+#   --apps-origin https://apps.example.com
+#
 # A login lasts 12 hours, however active, then asks for the password again
 # (idle browsers lock sooner, as each user sets). To change it:
 #   TILDE_OPTS="--listen 127.0.0.1:8443 --session-lifetime 8h"

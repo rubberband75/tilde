@@ -28,7 +28,8 @@
 # Environment: TILDE_VM_DIR (default ~/.cache/tilde-e2e-vm),
 # TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048),
 # TILDE_VM_UI_PORT (default 9443, for "tunnel"), TILDE_VM_UI_TEST_PORT
-# (default 9444, the UI suite's own tunnel).
+# (default 9445, the UI suite's own tunnel). Each tunnel also forwards the
+# port after it to Tilde's app port (D76).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +37,7 @@ DIR="${TILDE_VM_DIR:-$HOME/.cache/tilde-e2e-vm}"
 PORT="${TILDE_VM_SSH_PORT:-2522}"
 MEM="${TILDE_VM_MEM:-2048}"
 UI_PORT="${TILDE_VM_UI_PORT:-9443}"
-UI_TEST_PORT="${TILDE_VM_UI_TEST_PORT:-9444}"
+UI_TEST_PORT="${TILDE_VM_UI_TEST_PORT:-9445}"
 
 IMAGE_URL="https://cloud-images.ubuntu.com/noble/current"
 IMAGE_NAME="noble-server-cloudimg-amd64.img"
@@ -458,7 +459,8 @@ run_ui_tests() {
   reset_wifi
   reset_services
 
-  vm_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
+  # The app port too (D76): browsers find it one port up.
+  vm_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_TEST_PORT + 1)):127.0.0.1:8444" &
   local tunnel=$!
   # shellcheck disable=SC2064 # expand now: the pid is local
   trap "kill $tunnel 2>/dev/null" EXIT
@@ -512,7 +514,7 @@ case "$cmd" in
   tunnel)
     running || die "the VM is not running; start it with: $0 up"
     log "Tilde in the VM: https://localhost:$UI_PORT (user $TEST_USER, password $TEST_PASS)"
-    vm_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443"
+    vm_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_PORT + 1)):127.0.0.1:8444"
     ;;
   down) down ;;
   reset) down; rm -f "$DISK" "$SEED" "$PIDFILE"; log "VM disk deleted; the next run starts fresh" ;;

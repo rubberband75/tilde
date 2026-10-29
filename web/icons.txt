@@ -67,3 +67,5 @@ dialog-password
 dialog-information
 dialog-warning
 preferences-system-notifications
+applications-internet
+internet-web-browser

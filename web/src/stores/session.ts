@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { api, ApiError, onLocked, onSessionExpired } from '@/api/client'
+import { ref, watch } from 'vue'
+import { api, ApiError, onLocked, onSessionExpired, setSessionUser } from '@/api/client'
 import type { AuthPrompt, AuthStep, SessionInfo } from '@/api/types'
 
 export const useSession = defineStore('session', () => {
@@ -16,6 +16,9 @@ export const useSession = defineStore('session', () => {
    * PAM's question waiting for an answer during a login or unlock, such
    * as a verification code (D43); the login and lock screens ask it.
    */
+  // Requests say whose desktop this is (D76).
+  watch(info, (s) => setSessionUser(s?.user ?? ''), { immediate: true })
+
   const prompt = ref<AuthPrompt | null>(null)
 
   function show(s: SessionInfo) {

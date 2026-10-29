@@ -61,6 +61,9 @@ type UserSession struct {
 	hint          chan struct{}
 	// audit writes the worker's audit events under this user (D46).
 	audit *auditLog
+	// apps is the connection pool to the user's local web apps (D76).
+	appsMu sync.Mutex
+	apps   *http.Transport
 }
 
 // Done is closed when the session has ended.

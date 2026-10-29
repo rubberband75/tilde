@@ -169,6 +169,7 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/mount", w.handleMount)
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
+	m.HandleFunc("GET /api/v1/apps", w.handleApps)
 	m.HandleFunc("GET /api/v1/notifications", w.handleNotifications)
 	m.HandleFunc("GET /api/v1/notifications/image", w.handleNotificationImage)
 	m.HandleFunc("POST /api/v1/notifications/action", w.handleNotificationAction)
@@ -240,6 +241,7 @@ func (w *Worker) Handler() http.Handler {
 	// For the server only (protocol.InternalHeader), never proxied.
 	m.HandleFunc("GET /internal/session", w.handleSession)
 	m.HandleFunc("PUT /internal/session/locked", w.handleSessionLocked)
+	m.HandleFunc("GET /internal/dial", w.handleDial)
 
 	m.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})

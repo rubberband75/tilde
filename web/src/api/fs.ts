@@ -1,4 +1,4 @@
-import { api, ApiError, buildUrl, handleResponse, request } from './client'
+import { api, ApiError, buildUrl, handleResponse, request, userHeaders } from './client'
 import type {
   Background,
   BackgroundCollection,
@@ -88,6 +88,7 @@ export const fsApi = {
       const xhr = new XMLHttpRequest()
       xhr.open('PUT', url)
       xhr.withCredentials = true
+      for (const [k, v] of Object.entries(userHeaders())) xhr.setRequestHeader(k, v)
       xhr.upload.onprogress = (e) => onProgress?.(e.loaded, e.total)
       xhr.onerror = () => reject(new ApiError(0, 'network', 'Network error during upload'))
       xhr.onload = () => {
@@ -137,7 +138,11 @@ type StreamLine =
  * A non-2xx response throws the API error.
  */
 async function readNdjson<T>(url: string, onLine: (msg: T) => boolean | void, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(url, { credentials: 'same-origin', signal, headers: { Accept: 'application/x-ndjson' } })
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    signal,
+    headers: { Accept: 'application/x-ndjson', ...userHeaders() },
+  })
   if (!res.ok || !res.body) {
     await handleResponse(res, url.split('?')[0]!)
     throw new ApiError(res.status, 'error', res.statusText)

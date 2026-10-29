@@ -14,20 +14,21 @@
 #   ui       rerun only the UI subset against what is installed (args go to
 #            "playwright test")
 #   logs     show the tilde service log on the Pi
-#   tunnel   forward https://localhost:9445 to Tilde on the Pi (Ctrl+C stops)
+#   tunnel   forward https://localhost:9447 to Tilde on the Pi (Ctrl+C stops)
 #
 # Needs: ssh to the Pi with a key, a user there with passwordless sudo
 # (Raspberry Pi OS's first user has it), internet on the Pi the first time
 # (Go and build packages), 64-bit Raspberry Pi OS. Go (the version this
 # machine has) is kept in ~/tilde-e2e on the Pi, not installed system-wide.
-# Environment: TILDE_PI_UI_PORT (default 9445), TILDE_PI_UI_TEST_PORT
-# (default 9446, the UI subset's own tunnel).
+# Environment: TILDE_PI_UI_PORT (default 9447), TILDE_PI_UI_TEST_PORT
+# (default 9449, the UI subset's own tunnel). Each tunnel also forwards the
+# port after it to Tilde's app port (D76).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${TILDE_PI_DIR:-$HOME/.cache/tilde-e2e-pi}"
-UI_PORT="${TILDE_PI_UI_PORT:-9445}"
-UI_TEST_PORT="${TILDE_PI_UI_TEST_PORT:-9446}"
+UI_PORT="${TILDE_PI_UI_PORT:-9447}"
+UI_TEST_PORT="${TILDE_PI_UI_TEST_PORT:-9449}"
 NFPM=github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
 
 # The throwaway account the tests log in as. Not in sudo.
@@ -166,7 +167,8 @@ run_ui_tests() {
     die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
   restart_tilde
 
-  pi_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
+  # The app port too (D76): browsers find it one port up.
+  pi_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_TEST_PORT + 1)):127.0.0.1:8444" &
   local tunnel=$!
   # shellcheck disable=SC2064 # expand now: the pid is local
   trap "kill $tunnel 2>/dev/null" EXIT
@@ -212,7 +214,7 @@ case "$cmd" in
   logs) pi_ssh sudo journalctl -u tilde --no-pager -n 200 ;;
   tunnel)
     log "Tilde on the Pi: https://localhost:$UI_PORT (user $TEST_USER, password $TEST_PASS)"
-    pi_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443"
+    pi_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_PORT + 1)):127.0.0.1:8444"
     ;;
   *) die "unknown command '$cmd' (test, ui, logs, tunnel)" ;;
 esac

@@ -29,12 +29,14 @@ Bundled font ("Ubuntu derivative Tilde"): Ubuntu Font Licence 1.0.
 ```
 server/                 Go module "tilde" (one binary, three roles)
   cmd/tilde/            main: serve | session-helper | worker
-  internal/server/      root server: TLS, login, tokens, lock screen, origin checks, proxy
+  internal/server/      root server: TLS, login, tokens, lock screen, origin checks, proxy,
+                        the app port for local web apps
   internal/helper/      per-login root helper: PAM auth + session, starts worker
   internal/worker/      per-user API: fs, jobs, events + inotify, search, thumbnails,
                         bookmarks, trash, places, drives (udisks), terminals,
                         idle lock settings, logind, polkit agent, audit events,
-                        text files and editor drafts, settings, notifications
+                        text files and editor drafts, settings, notifications,
+                        local web apps (listening ports, the server's dial)
   internal/pamauth/     PAM via cgo (pam_linux.go) or a stub (nopam builds)
   internal/pty/         PTYs with ring-buffer replay (internal/ringbuf)
   internal/protocol/    pipe handshake messages
@@ -49,7 +51,8 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/wm/               window manager (frame, layer, edge tiling in snap.ts)
   src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
                         editor/, chooser/ (ctx.chooseFile), image-viewer/,
-                        media-player/, properties/, system-info/, backgrounds/
+                        media-player/, properties/, system-info/, backgrounds/,
+                        settings/, web-apps/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus,
                         folderSiblings (a file's folder, for viewers)
   src/styles/           base.css + themes/mint-y-dark.css (design tokens)

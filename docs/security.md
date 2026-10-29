@@ -110,6 +110,50 @@ bug in Tilde can never give more than the account already has.
   manager lists. Stopping `tilde.service` asks first. A service's journal
   is read by `journalctl` as the user, the name passed as its own
   argument, so journald's own access rules apply (D62).
+- Local web apps (D66, D76) never run on Tilde's origin (rule 8): they
+  are served from the app port, another origin of the same host. Because
+  cookies are per host, not per port, and SameSite counts every port of a
+  host as one site:
+  - The main port turns away `/api/` requests whose `Sec-Fetch-Site` is
+    `same-site` or `cross-site` (an app's page using the API with the
+    user's cookie, by GET, a form or `fetch`), on top of the Origin check
+    for state-changing requests and WebSockets.
+  - Each tab says whose desktop it is (`X-Tilde-User`, or `tilde-user` on
+    a WebSocket), and `/api/v1/` refuses a request whose cookie is another
+    user's (`401 session_changed`): a page that evicted Tilde's cookie and
+    set another account's session in its place gets no files or
+    keystrokes. The app port also drops apps' `Clear-Site-Data` and
+    `Set-Cookie` for Tilde's names.
+  - The app port has a cookie of its own, set from a one-time code (stored
+    by hash, a minute, at most 8 waiting per browser) that the desktop
+    posts in a form, never in a URL. The form must carry Tilde's cookie
+    for the token the code was given to (the app port is on Tilde's host,
+    so the browser sends it), and come from the desktop's origin; with
+    Tilde's `no-referrer` policy browsers send `Origin: null`, which is
+    taken only with `Sec-Fetch-Site: same-site`. Behind a reverse proxy
+    with the app port on another host name (`--apps-origin`), Tilde's
+    cookie is not sent, and a page on a sibling host name could post a
+    code of its own account's into another browser. The app cookie lives
+    no longer than the desktop's token; a locked browser gets `423`.
+  - The app port turns away other sites' requests, and this site's other
+    pages doing more than navigating to an app.
+  - The app's frame is sandboxed but for navigating the Tilde tab (a fake
+    lock screen there would ask for the password), and may write the
+    clipboard, not read it. Apps cannot widen a service worker to the
+    whole app port (`Service-Worker-Allowed` is dropped), and when another
+    user opens apps in the same browser, the app port's storage and cache
+    are cleared.
+  - The root server never connects to an app: the worker dials, as the
+    user, only a port one of the user's own sockets listens on (by uid,
+    from `/proc/net/tcp`), at that socket's own address (127.0.0.1 only
+    for one listening on every address), and checks after connecting that
+    the far end is the user's, so Tilde reaches none of another user's
+    apps.
+  - All of one user's apps share the app port's origin, so one app's pages
+    can reach the user's other apps through it, with their cookies: a
+    development server serving a compromised script could drive the
+    user's code-server. Keep apps that matter behind their own login, and
+    open untrusted ones elsewhere.
 - Notifications (D70): any program the user runs may send one, and every
   browser of the user shows it, so the worker bounds them (50 kept, 512
   bytes of summary, 4 KiB of body, 8 buttons, pictures up to 512×512) and
@@ -181,7 +225,7 @@ bug in Tilde can never give more than the account already has.
 6. Origin checks on every state-changing request and WebSocket upgrade.
 7. Never store passwords in the browser.
 8. Files from disk never run script on Tilde's origin; local web apps get a
-   separate origin.
+   separate origin (the app port, D76).
 9. No systemd sandboxing options on the unit (user processes inherit them).
 10. Root login stays disabled.
 11. `script-src` stays `'self'`.
@@ -214,6 +258,8 @@ works the same way (the e2e VM tests with it).
 
 - Keep the default localhost binding and reach Tilde over Tailscale or
   WireGuard (`--listen <vpn-address>:8443`). This removes most of the risk.
+- Local web apps use a second port, by default the one after `--listen`'s:
+  forward or open both, or turn it off with `--apps-listen off`.
 - If it must face a LAN, use your own certificate (`--tls-cert`,
   `--tls-key`) and enable `pam_faillock` in `common-auth`.
 - Do not put it on the public internet without two-factor (above), and even

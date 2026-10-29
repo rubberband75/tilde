@@ -45,6 +45,11 @@ could already do.
   token gets `423`; locking ends the requests made with it (D40).
 - Keeps browser tokens in memory (`tokens.go`) and rate-limits failed logins
   per address (`ratelimit.go`). Per-account lockout is pam_faillock's job.
+- Serves local web apps (`apps.go`, D76) from a second port, by default
+  the next one: `/_tilde/enter` takes a one-time code the desktop got from
+  `/api/auth/apps/handoff` and sets the app port's own cookie;
+  `/proxy/<port>/` and `/absproxy/<port>/` pass requests to the user's app
+  through the worker (`/internal/dial`), never connecting to it itself.
 - Must run as root (to start helpers), except in `--dev` single-user mode.
 
 ### `tilde session-helper` (root, one per login)
@@ -100,6 +105,10 @@ could already do.
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is
   `web/src/shell/NetworkApplet.vue`.
+- Lists the user's listening TCP ports for Web Apps (`apps.go`, D76) and
+  connects the server to one of them on request (`/internal/dial`, an
+  upgraded request that then carries the app's bytes): only ports a
+  socket of the user's own listens on.
 - Is the user's notification server while no other program is
   (`notifications.go`, D70): it waits in the session bus's queue for
   `org.freedesktop.Notifications`, keeps the last 50 in memory, and

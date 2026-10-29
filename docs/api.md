@@ -34,6 +34,7 @@ them in sync.
 | GET | `/api/auth/clients` | — | `200 {clients: ClientInfo[]}`: the user's signed-in browsers (D47), this one first, then the most recently seen. `ClientInfo`: `{id, address, agent, since, lastSeen, lastInput, locked, connected, current}`; `address` and `agent` (its `User-Agent`) are from its login or last unlock; `connected`: a tab has the events socket open. `423 locked` from a locked browser |
 | POST | `/api/auth/clients/signout` | `{id}` | `204`: signs that browser out (its requests and sockets end). `400` for this browser (log out instead), `404 not_found`, `423 locked` |
 | GET | `/api/auth/logins` | — | `200 {available, entries: LoginRecord[]}`: this account's last 50 logins and failed attempts (logins, failed logins and unlocks, the rate limit), newest first, read by the server from the audit log (D46, D72). `LoginRecord`: `{time, event, rhost, text, failed}`; `time` in ms, `text` the audit message without the user's name. `available` is false when the journal cannot be read. `423 locked` from a locked browser |
+| POST | `/api/auth/apps/handoff` | — | `200 {code, origin}`: a one-time code for the app port (D76), and that port's origin. Post the code in a form (`code`, `next`) to `<origin>/_tilde/enter`; it lasts a minute. `404 apps_off` when local web apps are off, `423 locked`, `429 busy` with too many waiting |
 | POST | `/api/auth/unlock` | `{password}` | `200 SessionInfo` and a new session cookie (the old one stops working); only this browser unlocks. `401 auth_failed`, `403 account_expired` / `password_expired`, `429 rate_limited` (shared with login: 5 attempts per address in 15 minutes), `401 too_many_attempts` after 5 tries on this cookie, which is then signed out |
 
 `SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login
@@ -182,6 +183,29 @@ first answer ends it. Unanswered requests are cancelled after 5 minutes.
 | GET | `/api/v1/polkit` | `{agent, requests: PolkitRequest[]}`, oldest first. `agent`: registered with polkit. `PolkitRequest`: `{id, action, message, icon?, identities, prompt?}`. `identities` are the users whose password polkit accepts, the user first when listed; `prompt` (`{text, echo, info?}`, as at login) is a question PAM asked after the password, waiting for its answer |
 | POST | `/api/v1/polkit/respond` | `{id, identity?, answer}`. With no `prompt` waiting, `answer` is the password of `identity` (default: the first). `204` authorized (the request ends), `200 {prompt}` another question, `401 auth_failed` wrong (the request stays open; `error` carries PAM's message if it gave one), `404 not_found` the request ended, `409 busy` an answer is being checked. Answers: at most 511 bytes, no line breaks |
 | POST | `/api/v1/polkit/cancel` | `{id}` → `204`; the program that asked is told it was dismissed. `404` if it already ended |
+
+### Local web apps (D76)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/apps` | `{apps: LocalApp[]}`, by port: the TCP ports the user's own programs listen on (`/proc/net/tcp`, `tcp6`). `LocalApp`: `{port, address, process?, pid?, http, title?}`; `http`: it answered `GET /` within a second, `title` its page's `<title>` |
+
+The app port (`--apps-listen`, by default the port after `--listen`'s;
+browsers reach it on the port as far from the one they reached Tilde at,
+or at `--apps-origin`) serves:
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/_tilde/enter` | Form `code`, `next`. The code from `/api/auth/apps/handoff`, once, from the origin that asked for it (or, as Tilde sends no Referer, `Origin: null` with `Sec-Fetch-Site: same-site`); `next` is `/proxy/<port>/…` or `/absproxy/<port>/…`. Sets the app cookie (`__Host-tilde-app`, `HttpOnly`, `SameSite=Strict`) and redirects (`303`) to `next`. `401` expired or spent, `403` from another origin, `423` locked |
+| any | `/proxy/<port>/…` | The user's app on `<port>`, the prefix taken off (apps with relative links, such as code-server). `X-Forwarded-Prefix` names it |
+| any | `/absproxy/<port>/…` | The same, the path kept (apps told their base path, such as Jupyter with `--ServerApp.base_url=/absproxy/<port>/`) |
+
+Requests reach the app with the browser's `Host`, `X-Forwarded-*`, and its
+cookies but Tilde's. Its responses cannot set Tilde's cookies, and may be
+framed by the desktop that opened them only (`frame-ancestors`; the app's
+own `X-Frame-Options` and `frame-ancestors` are dropped). WebSockets pass.
+Without a valid app cookie: `401`; locked: `423`; nothing of the user's
+on the port: `502`; each a small page.
 
 ### Notifications (D70)
 

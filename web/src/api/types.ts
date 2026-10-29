@@ -520,3 +520,15 @@ export interface NotificationsState {
   /** Newest first. */
   notifications: Notification[]
 }
+
+/** A TCP port one of the user's programs listens on (D76): GET /api/v1/apps. */
+export interface LocalApp {
+  port: number
+  /** 127.0.0.1, ::1, 0.0.0.0, :: or another address. */
+  address: string
+  process?: string
+  pid?: number
+  /** It answered an HTTP request; `title` is its page's. */
+  http: boolean
+  title?: string
+}

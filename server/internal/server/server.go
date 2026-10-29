@@ -45,6 +45,13 @@ type Config struct {
 	// TrustProxy uses X-Forwarded-For for rate limiting. Only enable it
 	// behind a reverse proxy you control.
 	TrustProxy bool
+	// AppsListen is where local web apps are served (D66, D76): "" for
+	// the port after Listen's, "off" for none.
+	AppsListen string
+	// AppsOrigin is the app port's address as browsers reach it, behind a
+	// reverse proxy; by default the host they reach Tilde at, on the port
+	// as far from theirs as AppsListen's is from Listen's.
+	AppsOrigin string
 	// SessionMaxAge is the absolute token lifetime: --session-lifetime,
 	// 12 hours by default (D16, D69).
 	SessionMaxAge time.Duration
@@ -71,6 +78,13 @@ type Server struct {
 	audit     *auditLog
 	anonMu    sync.Mutex
 	anonymous auditBudget
+	// apps holds the app port's handoffs and cookies (D76); nil when local
+	// web apps are off. appsOffset is the app port minus the main one.
+	apps       *appAuth
+	appsOffset int
+	// dialApp connects to a user's app through their worker; tests
+	// replace it.
+	dialApp func(ctx context.Context, us *UserSession, port int) (net.Conn, error)
 }
 
 // New creates a Server.
@@ -100,6 +114,14 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.verify = func(ctx context.Context, user, password, addr string) (check, error) {
 		return asCheck(s.sessions.Verify(ctx, user, password, addr))
+	}
+	s.dialApp = dialWorkerApp
+	if cfg.AppsListen != "off" {
+		addr, offset, err := appsAddress(cfg.Listen, cfg.AppsListen)
+		if err != nil {
+			return nil, err
+		}
+		s.cfg.AppsListen, s.appsOffset, s.apps = addr, offset, newAppAuth()
 	}
 	s.pending.m = map[string]*pending{}
 	s.audit = &auditLog{}
@@ -154,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /api/auth/clients", s.handleClients)
 	m.HandleFunc("GET /api/auth/logins", s.handleLogins)
 	m.HandleFunc("POST /api/auth/clients/signout", s.handleClientSignOut)
+	m.HandleFunc("POST /api/auth/apps/handoff", s.handleAppsHandoff)
 	m.HandleFunc("/api/v1/", s.handleWorkerAPI)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiError{Error: "no such endpoint", Code: "not_found"})
@@ -162,7 +185,11 @@ func (s *Server) Handler() http.Handler {
 		m.Handle("/", spaHandler(s.cfg.Web))
 	}
 	hsts := !s.cfg.Dev && s.cfg.TLSCert != ""
-	return securityHeaders(hsts)(originCheck(s.cfg.AllowedOrigins)(m))
+	var apps func(*http.Request) string
+	if s.apps != nil {
+		apps = s.appsOrigin
+	}
+	return securityHeaders(hsts, apps)(originCheck(s.cfg.AllowedOrigins)(fetchMetadataCheck(m)))
 }
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}\$?$`)
@@ -521,6 +548,22 @@ func (s *Server) handleClientSignOut(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// sameUser checks whose desktop the request says it comes from (the
+// X-Tilde-User header, or tilde-user for a WebSocket) against the
+// cookie's user, when it says (D76). Cookies are per host, so a local web
+// app's page could swap Tilde's cookie for another account's session; an
+// open desktop would then send its files and keystrokes there. Requests
+// that do not say, such as images and downloads, are left alone.
+func sameUser(r *http.Request, user string) bool {
+	if u := r.Header.Get("X-Tilde-User"); u != "" && u != user {
+		return false
+	}
+	if u := r.URL.Query().Get("tilde-user"); u != "" && u != user {
+		return false
+	}
+	return true
+}
+
 // handleWorkerAPI authenticates the request and forwards it to the worker.
 // A locked client gets 423 "locked". The request ends when its token is
 // locked or revoked, which closes WebSockets (terminals, events) too.
@@ -532,6 +575,10 @@ func (s *Server) handleWorkerAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if t.Locked {
 		writeLocked(w)
+		return
+	}
+	if !sameUser(r, t.User) {
+		writeJSON(w, http.StatusUnauthorized, apiError{Error: "this browser is now signed in as someone else", Code: "session_changed"})
 		return
 	}
 	ctx, cancel := context.WithCancel(r.Context())
@@ -583,19 +630,54 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	errc := make(chan error, 1)
+	// The app port (D76): the same server and certificate, its own
+	// handler, which serves nothing of Tilde's but its handoff.
+	var appsSrv *http.Server
+	var appsLn net.Listener
+	if s.apps != nil && cfg.Dev {
+		ah, _, _ := net.SplitHostPort(s.cfg.AppsListen)
+		if ip := net.ParseIP(ah); ah != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			ln.Close()
+			return errors.New("--dev serves local web apps over plain HTTP too, so --apps-listen must be a loopback address")
+		}
+	}
+	if s.apps != nil {
+		if appsLn, err = net.Listen("tcp", s.cfg.AppsListen); err != nil {
+			ln.Close()
+			return fmt.Errorf("local web apps (--apps-listen, or off): %w", err)
+		}
+		appsSrv = &http.Server{
+			Handler:           s.appsHandler(),
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			ErrorLog:          srv.ErrorLog,
+		}
+	}
+	errc := make(chan error, 2)
 	if cfg.Dev {
 		slog.Info("listening", "url", "http://"+ln.Addr().String())
 		go func() { errc <- srv.Serve(ln) }()
+		if appsSrv != nil {
+			slog.Info("local web apps", "url", "http://"+appsLn.Addr().String())
+			go func() { errc <- appsSrv.Serve(appsLn) }()
+		}
 	} else {
 		cert, err := loadOrCreateCert(cfg.TLSCert, cfg.TLSKey, cfg.StateDir, host)
 		if err != nil {
 			ln.Close()
+			if appsLn != nil {
+				appsLn.Close()
+			}
 			return fmt.Errorf("TLS certificate: %w", err)
 		}
 		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 		slog.Info("listening", "url", "https://"+ln.Addr().String())
 		go func() { errc <- srv.ServeTLS(ln, "", "") }()
+		if appsSrv != nil {
+			appsSrv.TLSConfig = srv.TLSConfig
+			slog.Info("local web apps", "url", "https://"+appsLn.Addr().String())
+			go func() { errc <- appsSrv.ServeTLS(appsLn, "", "") }()
+		}
 	}
 
 	// Often enough that an idle client loses its WebSockets close to its
@@ -605,6 +687,10 @@ func Run(ctx context.Context, cfg Config) error {
 	for {
 		select {
 		case err := <-errc:
+			if appsSrv != nil {
+				appsSrv.Close()
+			}
+			srv.Close()
 			s.sessions.EndAll()
 			if errors.Is(err, http.ErrServerClosed) {
 				return nil
@@ -612,10 +698,16 @@ func Run(ctx context.Context, cfg Config) error {
 			return err
 		case <-sweep.C:
 			s.tokens.Sweep()
+			if s.apps != nil {
+				s.apps.sweep(s.tokens.now(), s.tokens.ValidHash)
+			}
 		case <-ctx.Done():
 			slog.Info("shutting down")
 			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = srv.Shutdown(shutCtx)
+			if appsSrv != nil {
+				_ = appsSrv.Shutdown(shutCtx)
+			}
 			cancel()
 			s.sessions.EndAll()
 			return nil

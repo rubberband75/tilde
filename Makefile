@@ -73,11 +73,15 @@ dev:
 # Plain HTTP on loopback for the Vite proxy. Without root, Tilde runs in
 # single-user mode: it checks your own password through PAM and starts the
 # worker as you, without opening a logind session.
+# Local web apps on the next port (D76); the page comes from Vite, so the
+# server is told where browsers reach that port.
+DEV_APPS_ORIGIN ?= http://localhost:8444
+
 dev-server: server
-	./$(BIN) serve --dev --listen $(DEV_LISTEN)
+	./$(BIN) serve --dev --listen $(DEV_LISTEN) --apps-origin $(DEV_APPS_ORIGIN)
 
 dev-server-root: server
-	sudo ./$(BIN) serve --dev --listen $(DEV_LISTEN)
+	sudo ./$(BIN) serve --dev --listen $(DEV_LISTEN) --apps-origin $(DEV_APPS_ORIGIN)
 
 dev-web:
 	cd web && npm run dev

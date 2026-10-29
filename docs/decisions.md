@@ -1148,6 +1148,43 @@ notifications applet, a bell with the count and the list, which System
 Settings can hide. Showing a desktop's notifications in Tilde as well is
 still open.
 
+**D76 — Local web apps: the next port, a handoff, the worker dials** (2026-10-28, accepted; carries out D66)
+The app port is the port after `--listen`'s (`--apps-listen` moves it,
+`off` turns it off), on the same address and certificate; browsers are
+sent to the port as far from the one they reached Tilde at, so a tunnel
+that forwards both keeps working, or to `--apps-origin` behind a reverse
+proxy. The desktop gets a one-time code and posts it to the app port in a
+form, which sets the app port's own cookie: the code stays out of URLs
+(rule 6), is bound to the desktop's token (the form carries Tilde's
+cookie, which must be that token's) and origin (as Tilde sends no
+Referer, browsers send `Origin: null` with the form, and Fetch Metadata's
+`same-site` stands in for it), and the cookie dies
+with that token (locking and unlocking replaces it, and the window hands
+off again). The root server never connects to an app (rule 1): it asks
+the worker over the session's pipe, and the worker dials only ports a
+socket of the user's own listens on, so another user's apps stay out of
+reach. Paths are code-server's: `/proxy/<port>/` takes the prefix off,
+for apps with relative links; `/absproxy/<port>/` keeps it, for apps told
+their base path. The proxy keeps the browser's Host (Jupyter and
+code-server compare WebSocket origins with it) and lets only the opening
+desktop frame the app. Since every port of a host is one site to
+browsers, the main port also turns away `/api/` requests that Fetch
+Metadata marks as same-site or cross-site, which closes GET and form
+requests from apps' pages; and as a page on the app port could evict
+Tilde's cookie and set another account's session, every tab says whose
+desktop it is and the server refuses another user's cookie. The worker
+dials a listener's own address and checks the far end's owner after
+connecting. A security review found these; see docs/security.md. All of
+a user's apps share one origin, so one app's pages can drive the user's
+other apps; the user chose to keep one port and say so in Web Apps
+(apps that matter keep their own login), as code-server's own
+`/proxy/<port>/` does, over a port per app (a range to forward and open)
+or a host name per app (wildcard DNS and certificate), which can come
+with a reverse-proxy setup. Rejected: putting the code in
+the URL (rule 6); the server dialling apps as root (it could reach other
+users' apps); the main cookie on the app port (it would not work for an
+app port on another host name behind a proxy).
+
 ---
 
 ## Open decisions

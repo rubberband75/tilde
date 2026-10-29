@@ -48,11 +48,20 @@ const contentSecurityPolicy = "default-src 'self'; " +
 // hsts is set only with a certificate the administrator configured (D45):
 // on a self-signed one it would turn the browser's warning into an error
 // nobody can click through once the certificate changes.
-func securityHeaders(hsts bool) func(http.Handler) http.Handler {
+//
+// apps, when local web apps are on, names the app port's origin (D76):
+// windows frame it, and post the handoff form to it.
+func securityHeaders(hsts bool, apps func(*http.Request) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
-			h.Set("Content-Security-Policy", contentSecurityPolicy)
+			csp := contentSecurityPolicy
+			if apps != nil {
+				o := apps(r)
+				csp = strings.Replace(csp, "frame-src 'self'", "frame-src 'self' "+o, 1)
+				csp = strings.Replace(csp, "form-action 'self'", "form-action 'self' "+o, 1)
+			}
+			h.Set("Content-Security-Policy", csp)
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("X-Frame-Options", "SAMEORIGIN")
 			h.Set("Referrer-Policy", "no-referrer")
@@ -90,6 +99,25 @@ func originCheck(extra []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// fetchMetadataCheck turns away API requests that browsers say come from
+// another origin of the same site, or another site. Cookies are per host,
+// not per port, and SameSite counts every port of the host as one site,
+// so the app port's pages (D76) would otherwise reach the API with the
+// user's cookie, by GET (which the Origin check leaves alone) or a form.
+// Browsers too old to send Sec-Fetch-Site are left to the other checks.
+func fetchMetadataCheck(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			switch r.Header.Get("Sec-Fetch-Site") {
+			case "same-site", "cross-site":
+				writeJSON(w, http.StatusForbidden, apiError{Error: "cross-origin request refused", Code: "bad_origin"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func needsOriginCheck(r *http.Request) bool {

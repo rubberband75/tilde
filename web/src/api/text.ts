@@ -1,4 +1,4 @@
-import { api, buildUrl, handleResponse, request } from './client'
+import { api, buildUrl, handleResponse, request, userHeaders } from './client'
 import type { Draft, DraftInfo, SavedText, TextFile } from './types'
 
 export const textApi = {
@@ -11,7 +11,7 @@ export const textApi = {
   save: async (path: string, text: string, base: string, force = false) => {
     const res = await fetch(buildUrl('/api/v1/text', { path, base, force: force ? 1 : undefined }), {
       method: 'PUT',
-      headers: { Accept: 'application/json', 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: { Accept: 'application/json', 'Content-Type': 'text/plain; charset=utf-8', ...userHeaders() },
       body: text,
       credentials: 'same-origin',
     })
