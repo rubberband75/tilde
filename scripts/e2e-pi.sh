@@ -51,6 +51,12 @@ pi_ssh() {
   ssh -q -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=15 "$PI" "$@"
 }
 
+# pi_tunnel runs in the background: exec, so that its pid ($!) is ssh's,
+# and killing it ends the tunnel rather than leaving ssh behind.
+pi_tunnel() {
+  exec ssh -q -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=15 -N -o ExitOnForwardFailure=yes "$PI" "$@"
+}
+
 pi_scp() {
   scp -q -o BatchMode=yes "$@"
 }
@@ -160,7 +166,7 @@ run_ui_tests() {
     die "could not install Chromium; try: cd web && npx playwright install --with-deps chromium"
   restart_tilde
 
-  pi_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
+  pi_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
   local tunnel=$!
   # shellcheck disable=SC2064 # expand now: the pid is local
   trap "kill $tunnel 2>/dev/null" EXIT

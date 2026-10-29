@@ -86,6 +86,15 @@ vm_ssh() {
     ubuntu@127.0.0.1 "$@"
 }
 
+# vm_tunnel runs in the background: exec, so that its pid ($!) is ssh's,
+# and killing it ends the tunnel rather than leaving ssh behind.
+vm_tunnel() {
+  exec ssh -q -i "$KEY" -p "$PORT" \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+    -o ConnectTimeout=5 -o BatchMode=yes -N -o ExitOnForwardFailure=yes \
+    ubuntu@127.0.0.1 "$@"
+}
+
 vm_scp() {
   scp -q -i "$KEY" -P "$PORT" \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o BatchMode=yes \
@@ -449,7 +458,7 @@ run_ui_tests() {
   reset_wifi
   reset_services
 
-  vm_ssh -N -o ExitOnForwardFailure=yes -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
+  vm_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" &
   local tunnel=$!
   # shellcheck disable=SC2064 # expand now: the pid is local
   trap "kill $tunnel 2>/dev/null" EXIT
