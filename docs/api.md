@@ -34,7 +34,7 @@ them in sync.
 | GET | `/api/auth/clients` | — | `200 {clients: ClientInfo[]}`: the user's signed-in browsers (D47), this one first, then the most recently seen. `ClientInfo`: `{id, address, agent, since, lastSeen, lastInput, locked, connected, current}`; `address` and `agent` (its `User-Agent`) are from its login or last unlock; `connected`: a tab has the events socket open. `423 locked` from a locked browser |
 | POST | `/api/auth/clients/signout` | `{id}` | `204`: signs that browser out (its requests and sockets end). `400` for this browser (log out instead), `404 not_found`, `423 locked` |
 | GET | `/api/auth/logins` | — | `200 {available, entries: LoginRecord[]}`: this account's last 50 logins and failed attempts (logins, failed logins and unlocks, the rate limit), newest first, read by the server from the audit log (D46, D72). `LoginRecord`: `{time, event, rhost, text, failed}`; `time` in ms, `text` the audit message without the user's name. `available` is false when the journal cannot be read. `423 locked` from a locked browser |
-| POST | `/api/auth/apps/handoff` | — | `200 {code, origin}`: a one-time code for the app port (D76), and that port's origin. Post the code in a form (`code`, `next`) to `<origin>/_tilde/enter`; it lasts a minute. `404 apps_off` when local web apps are off, `423 locked`, `429 busy` with too many waiting |
+| POST | `/api/auth/apps/handoff` | `{for?}` | `200 {code, origin}`: a one-time code for the app port (D76), or with `for: "xpra"` the Xpra port (D78), and that port's origin. Post the code in a form (`code`, `next`) to `<origin>/_tilde/enter`; it lasts a minute. `404 apps_off` when local web apps are off, `423 locked`, `429 busy` with too many waiting |
 | POST | `/api/auth/unlock` | `{password}` | `200 SessionInfo` and a new session cookie (the old one stops working); only this browser unlocks. `401 auth_failed`, `403 account_expired` / `password_expired`, `429 rate_limited` (shared with login: 5 attempts per address in 15 minutes), `401 too_many_attempts` after 5 tries on this cookie, which is then signed out |
 
 `SessionInfo` is `{user, uid, home, locked, lockAfter, heartbeat}`; login
@@ -200,12 +200,33 @@ or at `--apps-origin`) serves:
 | any | `/proxy/<port>/…` | The user's app on `<port>`, the prefix taken off (apps with relative links, such as code-server). `X-Forwarded-Prefix` names it |
 | any | `/absproxy/<port>/…` | The same, the path kept (apps told their base path, such as Jupyter with `--ServerApp.base_url=/absproxy/<port>/`) |
 
+The Xpra port (`--xpra-listen`, by default the port after the app port's;
+browsers reach it two ports from Tilde's, or at `--xpra-origin`) serves
+`/_tilde/enter` likewise (its codes are `for: "xpra"`, its cookie
+`__Host-tilde-xpra`, `next` under `/xpra/`) and `/xpra/…`: the user's Xpra
+session, its HTML5 client and WebSocket, the prefix taken off; `502` when
+the session is not running. On both ports a WebSocket is taken only from
+the port's own origin.
+
 Requests reach the app with the browser's `Host`, `X-Forwarded-*`, and its
 cookies but Tilde's. Its responses cannot set Tilde's cookies, and may be
 framed by the desktop that opened them only (`frame-ancestors`; the app's
 own `X-Frame-Options` and `frame-ancestors` are dropped). WebSockets pass.
 Without a valid app cookie: `401`; locked: `423`; nothing of the user's
 on the port: `502`; each a small page.
+
+### Host apps (D78)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/v1/host-apps` | `{available, apps: HostApp[]}`, by name: the host's `.desktop` apps (`$XDG_DATA_HOME` first, then `$XDG_DATA_DIRS`; hidden, `Terminal=true`, `OnlyShowIn` and missing `TryExec` ones left out). `HostApp`: `{id, name, comment?, icon?, iconPath?, category}`; `id` is the desktop file ID, `iconPath` the icon found in hicolor or pixmaps, `category` the menu's. `available` is false without Xpra and xpra-html5 (or a runtime folder), and the list is then empty |
+| POST | `/api/v1/host-apps/launch` | `{id}` → `204`: the app's `Exec` (arguments with field codes dropped) runs as argv, without a shell, on the user's Xpra session's display, the session started first if need be (on `$XDG_RUNTIME_DIR/tilde/xpra.sock`). `404 not_found`, `404 no_xpra`, `502 launch_failed` |
+| POST | `/api/v1/host-apps/session` | → `204`: starts the session, for the Host Apps window. `404 no_xpra`, `502 start_failed` |
+
+The session is shown by Xpra's HTML5 client at `/xpra/index.html` on the
+Xpra port (after a handoff `for: "xpra"`), which reaches the socket
+through the worker; only these two endpoints start it. It ends when the
+session does.
 
 ### Notifications (D70)
 

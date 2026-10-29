@@ -38,6 +38,7 @@ Used when present, with a fallback otherwise:
 | `~/.config/user-dirs.dirs` (xdg-user-dirs) | Documents, Downloads, Music and the other places in Files | Home and `~/Desktop` only |
 | freedesktop thumbnailers | thumbnails of other types | PNG, JPEG and GIF only, with the built-in scaler |
 | `journalctl` | a service's log lines | an error in their place |
+| Xpra 6 and xpra-html5, from [xpra.org](https://xpra.org)'s repositories | host apps in the menu, in the Host Apps window (D78); its package also enables a system proxy on TCP 14500 that Tilde does not use: `sudo systemctl disable --now xpra-server.socket` | no host apps in the menu |
 
 Not needed: a desktop at the machine, Cinnamon, Mint, X or Wayland. The
 theme, icons and font are bundled.
@@ -154,13 +155,13 @@ scripts/e2e-vm.sh reset      # delete the disk; the next run starts from scratch
 
 State lives in `~/.cache/tilde-e2e-vm` (`TILDE_VM_DIR`); SSH is forwarded to
 `127.0.0.1:2522` (`TILDE_VM_SSH_PORT`). To use the UI against the VM:
-`ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443 -L 9444:127.0.0.1:8444
+`ssh -i ~/.cache/tilde-e2e-vm/id_ed25519 -p 2522 -L 9443:127.0.0.1:8443 -L 9444:127.0.0.1:8444 -L 9445:127.0.0.1:8445
 ubuntu@127.0.0.1`, then open https://localhost:9443 and log in as `tester`
 (or run `scripts/e2e-vm.sh tunnel`). The VM build embeds the UI.
 
 After the Go suite, `make e2e-vm` runs the Playwright UI tests in
 `web/e2e` with Chromium on the host, through an SSH tunnel to the VM
-(`127.0.0.1:9445`, `TILDE_VM_UI_TEST_PORT`, and the app port on 9446), logged in as `tester`: login
+(`127.0.0.1:9446`, `TILDE_VM_UI_TEST_PORT`, with the app and Xpra ports on 9447 and 9448), logged in as `tester`: login
 and logout, the desktop icons, layout and background, Files (new folder,
 rename, trash and restore), live updates from inotify, the terminal, and
 per-drive trash on a small ext4 image the script loop-mounts at
@@ -219,7 +220,7 @@ need only an account (sessions, the privilege drop, locking, jobs, the
 audit log) and the UI specs for login, the desktop, windows, Terminal,
 Files, the editor and System Settings, in Chromium here through an SSH
 tunnel. `scripts/e2e-pi.sh user@host ui` reruns the UI part, `logs` shows
-the service log, `tunnel` opens it at https://localhost:9447.
+the service log, `tunnel` opens it at https://localhost:9450.
 
 ## Debugging
 

@@ -549,3 +549,16 @@ export interface LocalApp {
   http: boolean
   title?: string
 }
+
+/** A host app from its .desktop file (D78), run in the user's Xpra session. */
+export interface HostApp {
+  /** The desktop file ID: "org.gnome.baobab". */
+  id: string
+  name: string
+  comment?: string
+  /** An icon name, and the file found for it in the host's icon themes. */
+  icon?: string
+  iconPath?: string
+  /** The menu's category: Tilde's, or Programming or Other. */
+  category: string
+}

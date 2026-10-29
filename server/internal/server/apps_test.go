@@ -37,7 +37,7 @@ func newAppsTest(t *testing.T) *appsTest {
 	}))
 	t.Cleanup(app.Close)
 	at.s.dialApp = func(ctx context.Context, _ *UserSession, port int) (net.Conn, error) {
-		if port != 4242 {
+		if port != 4242 && port != 0 { // 0: the Xpra session
 			return nil, errAppNotListening
 		}
 		var d net.Dialer
@@ -137,6 +137,11 @@ func TestAppsHandoff(t *testing.T) {
 		t.Fatalf("next elsewhere: %d", w.Code)
 	}
 	code, _ = at.handoff()
+	// The app port does not go to Xpra (D78).
+	if w := at.enter(code, "/xpra/index.html?submit=true", "http://desk.lan"); w.Code != http.StatusBadRequest {
+		t.Fatalf("enter to Xpra on the app port: %d", w.Code)
+	}
+	code, _ = at.handoff()
 	w := at.enter(code, "/proxy/4242/notes?x=1", "http://desk.lan")
 	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/proxy/4242/notes?x=1" {
 		t.Fatalf("enter: %d %v", w.Code, w.Header())
@@ -218,6 +223,22 @@ func TestAppsProxy(t *testing.T) {
 		t.Fatalf("absproxy: %d %s %q", w.Code, at.seen.URL.Path, at.seen.Header.Get("X-Forwarded-Prefix"))
 	}
 
+	// The app port has no Xpra (D78), and a WebSocket from another origin
+	// gets nowhere.
+	if w := at.get("/xpra/index.html", app); w.Code != http.StatusNotFound {
+		t.Fatalf("xpra on the app port: %d", w.Code)
+	}
+	ws := httptest.NewRequest(http.MethodGet, "https://desk.lan:444/proxy/4242/socket", nil)
+	ws.AddCookie(app)
+	ws.Header.Set("Upgrade", "websocket")
+	ws.Header.Set("Connection", "Upgrade")
+	ws.Header.Set("Origin", "https://desk.lan:445")
+	w = httptest.NewRecorder()
+	at.apps.ServeHTTP(w, ws)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("WebSocket from the Xpra port's origin: %d", w.Code)
+	}
+
 	// Tilde's own cookie is not the app port's; nothing listening; not a port.
 	for path, want := range map[string]int{"/proxy/4242/": http.StatusUnauthorized, "/proxy/99/": http.StatusBadGateway, "/proxy/x/": http.StatusNotFound} {
 		cookies := []*http.Cookie{app}
@@ -277,8 +298,8 @@ func TestFetchMetadata(t *testing.T) {
 		}
 	}
 	w := at.do(http.MethodGet, "/api/auth/session", at.tok, "")
-	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-src 'self' https://desk.lan:444;") ||
-		!strings.Contains(csp, "form-action 'self' https://desk.lan:444;") {
+	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-src 'self' https://desk.lan:444 https://desk.lan:445;") ||
+		!strings.Contains(csp, "form-action 'self' https://desk.lan:444 https://desk.lan:445;") {
 		t.Fatalf("CSP %s", csp)
 	}
 }
@@ -299,5 +320,71 @@ func TestAppsAddress(t *testing.T) {
 		if (err != nil) != c.bad || got != c.want || (!c.bad && off != c.offset) {
 			t.Errorf("appsAddress(%q, %q) = %q %d %v", c.listen, c.apps, got, off, err)
 		}
+	}
+}
+
+// TestXpraPort: the user's Xpra session (D78) has a port of its own, with
+// its own handoff and cookie: neither port's cookie opens the other, and
+// the session is served with the prefix taken off.
+func TestXpraPort(t *testing.T) {
+	at := newAppsTest(t)
+	xpra := at.s.xpraHandler()
+	enter := func(code, next string) *httptest.ResponseRecorder {
+		form := url.Values{"code": {code}, "next": {next}}
+		req := httptest.NewRequest(http.MethodPost, "https://desk.lan:445/_tilde/enter", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "http://desk.lan")
+		req.AddCookie(&http.Cookie{Name: at.s.cookie, Value: at.tok})
+		w := httptest.NewRecorder()
+		xpra.ServeHTTP(w, req)
+		return w
+	}
+	w := at.do(http.MethodPost, "/api/auth/apps/handoff", at.tok, `{"for":"xpra"}`)
+	at.expect(w, http.StatusOK, "")
+	var h struct{ Code, Origin string }
+	json.Unmarshal(w.Body.Bytes(), &h)
+	if h.Origin != "https://desk.lan:445" {
+		t.Fatalf("xpra origin %q", h.Origin)
+	}
+	// An app port code does not open Xpra, nor a path that is not Xpra's.
+	appCode, _ := at.handoff()
+	if w := enter(appCode, "/xpra/index.html"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("app code on the Xpra port: %d", w.Code)
+	}
+	if w := enter(h.Code, "/proxy/4242/"); w.Code != http.StatusBadRequest {
+		t.Fatalf("Xpra code to an app: %d", w.Code)
+	}
+	w = at.do(http.MethodPost, "/api/auth/apps/handoff", at.tok, `{"for":"xpra"}`)
+	json.Unmarshal(w.Body.Bytes(), &h)
+	w = enter(h.Code, "/xpra/index.html?submit=true")
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("enter: %d", w.Code)
+	}
+	cookie := w.Result().Cookies()[0]
+	if cookie.Name != at.s.cookie+"-xpra" {
+		t.Fatalf("cookie %+v", cookie)
+	}
+	get := func(h http.Handler, host, path string, c *http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "https://"+host+path, nil)
+		req.AddCookie(c)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w
+	}
+	if w := get(xpra, "desk.lan:445", "/xpra/index.html", cookie); w.Code != http.StatusOK || at.seen.URL.Path != "/index.html" ||
+		at.seen.Header.Get("X-Forwarded-Prefix") != "/xpra" {
+		t.Fatalf("xpra: %d %s", w.Code, at.seen.URL)
+	}
+	// Each port's cookie opens that port only.
+	if w := get(at.apps, "desk.lan:444", "/proxy/4242/", &http.Cookie{Name: at.s.cookie + "-app", Value: cookie.Value}); w.Code != http.StatusUnauthorized {
+		t.Fatalf("the Xpra cookie on the app port: %d", w.Code)
+	}
+	appCode, _ = at.handoff()
+	app := at.enter(appCode, "/proxy/4242/", "http://desk.lan").Result().Cookies()[0]
+	if w := get(xpra, "desk.lan:445", "/xpra/", &http.Cookie{Name: at.s.cookie + "-xpra", Value: app.Value}); w.Code != http.StatusUnauthorized {
+		t.Fatalf("an app cookie on the Xpra port: %d", w.Code)
+	}
+	if w := get(xpra, "desk.lan:445", "/proxy/4242/", cookie); w.Code != http.StatusNotFound {
+		t.Fatalf("an app on the Xpra port: %d", w.Code)
 	}
 }

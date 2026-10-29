@@ -50,6 +50,8 @@ could already do.
   `/api/auth/apps/handoff` and sets the app port's own cookie;
   `/proxy/<port>/` and `/absproxy/<port>/` pass requests to the user's app
   through the worker (`/internal/dial`), never connecting to it itself.
+  The Xpra port, the next one, serves the user's Xpra session (`/xpra/`,
+  D78) likewise, with a handoff and cookie of its own.
 - Must run as root (to start helpers), except in `--dev` single-user mode.
 
 ### `tilde session-helper` (root, one per login)
@@ -105,6 +107,11 @@ could already do.
   disconnects them and switches Wi-Fi through NetworkManager on the system
   bus, as the user (`network.go`, D55); the panel's network applet is
   `web/src/shell/NetworkApplet.vue`.
+- Runs the user's Xpra session for host apps (`xpra.go`, `hostapps.go`,
+  D78): lists the host's `.desktop` apps, starts Xpra on a socket in the
+  runtime folder when the desktop asks, runs apps on its display, all in
+  the `tilde-xpra.slice` user slice, connects the Xpra port's `/xpra/` to
+  it, and stops the slice at logout.
 - Lists the user's listening TCP ports for Web Apps (`apps.go`, D76) and
   connects the server to one of them on request (`/internal/dial`, an
   upgraded request that then carries the app's bytes): only ports a

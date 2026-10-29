@@ -28,8 +28,8 @@
 # Environment: TILDE_VM_DIR (default ~/.cache/tilde-e2e-vm),
 # TILDE_VM_SSH_PORT (default 2522), TILDE_VM_MEM (MiB, default 2048),
 # TILDE_VM_UI_PORT (default 9443, for "tunnel"), TILDE_VM_UI_TEST_PORT
-# (default 9445, the UI suite's own tunnel). Each tunnel also forwards the
-# port after it to Tilde's app port (D76).
+# (default 9446, the UI suite's own tunnel). Each tunnel also forwards the
+# two ports after it to Tilde's app port (D76) and Xpra port (D78).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,7 +37,7 @@ DIR="${TILDE_VM_DIR:-$HOME/.cache/tilde-e2e-vm}"
 PORT="${TILDE_VM_SSH_PORT:-2522}"
 MEM="${TILDE_VM_MEM:-2048}"
 UI_PORT="${TILDE_VM_UI_PORT:-9443}"
-UI_TEST_PORT="${TILDE_VM_UI_TEST_PORT:-9445}"
+UI_TEST_PORT="${TILDE_VM_UI_TEST_PORT:-9446}"
 
 IMAGE_URL="https://cloud-images.ubuntu.com/noble/current"
 IMAGE_NAME="noble-server-cloudimg-amd64.img"
@@ -229,6 +229,20 @@ install_build() {
     id $TEST_2FA_USER >/dev/null 2>&1 || sudo useradd -m -s /bin/bash $TEST_2FA_USER
     echo '$TEST_2FA_USER:$TEST_PASS' | sudo chpasswd
     sudo sed -i '/^@include common-auth/a auth [success=1 default=ignore] pam_succeed_if.so user notin $TEST_2FA_USER quiet\\nauth required pam_oath.so usersfile=/etc/users.oath window=5' /etc/pam.d/tilde"
+
+  # Host apps through Xpra (D78): xpra.org's packages (Ubuntu's are too old
+  # and lack the HTML5 client), and xterm to launch from the menu.
+  vm_ssh 'set -e
+    if ! dpkg -s xpra xpra-html5 xpra-x11 xterm >/dev/null 2>&1; then
+      sudo wget -q -O /usr/share/keyrings/xpra.asc https://xpra.org/xpra.asc
+      sudo wget -q -O /etc/apt/sources.list.d/xpra.sources \
+        https://raw.githubusercontent.com/Xpra-org/xpra/master/packaging/repos/noble/xpra.sources
+      sudo apt-get update -q >/dev/null
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q xpra xpra-html5 xpra-x11 xterm >/dev/null
+    fi
+    # xpra.org'"'"'s package listens on TCP 14500 on every address (its system
+    # proxy), which Tilde does not use (docs/development.md).
+    sudo systemctl disable --now xpra-server.socket xpra-server.service >/dev/null 2>&1 || true'
 
   # Lets the test user set up and mount loop images through udisks without
   # an active session, so the drives test has a stick mounted by the user.
@@ -459,8 +473,10 @@ run_ui_tests() {
   reset_wifi
   reset_services
 
-  # The app port too (D76): browsers find it one port up.
-  vm_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_TEST_PORT + 1)):127.0.0.1:8444" &
+  # The app and Xpra ports too (D76, D78): browsers find them one and two
+  # ports up.
+  vm_tunnel -L "127.0.0.1:$UI_TEST_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_TEST_PORT + 1)):127.0.0.1:8444" \
+    -L "127.0.0.1:$((UI_TEST_PORT + 2)):127.0.0.1:8445" &
   local tunnel=$!
   # shellcheck disable=SC2064 # expand now: the pid is local
   trap "kill $tunnel 2>/dev/null" EXIT
@@ -514,7 +530,8 @@ case "$cmd" in
   tunnel)
     running || die "the VM is not running; start it with: $0 up"
     log "Tilde in the VM: https://localhost:$UI_PORT (user $TEST_USER, password $TEST_PASS)"
-    vm_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_PORT + 1)):127.0.0.1:8444"
+    vm_ssh -N -L "127.0.0.1:$UI_PORT:127.0.0.1:8443" -L "127.0.0.1:$((UI_PORT + 1)):127.0.0.1:8444" \
+      -L "127.0.0.1:$((UI_PORT + 2)):127.0.0.1:8445"
     ;;
   down) down ;;
   reset) down; rm -f "$DISK" "$SEED" "$PIDFILE"; log "VM disk deleted; the next run starts fresh" ;;

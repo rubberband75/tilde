@@ -59,6 +59,7 @@ type Worker struct {
 	logind          *logindConn
 	polkit          *polkitAgent
 	notifications   *notificationService
+	xpra            *xpraSession
 	auditQ          *auditQueue
 }
 
@@ -119,6 +120,7 @@ func New(info *userinfo.Info, opt Options) *Worker {
 		logind:          newLogindConn(opt),
 		polkit:          newPolkitAgent(info.Name, func() { events.publish(event{Type: "polkit"}) }),
 		notifications:   newNotificationService(func() { events.publish(event{Type: "notifications"}) }),
+		xpra:            newXpraSession(),
 		auditQ:          newAuditQueue(),
 	}
 	w.terms.exited = func(id string) { w.audit(nil, protocol.AuditEvent{Event: "terminal_close", Terminal: id}) }
@@ -170,6 +172,9 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("POST /api/v1/drives/unmount", w.handleUnmount)
 	m.HandleFunc("POST /api/v1/drives/eject", w.handleEject)
 	m.HandleFunc("GET /api/v1/apps", w.handleApps)
+	m.HandleFunc("GET /api/v1/host-apps", w.handleHostApps)
+	m.HandleFunc("POST /api/v1/host-apps/launch", w.handleHostAppLaunch)
+	m.HandleFunc("POST /api/v1/host-apps/session", w.handleHostAppsSession)
 	m.HandleFunc("GET /api/v1/notifications", w.handleNotifications)
 	m.HandleFunc("GET /api/v1/notifications/image", w.handleNotificationImage)
 	m.HandleFunc("POST /api/v1/notifications/action", w.handleNotificationAction)
@@ -270,6 +275,7 @@ func (w *Worker) Shutdown() {
 	w.resources.close()
 	w.polkit.close()
 	w.notifications.close()
+	w.xpra.stop()
 	w.jobs.cancelAll()
 	w.terms.closeAll()
 	select {

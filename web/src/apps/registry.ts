@@ -154,6 +154,19 @@ export const apps: AppManifest[] = [
     component: () => import('./web-apps/WebViewApp.vue'),
   },
   {
+    id: 'xpra',
+    name: 'Host Apps',
+    comment: 'The host’s own graphical apps, through Xpra',
+    icon: 'preferences-desktop-remote-desktop',
+    category: 'Internet',
+    // Opened by the menu when it starts a host app (D78).
+    hidden: true,
+    singleInstance: true,
+    defaultSize: { w: 1100, h: 720 },
+    minSize: { w: 400, h: 300 },
+    component: () => import('./xpra/XpraApp.vue'),
+  },
+  {
     id: 'system-monitor',
     name: 'System Monitor',
     comment: 'View current processes and monitor system state',

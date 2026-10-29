@@ -154,6 +154,22 @@ bug in Tilde can never give more than the account already has.
     development server serving a compromised script could drive the
     user's code-server. Keep apps that matter behind their own login, and
     open untrusted ones elsewhere.
+- Host apps (D78): the user's Xpra session listens only on a socket in
+  the user's runtime folder (0700) with peer-credential auth, never on
+  TCP, and starts only when the desktop asks, on Tilde's own origin.
+  Xpra has no login and can run anything as the user, so its HTML5 client
+  is served from a port of its own (the Xpra port), with its own handoff
+  and cookie, never from the app port, where any local web app's pages
+  could reach it; each port takes WebSockets only from its own origin.
+  Xpra's commands, file transfer, URL opening, printing and server
+  scripts are off in Xpra itself, not only in its client. Launching takes
+  a `.desktop` file's ID and runs its `Exec` as argv, without a shell, on
+  Xpra's display; the user's own `~/.local/share/applications` can name
+  any command, which the user can run anyway. The session, its X server
+  and apps run in a systemd user slice that ends with the session.
+  xpra.org's package enables a system proxy listening on TCP 14500 on
+  every address; Tilde does not use it: turn it off (`sudo systemctl
+  disable --now xpra-server.socket`).
 - Notifications (D70): any program the user runs may send one, and every
   browser of the user shows it, so the worker bounds them (50 kept, 512
   bytes of summary, 4 KiB of body, 8 buttons, pictures up to 512×512) and
@@ -258,8 +274,9 @@ works the same way (the e2e VM tests with it).
 
 - Keep the default localhost binding and reach Tilde over Tailscale or
   WireGuard (`--listen <vpn-address>:8443`). This removes most of the risk.
-- Local web apps use a second port, by default the one after `--listen`'s:
-  forward or open both, or turn it off with `--apps-listen off`.
+- Local web apps and host apps use two more ports, by default the two
+  after `--listen`'s: forward or open all three, or turn them off with
+  `--apps-listen off` or `--xpra-listen off`.
 - If it must face a LAN, use your own certificate (`--tls-cert`,
   `--tls-key`) and enable `pam_faillock` in `common-auth`.
 - Do not put it on the public internet without two-factor (above), and even

@@ -78,7 +78,8 @@ sudo systemctl enable --now tilde
 
 Tilde listens on `127.0.0.1:8443` with a self-signed certificate by default
 (the fingerprint is in `journalctl -u tilde`), and serves local web apps
-(Jupyter, code-server) from the next port, 8444. Edit `/etc/default/tilde` to
+(Jupyter, code-server) from the next port, 8444, and host apps through Xpra
+from the one after, 8445. Edit `/etc/default/tilde` to
 listen on a VPN or LAN address. Exposing it to the public internet is not
 recommended; see [docs/security.md](docs/security.md).
 

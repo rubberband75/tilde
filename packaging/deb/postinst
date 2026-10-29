@@ -24,8 +24,8 @@ if [ "$1" = configure ] && [ -z "$2" ]; then
 	[ -n "$addr" ] || addr=192.168.1.20
 	cat <<MSG
 
-Tilde is running at https://localhost:8443 on this machine only, and local
-web apps on the next port, 8444.
+Tilde is running at https://localhost:8443 on this machine only; local web
+apps use the next port, 8444, and host apps (Xpra) the one after, 8445.
 Log in with an account on this machine. The certificate is self-signed, so
 the browser warns the first time; its fingerprint is in journalctl -u tilde.
 
@@ -34,9 +34,9 @@ To open it from other machines:
       TILDE_OPTS="--listen $addr:8443"
     then run: sudo systemctl restart tilde
     and open https://$addr:8443
-  - Through an SSH tunnel, with nothing changed here (8444 is for local
-    web apps):
-      ssh -L 8443:127.0.0.1:8443 -L 8444:127.0.0.1:8444 ${SUDO_USER:-you}@$addr
+  - Through an SSH tunnel, with nothing changed here (8444 and 8445 are
+    for local web apps and host apps):
+      ssh -L 8443:127.0.0.1:8443 -L 8444:127.0.0.1:8444 -L 8445:127.0.0.1:8445 ${SUDO_USER:-you}@$addr
     then open https://localhost:8443
   - From the internet: behind a reverse proxy with its own certificate, and
     with two-factor login. See

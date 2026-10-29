@@ -52,6 +52,11 @@ type Config struct {
 	// reverse proxy; by default the host they reach Tilde at, on the port
 	// as far from theirs as AppsListen's is from Listen's.
 	AppsOrigin string
+	// XpraListen is where the user's Xpra session is served (D78): "" for
+	// the port after AppsListen's, "off" for none. XpraOrigin is as
+	// AppsOrigin.
+	XpraListen string
+	XpraOrigin string
 	// SessionMaxAge is the absolute token lifetime: --session-lifetime,
 	// 12 hours by default (D16, D69).
 	SessionMaxAge time.Duration
@@ -82,6 +87,9 @@ type Server struct {
 	// web apps are off. appsOffset is the app port minus the main one.
 	apps       *appAuth
 	appsOffset int
+	// xpraOn: the Xpra port is on; xpraOffset is it minus the main port.
+	xpraOn     bool
+	xpraOffset int
 	// dialApp connects to a user's app through their worker; tests
 	// replace it.
 	dialApp func(ctx context.Context, us *UserSession, port int) (net.Conn, error)
@@ -122,6 +130,13 @@ func New(cfg Config) (*Server, error) {
 			return nil, err
 		}
 		s.cfg.AppsListen, s.appsOffset, s.apps = addr, offset, newAppAuth()
+		if cfg.XpraListen != "off" {
+			xaddr, xoffset, err := appsAddress(addr, cfg.XpraListen)
+			if err != nil {
+				return nil, err
+			}
+			s.cfg.XpraListen, s.xpraOffset, s.xpraOn = xaddr, offset+xoffset, true
+		}
 	}
 	s.pending.m = map[string]*pending{}
 	s.audit = &auditLog{}
@@ -187,7 +202,12 @@ func (s *Server) Handler() http.Handler {
 	hsts := !s.cfg.Dev && s.cfg.TLSCert != ""
 	var apps func(*http.Request) string
 	if s.apps != nil {
-		apps = s.appsOrigin
+		apps = func(r *http.Request) string {
+			if s.xpraOn {
+				return s.appsOrigin(r) + " " + s.originFor(r, kindXpra)
+			}
+			return s.appsOrigin(r)
+		}
 	}
 	return securityHeaders(hsts, apps)(originCheck(s.cfg.AllowedOrigins)(fetchMetadataCheck(m)))
 }
@@ -630,53 +650,67 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	// The app port (D76): the same server and certificate, its own
-	// handler, which serves nothing of Tilde's but its handoff.
-	var appsSrv *http.Server
-	var appsLn net.Listener
-	if s.apps != nil && cfg.Dev {
-		ah, _, _ := net.SplitHostPort(s.cfg.AppsListen)
-		if ip := net.ParseIP(ah); ah != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			ln.Close()
-			return errors.New("--dev serves local web apps over plain HTTP too, so --apps-listen must be a loopback address")
+	// The app port (D76) and the Xpra port (D78): the same certificate,
+	// handlers of their own, which serve nothing of Tilde's but the
+	// handoff.
+	type extra struct {
+		name string
+		srv  *http.Server
+		ln   net.Listener
+	}
+	var extras []extra
+	closeAll := func() {
+		ln.Close()
+		for _, e := range extras {
+			e.ln.Close()
 		}
 	}
 	if s.apps != nil {
-		if appsLn, err = net.Listen("tcp", s.cfg.AppsListen); err != nil {
-			ln.Close()
-			return fmt.Errorf("local web apps (--apps-listen, or off): %w", err)
+		ports := []struct {
+			name, addr string
+			h          http.Handler
+		}{{"local web apps", s.cfg.AppsListen, s.appsHandler()}}
+		if s.xpraOn {
+			ports = append(ports, struct {
+				name, addr string
+				h          http.Handler
+			}{"host apps (Xpra)", s.cfg.XpraListen, s.xpraHandler()})
 		}
-		appsSrv = &http.Server{
-			Handler:           s.appsHandler(),
-			ReadHeaderTimeout: 10 * time.Second,
-			IdleTimeout:       120 * time.Second,
-			ErrorLog:          srv.ErrorLog,
+		for _, p := range ports {
+			l, err := net.Listen("tcp", p.addr)
+			if err != nil {
+				closeAll()
+				return fmt.Errorf("%s (--apps-listen, --xpra-listen, or off): %w", p.name, err)
+			}
+			extras = append(extras, extra{p.name, &http.Server{
+				Handler:           p.h,
+				ReadHeaderTimeout: 10 * time.Second,
+				IdleTimeout:       120 * time.Second,
+				ErrorLog:          srv.ErrorLog,
+			}, l})
 		}
 	}
-	errc := make(chan error, 2)
+	errc := make(chan error, 1+len(extras))
 	if cfg.Dev {
 		slog.Info("listening", "url", "http://"+ln.Addr().String())
 		go func() { errc <- srv.Serve(ln) }()
-		if appsSrv != nil {
-			slog.Info("local web apps", "url", "http://"+appsLn.Addr().String())
-			go func() { errc <- appsSrv.Serve(appsLn) }()
+		for _, e := range extras {
+			slog.Info(e.name, "url", "http://"+e.ln.Addr().String())
+			go func() { errc <- e.srv.Serve(e.ln) }()
 		}
 	} else {
 		cert, err := loadOrCreateCert(cfg.TLSCert, cfg.TLSKey, cfg.StateDir, host)
 		if err != nil {
-			ln.Close()
-			if appsLn != nil {
-				appsLn.Close()
-			}
+			closeAll()
 			return fmt.Errorf("TLS certificate: %w", err)
 		}
 		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 		slog.Info("listening", "url", "https://"+ln.Addr().String())
 		go func() { errc <- srv.ServeTLS(ln, "", "") }()
-		if appsSrv != nil {
-			appsSrv.TLSConfig = srv.TLSConfig
-			slog.Info("local web apps", "url", "https://"+appsLn.Addr().String())
-			go func() { errc <- appsSrv.ServeTLS(appsLn, "", "") }()
+		for _, e := range extras {
+			e.srv.TLSConfig = srv.TLSConfig
+			slog.Info(e.name, "url", "https://"+e.ln.Addr().String())
+			go func() { errc <- e.srv.ServeTLS(e.ln, "", "") }()
 		}
 	}
 
@@ -687,8 +721,8 @@ func Run(ctx context.Context, cfg Config) error {
 	for {
 		select {
 		case err := <-errc:
-			if appsSrv != nil {
-				appsSrv.Close()
+			for _, e := range extras {
+				e.srv.Close()
 			}
 			srv.Close()
 			s.sessions.EndAll()
@@ -705,8 +739,8 @@ func Run(ctx context.Context, cfg Config) error {
 			slog.Info("shutting down")
 			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = srv.Shutdown(shutCtx)
-			if appsSrv != nil {
-				_ = appsSrv.Shutdown(shutCtx)
+			for _, e := range extras {
+				_ = e.srv.Shutdown(shutCtx)
 			}
 			cancel()
 			s.sessions.EndAll()

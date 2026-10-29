@@ -4,8 +4,12 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
+import { fsApi } from '@/api/fs'
+import { hostAppsApi } from '@/api/hostApps'
+import type { HostApp } from '@/api/types'
 import { apps } from '@/apps/registry'
 import type { AppManifest } from '@/apps/types'
+import { useHostApps } from '@/stores/hostApps'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import { desktopFullscreen, toggleDesktopFullscreen } from '@/lib/fullscreen'
@@ -33,18 +37,48 @@ const favoriteApps = computed(() =>
   favorites.map((id) => apps.find((a) => a.id === id)).filter((a): a is AppManifest => !!a),
 )
 
-const visibleApps = computed(() => apps.filter((a) => !a.hidden))
-const categories = computed(() => ['All Applications', ...new Set(visibleApps.value.map((a) => a.category).sort())])
+// The host's own apps (D78), next to Tilde's: they open in the Xpra window.
+const hostApps = useHostApps()
+
+/** One line of the menu: one of Tilde's apps, or the host's. */
+interface Entry {
+  key: string
+  name: string
+  comment: string
+  category: string
+  icon: string | string[]
+  /** A host app's icon file, shown in place of `icon` when there is one. */
+  iconPath?: string
+  app?: AppManifest
+  host?: HostApp
+}
+
+const entries = computed<Entry[]>(() => [
+  ...apps
+    .filter((a) => !a.hidden)
+    .map((a) => ({ key: a.id, name: a.name, comment: a.comment, category: a.category, icon: a.icon, app: a })),
+  ...(hostApps.available ? hostApps.apps : []).map((h) => ({
+    key: `host:${h.id}`,
+    name: h.name,
+    comment: h.comment ?? '',
+    category: h.category,
+    icon: [...(h.icon ? [h.icon] : []), 'application-x-executable'],
+    iconPath: h.iconPath,
+    host: h,
+  })),
+])
+const categories = computed(() => ['All Applications', ...new Set(entries.value.map((a) => a.category).sort())])
 
 const shown = computed(() => {
   const q = query.value.trim().toLowerCase()
-  let list = visibleApps.value
+  let list = entries.value
   if (q) list = list.filter((a) => a.name.toLowerCase().includes(q) || a.comment.toLowerCase().includes(q))
   else if (category.value !== 'All Applications') list = list.filter((a) => a.category === category.value)
   return [...list].sort((a, b) => a.name.localeCompare(b.name))
 })
 
-const hovered = ref<AppManifest | null>(null)
+const hovered = ref<Entry | null>(null)
+const brokenIcons = ref(new Set<string>())
 
 /** Set when the menu closes for an app it launched: the app keeps the focus. */
 let launched = false
@@ -55,9 +89,26 @@ function launch(app: AppManifest) {
   open.value = false
 }
 
+/** A host app: the Xpra window first, then the app in the session. */
+async function launchHost(h: HostApp) {
+  launched = true
+  wm.open('xpra')
+  open.value = false
+  try {
+    await hostAppsApi.launch(h.id)
+  } catch (e) {
+    notices.push(`Could not start ${h.name}: ${(e as Error).message}`, 'error')
+  }
+}
+
+function launchEntry(e: Entry) {
+  if (e.app) launch(e.app)
+  else if (e.host) void launchHost(e.host)
+}
+
 function onEnter() {
   const first = shown.value[0]
-  if (first) launch(first)
+  if (first) launchEntry(first)
 }
 
 async function logOut() {
@@ -87,6 +138,7 @@ function onCloseFocus(e: Event) {
 
 watch(open, async (v) => {
   if (v) {
+    void hostApps.load()
     query.value = ''
     category.value = 'All Applications'
     await nextTick()
@@ -147,14 +199,23 @@ watch(open, async (v) => {
             <ul class="apps">
               <li
                 v-for="a in shown"
-                :key="a.id"
+                :key="a.key"
                 tabindex="0"
-                @click="launch(a)"
-                @keydown.enter.prevent="launch(a)"
+                @click="launchEntry(a)"
+                @keydown.enter.prevent="launchEntry(a)"
                 @pointerenter="hovered = a"
                 @pointerleave="hovered = null"
               >
-                <ThemeIcon :name="a.icon" :size="24" />
+                <img
+                  v-if="a.iconPath && !brokenIcons.has(a.key)"
+                  class="host-icon"
+                  :src="fsApi.contentUrl(a.iconPath)"
+                  width="24"
+                  height="24"
+                  alt=""
+                  @error="brokenIcons.add(a.key)"
+                />
+                <ThemeIcon v-else :name="a.icon" :size="24" />
                 <span>{{ a.name }}</span>
               </li>
               <li v-if="shown.length === 0" class="empty">No applications found</li>
@@ -188,6 +249,10 @@ watch(open, async (v) => {
 </template>
 
 <style scoped>
+.host-icon {
+  flex: none;
+  object-fit: contain;
+}
 .menu-button {
   display: grid;
   place-items: center;

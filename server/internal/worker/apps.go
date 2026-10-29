@@ -9,6 +9,7 @@ import (
 	"html"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -323,19 +324,33 @@ func (w *Worker) handleDial(rw http.ResponseWriter, r *http.Request) {
 	if !internalOnly(rw, r) {
 		return
 	}
-	port, err := strconv.Atoi(r.URL.Query().Get("port"))
-	if err != nil || port < 1 || port > 65535 {
-		writeErr(rw, badRequest{"invalid port"})
-		return
+	var app net.Conn
+	var err error
+	if r.URL.Query().Get("xpra") == "1" {
+		// The user's Xpra session (D78); never started by a connection.
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		app, err = w.xpra.dial(ctx)
+		cancel()
+		if errors.Is(err, errXpraNotRunning) {
+			writeJSON(rw, http.StatusNotFound, apiError{Error: err.Error(), Code: "not_found"})
+			return
+		}
+	} else {
+		port, perr := strconv.Atoi(r.URL.Query().Get("port"))
+		if perr != nil || port < 1 || port > 65535 {
+			writeErr(rw, badRequest{"invalid port"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		app, err = dialOwn(ctx, port)
+		cancel()
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	app, err := dialOwn(ctx, port)
-	cancel()
 	if errors.Is(err, errNotListening) {
 		writeJSON(rw, http.StatusNotFound, apiError{Error: err.Error(), Code: "not_found"})
 		return
 	}
 	if err != nil {
+		slog.Info("worker: dial for the app port", "query", r.URL.RawQuery, "err", err)
 		writeJSON(rw, http.StatusBadGateway, apiError{Error: err.Error(), Code: "unreachable"})
 		return
 	}

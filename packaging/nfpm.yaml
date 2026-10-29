@@ -31,6 +31,10 @@ recommends:
   - udisks2
   - libglib2.0-bin
   - xdg-user-dirs
+# Host apps (D78); xpra.org's packages, the distributions' are too old.
+suggests:
+  - xpra
+  - xpra-html5
 
 contents:
   - src: ${TILDE_BIN}

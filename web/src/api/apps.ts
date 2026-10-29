@@ -1,6 +1,9 @@
 import { api } from './client'
 import type { LocalApp } from './types'
 
+/** The origins Tilde serves others' pages from: the app port (D76), the Xpra port (D78). */
+export type AppPort = 'apps' | 'xpra'
+
 /** Local web apps (D76): the user's listening ports, opened from the app port. */
 export const appsApi = {
   list: () => api.get<{ apps: LocalApp[] }>('/api/v1/apps').then((r) => r.apps),
@@ -8,7 +11,8 @@ export const appsApi = {
    * A one-time code to post to the app port's /_tilde/enter, and that
    * port's origin. The code is spent by its first use, or after a minute.
    */
-  handoff: () => api.post<{ code: string; origin: string }>('/api/auth/apps/handoff', {}),
+  handoff: (port: AppPort = 'apps') =>
+    api.post<{ code: string; origin: string }>('/api/auth/apps/handoff', { for: port }),
 }
 
 /** Where on the app port a local app's page is: its path kept, or the prefix taken off. */
@@ -22,8 +26,8 @@ export function appPath(port: number, keepPrefix: boolean, path = '/'): string {
  * code to the app port in a form: the code never goes in a URL (rule 6).
  * Resolves to the app port's origin.
  */
-export async function enterApp(target: string, next: string): Promise<string> {
-  const { code, origin } = await appsApi.handoff()
+export async function enterApp(target: string, next: string, port: AppPort = 'apps'): Promise<string> {
+  const { code, origin } = await appsApi.handoff(port)
   const form = document.createElement('form')
   form.method = 'POST'
   form.action = `${origin}/_tilde/enter`

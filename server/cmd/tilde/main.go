@@ -96,6 +96,10 @@ func serve(args []string) int {
 		`where local web apps are served, a second origin (default: the port after --listen's; "off" for none)`)
 	appsOrigin := fs.String("apps-origin", "",
 		"the app port's address as browsers reach it, behind a reverse proxy (e.g. https://apps.example.com)")
+	xpraListen := fs.String("xpra-listen", "",
+		`where host apps' Xpra session is served, an origin of its own (default: the port after the app port's; "off" for none)`)
+	xpraOrigin := fs.String("xpra-origin", "",
+		"the Xpra port's address as browsers reach it, behind a reverse proxy (e.g. https://xpra.example.com)")
 	lifetime := fs.Duration("session-lifetime", 12*time.Hour,
 		"how long a login lasts, however active, before logging in again (e.g. 8h; 10m to 168h)")
 	debug := fs.Bool("debug", false, "verbose logging")
@@ -113,21 +117,32 @@ func serve(args []string) int {
 			extra = append(extra, o)
 		}
 	}
-	if o := *appsOrigin; o != "" {
-		if u, err := url.Parse(o); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
-			(u.Path != "" && u.Path != "/") || u.RawQuery != "" {
-			slog.Error("tilde serve: --apps-origin must be like https://apps.example.com", "got", o)
+	// --apps-origin and --xpra-origin: another origin than Tilde's own and
+	// each other's (rule 8; D76, D78).
+	seen := map[string]string{}
+	for _, x := range extra {
+		if u, err := url.Parse(x); err == nil {
+			seen[strings.ToLower(u.Host)] = "--allowed-origins"
+		}
+	}
+	for _, o := range []struct {
+		flag string
+		v    *string
+	}{{"--apps-origin", appsOrigin}, {"--xpra-origin", xpraOrigin}} {
+		if *o.v == "" {
+			continue
+		}
+		u, err := url.Parse(*o.v)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
+			slog.Error("tilde serve: "+o.flag+" must be like https://apps.example.com", "got", *o.v)
 			return 2
 		}
-		*appsOrigin = strings.TrimSuffix(o, "/")
-		// Never Tilde's own origin (rule 8): apps would run as Tilde.
-		au, _ := url.Parse(*appsOrigin)
-		for _, x := range extra {
-			if xu, err := url.Parse(x); err == nil && strings.EqualFold(xu.Host, au.Host) {
-				slog.Error("tilde serve: --apps-origin must be another origin than Tilde's own", "got", o)
-				return 2
-			}
+		if other, ok := seen[strings.ToLower(u.Host)]; ok {
+			slog.Error("tilde serve: "+o.flag+" must be another origin than "+other+"'s", "got", *o.v)
+			return 2
 		}
+		seen[strings.ToLower(u.Host)] = o.flag
+		*o.v = strings.TrimSuffix(*o.v, "/")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -142,6 +157,8 @@ func serve(args []string) int {
 		SessionMaxAge:  *lifetime,
 		AppsListen:     *appsListen,
 		AppsOrigin:     *appsOrigin,
+		XpraListen:     *xpraListen,
+		XpraOrigin:     *xpraOrigin,
 		Web:            webui.FS(),
 	})
 	if err != nil {

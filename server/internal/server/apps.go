@@ -2,12 +2,14 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -33,6 +35,16 @@ import (
 // connects through the user's worker, which dials only the user's own
 // ports. The main port turns away /api/ requests from other origins of
 // the site, the app port's pages among them (fetchMetadataCheck).
+//
+// The user's Xpra session (D78) has a port of its own, the next one, with
+// its own cookie: Xpra has no login and can run anything as the user, so
+// no page of a local web app may share its origin.
+
+// The two origins Tilde serves others' pages from.
+const (
+	kindApps = "apps"
+	kindXpra = "xpra"
+)
 
 // appsHandoffTTL is how long a handoff code may wait for its form.
 const appsHandoffTTL = time.Minute
@@ -54,6 +66,8 @@ func randomToken() (string, error) {
 }
 
 type appHandoff struct {
+	// kind is the port it is for: kindApps or kindXpra.
+	kind string
 	// main is the hash of the desktop's token.
 	main string
 	// origin is the desktop's: the form must come from there, and only
@@ -63,7 +77,7 @@ type appHandoff struct {
 }
 
 type appToken struct {
-	main, origin string
+	kind, main, origin string
 }
 
 // appAuth holds handoff codes and app cookies, by hash, in memory. An
@@ -155,8 +169,17 @@ func appsAddress(listen, apps string) (string, int, error) {
 // app port is from the main one (8443 and 8444; through a tunnel that
 // forwards both, 9443 and 9444).
 func (s *Server) appsOrigin(r *http.Request) string {
-	if s.cfg.AppsOrigin != "" {
-		return s.cfg.AppsOrigin
+	return s.originFor(r, kindApps)
+}
+
+// originFor is where browsers reach the app port or the Xpra port.
+func (s *Server) originFor(r *http.Request, kind string) string {
+	override, offset := s.cfg.AppsOrigin, s.appsOffset
+	if kind == kindXpra {
+		override, offset = s.cfg.XpraOrigin, s.xpraOffset
+	}
+	if override != "" {
+		return override
 	}
 	scheme, def := "https", 443
 	if s.cfg.Dev {
@@ -167,13 +190,33 @@ func (s *Server) appsOrigin(r *http.Request) string {
 	if err != nil || perr != nil {
 		host, port = r.Host, def
 	}
-	return scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port+s.appsOffset))
+	return scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port+offset))
+}
+
+// ownOrigin is the origin of a request to the app or Xpra port itself.
+func (s *Server) ownOrigin(r *http.Request, kind string) string {
+	if o := map[string]string{kindApps: s.cfg.AppsOrigin, kindXpra: s.cfg.XpraOrigin}[kind]; o != "" {
+		return o
+	}
+	if s.cfg.Dev {
+		return "http://" + r.Host
+	}
+	return "https://" + r.Host
 }
 
 // handleAppsHandoff gives the desktop a one-time code to post to the app
 // port, and where that is.
 func (s *Server) handleAppsHandoff(w http.ResponseWriter, r *http.Request) {
-	if s.apps == nil {
+	var req struct {
+		For string `json:"for"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	_ = jsonDecode(r, &req) // an empty body is for the app port
+	kind := kindApps
+	if req.For == kindXpra {
+		kind = kindXpra
+	}
+	if s.apps == nil || (kind == kindXpra && !s.xpraOn) {
 		writeJSON(w, http.StatusNotFound, apiError{Error: "local web apps are turned off on this server", Code: "apps_off"})
 		return
 	}
@@ -189,7 +232,7 @@ func (s *Server) handleAppsHandoff(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Never Tilde's own origin (rule 8): a misconfigured --apps-origin.
-		if apps := s.appsOrigin(r); apps == r.Header.Get("Origin") {
+		if apps := s.originFor(r, kind); apps == r.Header.Get("Origin") || (kind == kindXpra && apps == s.appsOrigin(r)) {
 			slog.Error("local web apps: --apps-origin is Tilde's own origin; refusing", "origin", apps)
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "local web apps are misconfigured on this server", Code: "apps_misconfigured"})
 			return
@@ -205,7 +248,7 @@ func (s *Server) handleAppsHandoff(w http.ResponseWriter, r *http.Request) {
 		// One browser cannot use up everyone's codes.
 		full := len(s.apps.codes) >= maxAppHandoffs || mine >= maxHandoffsToken
 		if !full {
-			s.apps.codes[hashToken(code)] = appHandoff{main: main, origin: r.Header.Get("Origin"),
+			s.apps.codes[hashToken(code)] = appHandoff{kind: kind, main: main, origin: r.Header.Get("Origin"),
 				expires: s.tokens.now().Add(appsHandoffTTL)}
 		}
 		s.apps.mu.Unlock()
@@ -213,20 +256,33 @@ func (s *Server) handleAppsHandoff(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusTooManyRequests, apiError{Error: "too many apps opening at once; try again", Code: "busy"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"code": code, "origin": s.appsOrigin(r)})
+		writeJSON(w, http.StatusOK, map[string]string{"code": code, "origin": s.originFor(r, kind)})
 	}
 }
 
-// appsNext is where an app's handoff may send the browser: a path on the
-// app port, never another site.
-var appsNext = regexp.MustCompile(`^/(abs)?proxy/[1-9][0-9]{0,4}/[^\\\s]*$`)
+// appsNext is where a handoff may send the browser: a path on that port,
+// never another site.
+var appsNext = map[string]*regexp.Regexp{
+	kindApps: regexp.MustCompile(`^/(abs)?proxy/[1-9][0-9]{0,4}/[^\\\s]*$`),
+	kindXpra: regexp.MustCompile(`^/xpra/[^\\\s]*$`),
+}
 
 // appsHandler serves the app port.
-func (s *Server) appsHandler() http.Handler {
+func (s *Server) appsHandler() http.Handler { return s.appHandler(kindApps) }
+
+// xpraHandler serves the Xpra port: the user's Xpra session (D78), its
+// HTML5 client and its WebSocket, and nothing else.
+func (s *Server) xpraHandler() http.Handler { return s.appHandler(kindXpra) }
+
+func (s *Server) appHandler(kind string) http.Handler {
 	m := http.NewServeMux()
-	m.HandleFunc("POST /_tilde/enter", s.handleAppEnter)
-	m.HandleFunc("/proxy/{port}/{rest...}", s.handleAppProxy(false))
-	m.HandleFunc("/absproxy/{port}/{rest...}", s.handleAppProxy(true))
+	m.HandleFunc("POST /_tilde/enter", s.handleAppEnter(kind))
+	if kind == kindXpra {
+		m.HandleFunc("/xpra/{rest...}", s.handleAppProxy(kind, false))
+	} else {
+		m.HandleFunc("/proxy/{port}/{rest...}", s.handleAppProxy(kind, false))
+		m.HandleFunc("/absproxy/{port}/{rest...}", s.handleAppProxy(kind, true))
+	}
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		appPage(w, http.StatusNotFound, "Nothing here", "Open local web apps from Tilde’s Web Apps window.")
 	})
@@ -234,8 +290,12 @@ func (s *Server) appsHandler() http.Handler {
 }
 
 // handleAppEnter takes a handoff code from the desktop's form, sets the
-// app cookie and goes on to the app.
-func (s *Server) handleAppEnter(w http.ResponseWriter, r *http.Request) {
+// port's cookie and goes on to the app.
+func (s *Server) handleAppEnter(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { s.enterApp(w, r, kind) }
+}
+
+func (s *Server) enterApp(w http.ResponseWriter, r *http.Request, kind string) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	if err := r.ParseForm(); err != nil {
 		appPage(w, http.StatusBadRequest, "Invalid request", "Open the app again from Tilde.")
@@ -244,13 +304,13 @@ func (s *Server) handleAppEnter(w http.ResponseWriter, r *http.Request) {
 	next := r.PostForm.Get("next")
 	ho, ok := s.apps.take(r.PostForm.Get("code"), s.tokens.now())
 	switch {
-	case !ok:
+	case !ok || ho.kind != kind:
 		appPage(w, http.StatusUnauthorized, "Open the app again", "This link has expired. Open the app again from Tilde.")
 		return
 	case !s.fromDesktop(r, ho):
 		appPage(w, http.StatusForbidden, "Refused", "Apps open only from the Tilde that asked for them.")
 		return
-	case !appsNext.MatchString(next):
+	case !appsNext[kind].MatchString(next):
 		appPage(w, http.StatusBadRequest, "Invalid request", "Open the app again from Tilde.")
 		return
 	}
@@ -268,17 +328,17 @@ func (s *Server) handleAppEnter(w http.ResponseWriter, r *http.Request) {
 		appPage(w, http.StatusInternalServerError, "Error", "Try again.")
 		return
 	}
-	s.apps.add(hashToken(value), appToken{main: ho.main, origin: ho.origin})
-	http.SetCookie(w, &http.Cookie{Name: s.appCookie(), Value: value, Path: "/", HttpOnly: true,
+	s.apps.add(hashToken(value), appToken{kind: kind, main: ho.main, origin: ho.origin})
+	http.SetCookie(w, &http.Cookie{Name: s.appCookieFor(kind), Value: value, Path: "/", HttpOnly: true,
 		Secure: s.secure, SameSite: http.SameSiteStrictMode})
 	// Another user used apps in this browser: what their apps stored on the
 	// app port (storage, service workers, cache) must not serve this one's.
 	// Never "cookies": that would clear Tilde's too.
 	owner := hashToken("app-owner:" + t.User)[:16]
-	if c, err := r.Cookie(s.appCookie() + "-owner"); err == nil && c.Value != owner {
+	if c, err := r.Cookie(s.appCookieFor(kind) + "-owner"); err == nil && c.Value != owner {
 		w.Header().Set("Clear-Site-Data", `"storage", "cache"`)
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.appCookie() + "-owner", Value: owner, Path: "/", MaxAge: 400 * 24 * 3600,
+	http.SetCookie(w, &http.Cookie{Name: s.appCookieFor(kind) + "-owner", Value: owner, Path: "/", MaxAge: 400 * 24 * 3600,
 		HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode})
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
@@ -307,7 +367,16 @@ func (s *Server) fromDesktop(r *http.Request, ho appHandoff) bool {
 	}
 }
 
-func (s *Server) appCookie() string { return s.cookie + "-app" }
+func (s *Server) appCookie() string { return s.appCookieFor(kindApps) }
+
+// appCookieFor is the cookie of the app port or the Xpra port: cookies
+// are per host, so each needs its own name.
+func (s *Server) appCookieFor(kind string) string {
+	if kind == kindXpra {
+		return s.cookie + "-xpra"
+	}
+	return s.cookie + "-app"
+}
 
 // tildeCookie names the cookies the app port keeps from apps: Tilde's own.
 func (s *Server) tildeCookie(name string) bool {
@@ -320,12 +389,17 @@ var errAppNotListening = errors.New("not listening")
 // handleAppProxy passes a request to the user's app on {port}: with the
 // prefix taken off (/proxy/, for apps that use relative links), or kept
 // (/absproxy/, for apps told their base path).
-func (s *Server) handleAppProxy(keepPrefix bool) http.HandlerFunc {
+func (s *Server) handleAppProxy(kind string, keepPrefix bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		port, err := strconv.Atoi(r.PathValue("port"))
-		if err != nil || port < 1 || port > 65535 {
-			appPage(w, http.StatusNotFound, "No such app", "That is not a port.")
-			return
+		// Port 0 stands for the user's Xpra session.
+		port := 0
+		if kind == kindApps {
+			var err error
+			port, err = strconv.Atoi(r.PathValue("port"))
+			if err != nil || port < 1 || port > 65535 {
+				appPage(w, http.StatusNotFound, "No such app", "That is not a port.")
+				return
+			}
 		}
 		// Another site's pages, or a page elsewhere on this site doing more
 		// than opening the app, do not get to use the app cookie.
@@ -339,12 +413,18 @@ func (s *Server) handleAppProxy(keepPrefix bool) http.HandlerFunc {
 				return
 			}
 		}
+		// A WebSocket only from this port's own pages.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") && r.Header.Get("Origin") != s.ownOrigin(r, kind) {
+			appPage(w, http.StatusForbidden, "Refused", "Another page cannot use your apps.")
+			return
+		}
 		var at appToken
 		found := false
-		if c, err := r.Cookie(s.appCookie()); err == nil {
+		if c, err := r.Cookie(s.appCookieFor(kind)); err == nil {
 			s.apps.mu.Lock()
 			at, found = s.apps.tokens[hashToken(c.Value)]
 			s.apps.mu.Unlock()
+			found = found && at.kind == kind
 		}
 		var t Token
 		if found {
@@ -374,6 +454,9 @@ func (s *Server) handleAppProxy(keepPrefix bool) http.HandlerFunc {
 
 func (s *Server) appProxy(us *UserSession, port int, keepPrefix bool, desktop string) http.Handler {
 	prefix := "/proxy/" + strconv.Itoa(port)
+	if port == 0 {
+		prefix = "/xpra"
+	}
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(&url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(port)})
@@ -415,9 +498,13 @@ func (s *Server) appProxy(us *UserSession, port int, keepPrefix bool, desktop st
 			appResponseHeaders(resp.Header, desktop, s.tildeCookie)
 			return nil
 		},
-		Transport:     s.appTransport(us),
+		Transport:     s.appTransport(us, port == 0),
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if errors.Is(err, errAppNotListening) && port == 0 {
+				appPage(w, http.StatusBadGateway, "Host apps are not running", "Open Host Apps again from Tilde’s menu.")
+				return
+			}
 			if errors.Is(err, errAppNotListening) {
 				appPage(w, http.StatusBadGateway, "Nothing on port "+strconv.Itoa(port),
 					"None of your programs listens on this port now.")
@@ -426,7 +513,11 @@ func (s *Server) appProxy(us *UserSession, port int, keepPrefix bool, desktop st
 			if !errors.Is(err, context.Canceled) {
 				slog.Info("local web app", "user", us.User, "port", port, "err", err)
 			}
-			appPage(w, http.StatusBadGateway, "The app does not answer", "Port "+strconv.Itoa(port)+": "+err.Error())
+			what := "Port " + strconv.Itoa(port)
+			if port == 0 {
+				what = "Xpra"
+			}
+			appPage(w, http.StatusBadGateway, "The app does not answer", what+": "+err.Error())
 		},
 	}
 }
@@ -475,13 +566,17 @@ func appResponseHeaders(h http.Header, desktop string, tildeCookie func(string) 
 	h.Add("Content-Security-Policy", "frame-ancestors "+ancestors)
 }
 
-// appTransport is the user's connection pool to their apps, through the
-// worker.
-func (s *Server) appTransport(us *UserSession) http.RoundTripper {
+// appTransport is the user's connection pool to their apps, or to their
+// Xpra session, through the worker.
+func (s *Server) appTransport(us *UserSession, xpra bool) http.RoundTripper {
 	us.appsMu.Lock()
 	defer us.appsMu.Unlock()
-	if us.apps == nil {
-		us.apps = &http.Transport{
+	t := &us.apps
+	if xpra {
+		t = &us.xpra
+	}
+	if *t == nil {
+		*t = &http.Transport{
 			DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
 				_, p, _ := net.SplitHostPort(addr)
 				port, err := strconv.Atoi(p)
@@ -494,12 +589,17 @@ func (s *Server) appTransport(us *UserSession) http.RoundTripper {
 			IdleConnTimeout:     60 * time.Second,
 			DisableCompression:  true,
 		}
+		if xpra {
+			// Xpra's client loads dozens of files at once, which would fill
+			// Xpra's queue: some connections at a time.
+			(*t).MaxConnsPerHost = 16
+		}
 	}
-	return us.apps
+	return *t
 }
 
 // dialWorkerApp opens a stream to the user's worker and has it connect to
-// port (the worker's /internal/dial).
+// port, or for 0 the user's Xpra session (the worker's /internal/dial).
 func dialWorkerApp(ctx context.Context, us *UserSession, port int) (net.Conn, error) {
 	if us.conn == nil {
 		return nil, errors.New("no worker")
@@ -511,13 +611,21 @@ func dialWorkerApp(ctx context.Context, us *UserSession, port int) (net.Conn, er
 	if dl, ok := ctx.Deadline(); ok {
 		stream.SetDeadline(dl)
 	}
-	fmt.Fprintf(stream, "GET /internal/dial?port=%d HTTP/1.1\r\nHost: worker\r\nConnection: Upgrade\r\nUpgrade: tilde-tcp\r\n%s: 1\r\n\r\n",
-		port, protocol.InternalHeader)
+	target := fmt.Sprintf("port=%d", port)
+	if port == 0 {
+		target = "xpra=1"
+	}
+	fmt.Fprintf(stream, "GET /internal/dial?%s HTTP/1.1\r\nHost: worker\r\nConnection: Upgrade\r\nUpgrade: tilde-tcp\r\n%s: 1\r\n\r\n",
+		target, protocol.InternalHeader)
 	br := bufio.NewReader(stream)
 	resp, err := http.ReadResponse(br, nil)
 	if err != nil {
 		stream.Close()
 		return nil, err
+	}
+	var why []byte
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		why, _ = io.ReadAll(io.LimitReader(resp.Body, 512))
 	}
 	resp.Body.Close()
 	switch resp.StatusCode {
@@ -529,7 +637,7 @@ func dialWorkerApp(ctx context.Context, us *UserSession, port int) (net.Conn, er
 		return nil, errAppNotListening
 	}
 	stream.Close()
-	return nil, fmt.Errorf("the worker answered %s", resp.Status)
+	return nil, fmt.Errorf("the worker answered %s: %s", resp.Status, bytes.TrimSpace(why))
 }
 
 // bufferedConn reads what the response reader already buffered first.

@@ -1199,6 +1199,39 @@ items became a neutral highlight with an accent underline, as Mint-Y has
 them, instead of a green-tinted one. Not done: accent-coloured folder
 icons (another ten icon sets), Mint-L and Mint-X.
 
+**D78 — Host apps through Xpra: its own client first, Tilde's later** (2026-10-29, accepted; carries out D26 and D71)
+In two stages, as the user chose. Stage 1: the menu lists the host's
+`.desktop` apps (the user's own first; hidden ones, terminal ones and
+those for one desktop only left out) and launches them in the user's
+Xpra session. Xpra's own HTML5 client shows the session in one Tilde
+window, Host Apps; the host's windows float inside it. Stage 2: Tilde's
+own client of Xpra's protocol, so each host window is a Tilde window; it
+reuses stage 1's session, launch and socket.
+
+The session: the worker starts Xpra when the desktop asks (the Host
+Apps window or a launch, on Tilde's own origin), never because something
+connected; `--bind` on a socket in the user's runtime folder with
+peer-credential auth (no TCP port, rule 5), its output in a log (rule
+4), commands, files, URLs, printing and server scripts turned off in
+Xpra itself. The worker runs the apps on Xpra's display with their argv
+as is: `xpra control start` reads an app's own options as its own. Xpra
+and the apps run in one systemd user slice, `tilde-xpra.slice`, stopped
+at logout (as a desktop's apps end with it) and before the next start
+(what a crashed worker left); Xvfb and Xpra's helpers leave its process
+group, so a group kill would miss them.
+
+Xpra's port: Xpra has no login and can run anything as the user, so it
+is served from a port of its own, the one after the app port (8445 by
+default; `--xpra-listen`, `--xpra-origin`), with its own handoff and
+cookie, not from the app port: there, any local web app's pages could
+have driven it (a security review found this). Both ports take a
+WebSocket only from their own origin. Xpra comes from xpra.org's
+packages, the Debian family's being too old and without the HTML5
+client; xpra.org's package also enables a system proxy on TCP 14500,
+which Tilde does not use and the docs say to turn off. Rejected for now:
+going straight to stage 2 (weeks before anything shows), Broadway (GTK
+apps only).
+
 ---
 
 ## Open decisions

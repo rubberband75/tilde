@@ -64,6 +64,7 @@ type UserSession struct {
 	// apps is the connection pool to the user's local web apps (D76).
 	appsMu sync.Mutex
 	apps   *http.Transport
+	xpra   *http.Transport
 }
 
 // Done is closed when the session has ended.
