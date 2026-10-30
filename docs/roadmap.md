@@ -108,7 +108,16 @@ to; tick items off as they land.
 ## Phase 7 — Remote windows
 
 - [x] Xpra, stage 1 (D78): the host's `.desktop` apps in the menu, run in the user's Xpra session (started on first use, on a socket in the runtime folder, stopped at logout) and shown by Xpra's own HTML5 client in the Host Apps window, from the app port
-- [ ] Xpra, stage 2 (D78): Tilde's own Xpra client, so each host window is a Tilde window (title bar, snapping, window list)
+- [ ] Xpra, stage 2 (D78, D80): Tilde's own Xpra client, so each host window is a Tilde window (title bar, snapping, window list). The plan and its steps: `docs/xpra-client.md`
+  - [ ] 1. Connection and protocol: the worker's `/api/v1/host-apps/connect` relay; framing, LZ4, rencodeplus; hello, ping; the packet name table
+  - [ ] 2. Windows appear: a setting chooses Tilde's client; host windows as Tilde windows with title and icon; drawing (RGB, PNG, JPEG, WebP, scroll) in a Worker, acknowledged; reconnect on reload and unlock
+  - [ ] 3. Input: pointer, wheel, keyboard and layout, focus, cursors
+  - [ ] 4. Window management: moves, resizes, maximize, tiling, minimize told to Xpra and back; size constraints; the X screen follows the browser; dialogs
+  - [ ] 5. Popups: menus, dropdowns and tooltips in a layer of their own, placed by their parent
+  - [ ] 6. Clipboard both ways, sound, the bell
+  - [ ] 7. Header-bar apps: frameless windows, moved and resized by the app's own title bar
+  - [ ] 8. Speed: video encodings through WebCodecs, drawing in the Worker, HiDPI
+  - [ ] 9. Tilde's client by default: several browsers take over cleanly; stage 1's window, the Xpra port and `--html=on` removed
 - [x] Sound applet (D55, D79): the host's outputs, volume, mute and the apps playing, through PipeWire's or PulseAudio's `pactl`; host apps' sound plays in the browser through Xpra
 - [ ] Explore game streaming (Steam): WebRTC from the host GPU, gamepad and pointer lock (open decision)
 

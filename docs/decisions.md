@@ -1250,6 +1250,32 @@ apps are silent. Rejected: `wpctl` (no machine-readable output), the
 host's own sound server for host apps (their sound would play at the
 machine).
 
+**D80 — Tilde's Xpra client: on Tilde's origin, in nine steps** (2026-10-30, accepted; plans D78's stage 2)
+The plan is `docs/xpra-client.md`. The client is Tilde's own TypeScript
+(protocol, decoding, one `<canvas>` per host window in a hidden app),
+with xpra-html5 as a reference, not a base: its client is one page that
+draws every window inside itself, around jQuery. It runs on Tilde's own
+origin, one connection per browser, through a worker endpoint that
+relays bytes to the session's socket in Xpra's own protocol, not
+WebSocket or HTTP: the browser frames the packets. Tilde's origin can
+already run commands, so reaching Xpra from it gives the browser nothing
+new; what Xpra sends (titles, icons, cursors, clipboard, pixels) is
+untrusted, shown as text and decoded images only, with bounded sizes,
+and the CSP stays as it is (the browser's own decoders, no
+WebAssembly). The X screen is Tilde's desktop, and a window's position
+is its content area's, so apps' menus land where they should; popups
+are drawn in a layer of their own, placed by their parent. Host windows
+are not saved with the layout: Xpra sends them again on reconnecting.
+Xpra 6's packet names come first, through a table, as Xpra 7 renamed
+them. Code copied or ported from xpra-html5 (only the keysym tables are
+planned) stays MPL-2.0 at file level. Until the last step, a setting
+chooses Tilde's client and stage 1 stays the default; then stage 1, the
+Xpra port and `--html=on` go. Rejected: running xpra-html5's client on
+Tilde's origin (its code on the origin that holds terminals, and still
+one page of windows), a frame per window from the Xpra port (Xpra
+drives one client per session), a WebSocket from the worker to Xpra
+(framing in two places for nothing).
+
 ---
 
 ## Open decisions
