@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // Host apps through Xpra (D26, D71, D78): the worker starts the user's
@@ -312,6 +315,62 @@ func (x *xpraSession) dial(ctx context.Context) (net.Conn, error) {
 		case <-time.After(100 * time.Millisecond):
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		}
+	}
+}
+
+// xpraMessageLimit bounds one WebSocket message from the browser to Xpra;
+// the client splits what it sends into smaller ones (D80).
+const xpraMessageLimit = 1 << 20
+
+// xpraWriteTimeout ends a relay whose Xpra stopped reading: otherwise a
+// browser that left would go unnoticed while both directions block.
+const xpraWriteTimeout = time.Minute
+
+// relayXpra copies bytes between the browser's WebSocket and a connection
+// to the session's socket until either ends, then closes both. It parses
+// nothing: messages are pieces of Xpra's byte stream, not packets.
+func relayXpra(c *websocket.Conn, xc net.Conn) {
+	defer c.CloseNow()
+	c.SetReadLimit(xpraMessageLimit)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// The browser gone: unblock the read from Xpra below.
+	stop := context.AfterFunc(ctx, func() { xc.Close() })
+	defer stop()
+	defer xc.Close()
+
+	go func() {
+		defer cancel()
+		for {
+			typ, b, err := c.Read(ctx)
+			if err != nil {
+				return
+			}
+			if typ != websocket.MessageBinary {
+				c.Close(websocket.StatusUnsupportedData, "binary messages only")
+				return
+			}
+			xc.SetWriteDeadline(time.Now().Add(xpraWriteTimeout))
+			if _, err := xc.Write(b); err != nil {
+				return
+			}
+		}
+	}()
+
+	buf := make([]byte, 256<<10)
+	for {
+		n, err := xc.Read(buf)
+		if n > 0 {
+			if werr := c.Write(ctx, websocket.MessageBinary, buf[:n]); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				c.Close(websocket.StatusNormalClosure, "the session ended")
+			}
+			return
 		}
 	}
 }

@@ -56,6 +56,7 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
                         settings/, web-apps/, xpra/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus,
                         folderSiblings (a file's folder, for viewers)
+  src/xpra/             Tilde's Xpra client (D80): protocol, framing, rencodeplus, LZ4
   src/styles/           base.css + themes/mint-y.css (design tokens: modes, accents; D77)
   e2e/                  Playwright UI tests (run by make e2e-vm)
   public/icons/         bundled Mint-Y icons (scripts/fetch-icons.sh)

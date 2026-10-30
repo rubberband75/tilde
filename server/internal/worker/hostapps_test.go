@@ -1,9 +1,11 @@
 package worker
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 func TestExecArgs(t *testing.T) {
@@ -85,8 +89,9 @@ func TestListHostApps(t *testing.T) {
 }
 
 // fakeXpra stands in for xpra: "start --bind=S,..." says display 7 on
-// fd 3 and listens on S until stopped; everything is logged. systemd-run
-// is missing, so nothing goes in a slice.
+// fd 3 and listens on S until stopped, echoing what each connection
+// sends; everything is logged. systemd-run is missing, so nothing goes in
+// a slice.
 func fakeXpra(t *testing.T) (log string) {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
@@ -103,10 +108,16 @@ start)
   echo 7 >&3
   exec 3>&-
   mkdir -p "$XDG_RUNTIME_DIR/xpra/7/pulse" && touch "$XDG_RUNTIME_DIR/xpra/7/pulse/native"
-  exec python3 -c 'import socket,sys
+  exec python3 -c 'import socket,sys,threading
+def echo(c):
+    while True:
+        b=c.recv(65536)
+        if not b: break
+        c.sendall(b)
+    c.close()
 s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(8)
 while True:
-    c,_=s.accept(); c.close()' "$sock";;
+    c,_=s.accept(); threading.Thread(target=echo,args=(c,),daemon=True).start()' "$sock";;
 stop) pkill -f "socket.AF_UNIX" -P $PPID 2>/dev/null; exit 0;;
 esac
 `), 0o755)
@@ -196,5 +207,72 @@ func TestHostAppsLaunch(t *testing.T) {
 	rec = serve(t, w, "GET", "/api/v1/host-apps", "")
 	if !strings.Contains(rec.Body.String(), `"available":false`) {
 		t.Fatalf("without Xpra: %s", rec.Body)
+	}
+}
+
+// TestHostAppsConnect: Tilde's own Xpra client (D80) reaches the session
+// through a WebSocket that the worker relays to its socket, bytes as they
+// come, whatever the messages' boundaries; it never starts the session,
+// and ends with it.
+func TestHostAppsConnect(t *testing.T) {
+	fakeXpra(t)
+	w := driveWorker(t, nil)
+	t.Cleanup(w.xpra.stop)
+	srv := httptest.NewServer(w.Handler())
+	t.Cleanup(srv.Close)
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/v1/host-apps/connect"
+	ctx := t.Context()
+
+	if _, res, err := websocket.Dial(ctx, url, nil); err == nil || res == nil || res.StatusCode != http.StatusNotFound {
+		t.Fatalf("before the session: %v %v", res, err)
+	}
+	if rec := serve(t, w, "POST", "/api/v1/host-apps/session", ``); rec.Code != http.StatusNoContent {
+		t.Fatalf("session: %d %s", rec.Code, rec.Body)
+	}
+	// A plain GET, which the server lets through without an Origin check,
+	// does not reach Xpra.
+	if rec := serve(t, w, "GET", "/api/v1/host-apps/connect", ``); rec.Code != http.StatusUpgradeRequired {
+		t.Fatalf("plain GET: %d %s", rec.Code, rec.Body)
+	}
+
+	c, _, err := websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	c.SetReadLimit(1 << 20) // the relay sends up to 256 KiB at a time
+	sent := append([]byte("P\x10\x00\x00"), bytes.Repeat([]byte("pixels"), 100_000)...)
+	for _, part := range [][]byte{sent[:3], sent[3:70_000], sent[70_000:]} {
+		if err := c.Write(ctx, websocket.MessageBinary, part); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []byte
+	for len(got) < len(sent) {
+		typ, b, err := c.Read(ctx)
+		if err != nil || typ != websocket.MessageBinary {
+			t.Fatalf("read after %d bytes: %v %v", len(got), typ, err)
+		}
+		got = append(got, b...)
+	}
+	if !bytes.Equal(got, sent) {
+		t.Fatalf("relayed %d bytes, not the %d sent", len(got), len(sent))
+	}
+
+	// Text is not Xpra's.
+	c.Write(ctx, websocket.MessageText, []byte("hello"))
+	if _, _, err := c.Read(ctx); websocket.CloseStatus(err) != websocket.StatusUnsupportedData {
+		t.Fatalf("after text: %v", err)
+	}
+
+	// The session ending ends the connection.
+	c, _, err = websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	w.xpra.stop()
+	if _, _, err := c.Read(ctx); websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+		t.Fatalf("after the session: %v", err)
 	}
 }

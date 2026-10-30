@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // The host's graphical apps, from their .desktop files (the freedesktop
@@ -279,4 +282,39 @@ func (w *Worker) handleHostAppLaunch(rw http.ResponseWriter, r *http.Request) {
 	default:
 		rw.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// handleHostAppsConnect connects Tilde's own Xpra client (D80) to the
+// user's Xpra session: the browser frames Xpra's packets itself, and the
+// worker relays the bytes, in WebSocket messages of any size, to and from
+// the session's socket. Like a dial for the Xpra port, it never starts the
+// session; the desktop does (session, launch).
+//
+// The Origin check happens in the main server before the upgrade is
+// proxied here.
+func (w *Worker) handleHostAppsConnect(rw http.ResponseWriter, r *http.Request) {
+	// A plain GET passes the server without an Origin check: it must not
+	// make the worker connect to Xpra.
+	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		writeJSON(rw, http.StatusUpgradeRequired, apiError{Error: "a WebSocket only", Code: "upgrade_required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	xc, err := w.xpra.dial(ctx)
+	cancel()
+	switch {
+	case errors.Is(err, errXpraNotRunning):
+		writeJSON(rw, http.StatusNotFound, apiError{Error: err.Error(), Code: "not_running"})
+		return
+	case err != nil:
+		slog.Info("worker: connect to Xpra", "err", err)
+		writeJSON(rw, http.StatusBadGateway, apiError{Error: err.Error(), Code: "unreachable"})
+		return
+	}
+	c, err := websocket.Accept(rw, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	if err != nil {
+		xc.Close()
+		return
+	}
+	relayXpra(c, xc)
 }

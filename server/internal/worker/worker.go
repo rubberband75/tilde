@@ -179,6 +179,7 @@ func (w *Worker) Handler() http.Handler {
 	m.HandleFunc("GET /api/v1/host-apps", w.handleHostApps)
 	m.HandleFunc("POST /api/v1/host-apps/launch", w.handleHostAppLaunch)
 	m.HandleFunc("POST /api/v1/host-apps/session", w.handleHostAppsSession)
+	m.HandleFunc("GET /api/v1/host-apps/connect", w.handleHostAppsConnect)
 	m.HandleFunc("GET /api/v1/notifications", w.handleNotifications)
 	m.HandleFunc("GET /api/v1/notifications/image", w.handleNotificationImage)
 	m.HandleFunc("POST /api/v1/notifications/action", w.handleNotificationAction)

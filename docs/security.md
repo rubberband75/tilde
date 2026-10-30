@@ -170,6 +170,21 @@ bug in Tilde can never give more than the account already has.
   xpra.org's package enables a system proxy listening on TCP 14500 on
   every address; Tilde does not use it: turn it off (`sudo systemctl
   disable --now xpra-server.socket`).
+- Tilde's own Xpra client (D80, being built): Tilde's origin reaches the
+  session through `/api/v1/host-apps/connect`, behind the session cookie,
+  the Origin check and the lock like any `/api/v1/` WebSocket. That
+  origin can already run commands (terminals), so it gains nothing; local
+  web apps, on the app port, have no way to it. The worker relays bytes
+  and parses none. What Xpra sends is untrusted, as host apps choose it:
+  the client checks every length (`src/xpra/framing.ts`, `rencode.ts`,
+  `lz4.ts`), bounds a packet to 64 MiB decompressed (chunks included), a
+  million values and 100 levels of nesting, and builds decoded dicts
+  without a prototype. Later steps keep to the rules in
+  `docs/xpra-client.md` ("Security"): text shown only as text, images only
+  decoded as images, the CSP unchanged. The client takes the session over
+  from another (`steal`), as the Host Apps window does: any of the user's
+  Tilde tabs may take it from another, by design. The relay gives up on
+  an Xpra that stops reading for a minute.
 - Sound (D79): the worker runs `pactl` as the user, with only output
   names and stream ids the sound server has just listed, as arguments of
   their own. Host apps play to the Xpra session's own sound server, sent

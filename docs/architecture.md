@@ -113,7 +113,9 @@ could already do.
   D78): lists the host's `.desktop` apps, starts Xpra on a socket in the
   runtime folder when the desktop asks, runs apps on its display, all in
   the `tilde-xpra.slice` user slice, connects the Xpra port's `/xpra/` to
-  it, and stops the slice at logout.
+  it, and stops the slice at logout. For Tilde's own Xpra client (D80),
+  `/api/v1/host-apps/connect` relays a WebSocket's bytes to the socket,
+  unparsed.
 - Lists the user's listening TCP ports for Web Apps (`apps.go`, D76) and
   connects the server to one of them on request (`/internal/dial`, an
   upgraded request that then carries the app's bytes): only ports a
@@ -297,6 +299,12 @@ App.vue ── LoginScreen (logged out)
   socket reconnects as soon as a lock closes it) switches the session store
   to `locked`; the desktop is unmounted and its stores reset, as on logout,
   and the window layout comes back from `localStorage` on unlock.
+- **Tilde's Xpra client** (D80, `docs/xpra-client.md`, being built):
+  `src/xpra/` speaks Xpra's protocol with no DOM of its own: `framing.ts`
+  (headers, chunks, LZ4 through `lz4.ts`), `rencode.ts` (rencodeplus),
+  `packets.ts` (Xpra 7's names read as Xpra 6's) and `client.ts` (hello,
+  pings, a `Transport` to send and receive bytes on: `websocket.ts`, or a
+  test's).
 - **Font** (D56): the bundled Ubuntu font in `src/assets/fonts`, its
   `@font-face` rules and size-adjusted fallbacks in `src/styles/fonts.css`
   (both made by `make fonts`), used through `--font-ui`.

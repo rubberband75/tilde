@@ -222,8 +222,10 @@ on the port: `502`; each a small page.
 | GET | `/api/v1/host-apps` | `{available, apps: HostApp[]}`, by name: the host's `.desktop` apps (`$XDG_DATA_HOME` first, then `$XDG_DATA_DIRS`; hidden, `Terminal=true`, `OnlyShowIn` and missing `TryExec` ones left out). `HostApp`: `{id, name, comment?, icon?, iconPath?, category}`; `id` is the desktop file ID, `iconPath` the icon found in hicolor or pixmaps, `category` the menu's. `available` is false without Xpra and xpra-html5 (or a runtime folder), and the list is then empty |
 | POST | `/api/v1/host-apps/launch` | `{id}` → `204`: the app's `Exec` (arguments with field codes dropped) runs as argv, without a shell, on the user's Xpra session's display, the session started first if need be (on `$XDG_RUNTIME_DIR/tilde/xpra.sock`). `404 not_found`, `404 no_xpra`, `502 launch_failed` |
 | POST | `/api/v1/host-apps/session` | → `204`: starts the session, for the Host Apps window. `404 no_xpra`, `502 start_failed` |
+| GET (WebSocket) | `/api/v1/host-apps/connect` | Tilde's own Xpra client (D80): binary messages carry Xpra's byte stream both ways, relayed to and from the running session's socket as they come (a message is a piece of the stream, not a packet; at most 1 MiB from the browser). Text messages close it (`1003`); the session ending closes it (`1000`). Does not start the session: `404 not_running`, `502 unreachable` before the upgrade |
 
-The session is shown by Xpra's HTML5 client at `/xpra/index.html` on the
+Until Tilde's own client is done (`docs/xpra-client.md`), the session is
+shown by Xpra's HTML5 client at `/xpra/index.html` on the
 Xpra port (after a handoff `for: "xpra"`), which reaches the socket
 through the worker; only these two endpoints start it. It ends when the
 session does.

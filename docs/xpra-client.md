@@ -172,9 +172,10 @@ spelt out here and in `docs/security.md` as the steps land.
   is only ever shown as text (Vue interpolation, never `v-html`);
   icons, cursors and frames are decoded as images (`createImageBitmap`),
   never put into markup; a cursor becomes a `data:image/png;base64` URL
-  built by Tilde from bytes, and only after it decodes. Sizes are bound
-  (windows, icon and cursor sizes, draw rectangles inside their window,
-  chunks, packet length), so a host app cannot use up the tab's memory.
+  built by Tilde from bytes, and only after it decodes. Sizes are bound:
+  a packet to 64 MiB decompressed and a million values (step 1), and as
+  the steps land, windows, icon and cursor sizes, and draw rectangles
+  inside their window, so a host app cannot use up the tab's memory.
 - **The CSP stays as it is.** Decoding uses the browser's own decoders
   (images, WebCodecs) in a Worker loaded from `'self'`: no WebAssembly,
   no `wasm-unsafe-eval`, no `blob:` scripts.
