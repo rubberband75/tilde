@@ -247,10 +247,10 @@ pleasant; 8 makes them fast; 9 tidies up.
 
 ## Open questions
 
-- **Which Xpra.** The VM installs xpra.org's current stable packages;
-  step 1 records which version that is (and the user's laptop's), and
-  whether Tilde should require 6, 7 or both. The packet table covers
-  both either way.
+- **Which Xpra.** The VM's xpra.org packages and the user's laptop both
+  run Xpra 6.5 (step 1 saw it say so), so Tilde is built against 6.5
+  first. Whether to require 6, 7 or both is still open; the packet table
+  covers both either way.
 - **Closing a menu from outside.** Xpra 6 has no packet for it (Xpra 8
   adds `window-dismiss`); step 5 finds out what works.
 - **HiDPI**: scaling the X screen or the apps (step 8).
