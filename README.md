@@ -65,11 +65,13 @@ your machine (amd64 or arm64) from the
 with `make deb`:
 
 ```bash
-sudo apt install ./tilde_*_arm64.deb
+sudo apt install ./tilde-desktop_*_arm64.deb
 ```
 
-The package starts Tilde and says how to open it. From a source tree
-instead:
+The package is `tilde-desktop` (`tilde`, in Debian and Ubuntu, is an
+unrelated text editor; both install `/usr/bin/tilde`, so installing one
+removes the other). It starts Tilde and says how to open it. From a source
+tree instead:
 
 ```bash
 make install                      # binary, PAM file, systemd unit, under /usr/local

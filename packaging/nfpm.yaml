@@ -2,7 +2,9 @@
 # "make install" puts in place. TILDE_VERSION and TILDE_ARCH come from the
 # Makefile, as does TILDE_BIN, the binary: built for TILDE_ARCH (cgo, for
 # PAM).
-name: tilde
+# Not "tilde": Debian and Ubuntu have a text editor of that name at a higher
+# version, which apt would install over this package (D81).
+name: tilde-desktop
 arch: ${TILDE_ARCH}
 platform: linux
 version: ${TILDE_VERSION}
@@ -24,6 +26,13 @@ depends:
   - libpam0g
   - systemd
   - dbus
+# Both own /usr/bin/tilde. Replaces takes over from an installed "tilde",
+# whether the editor or this package under its old name; it is not
+# "provides": this is not the editor.
+conflicts:
+  - tilde
+replaces:
+  - tilde
 # Used when present (docs/development.md, "Host requirements").
 recommends:
   - dbus-user-session
@@ -57,11 +66,11 @@ contents:
     file_info:
       mode: 0644
   - src: packaging/deb/copyright
-    dst: /usr/share/doc/tilde/copyright
+    dst: /usr/share/doc/tilde-desktop/copyright
     file_info:
       mode: 0644
   - src: README.md
-    dst: /usr/share/doc/tilde/README.md
+    dst: /usr/share/doc/tilde-desktop/README.md
     file_info:
       mode: 0644
 

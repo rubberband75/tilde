@@ -130,7 +130,7 @@ to; tick items off as they land.
 
 - [x] systemd unit without sandboxing, `/etc/default/tilde`, PAM file, `make install`
 - [x] CI on GitHub Actions: format checks, Go and frontend tests, builds (D30)
-- [x] Packages with nfpm (D65, D73): `.deb` for amd64 and arm64 (`make deb`), built on Debian 12 by a release workflow that attaches them to the tag's GitHub release; the e2e VM installs the `.deb`
+- [x] Packages with nfpm (D65, D73): `.deb` for amd64 and arm64 (`make deb`), named `tilde-desktop` (D81), built on Debian 12 by a release workflow that attaches them to the tag's GitHub release; the e2e VM installs the `.deb`
 - [ ] `.rpm` and Arch packages, each with its family's PAM file (D65)
 - [x] Installing enables and starts Tilde on localhost and prints how to open it to the LAN, a VPN, an SSH tunnel or a reverse proxy (D68)
 - [x] Session lifetime as a server setting, 12 hours by default (D69): `--session-lifetime`

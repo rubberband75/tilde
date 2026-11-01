@@ -1276,6 +1276,22 @@ one page of windows), a frame per window from the Xpra port (Xpra
 drives one client per session), a WebSocket from the worker to Xpra
 (framing in two places for nothing).
 
+**D81 — The package is tilde-desktop** (2026-11-01, accepted; amends D65)
+Debian and Ubuntu have an unrelated text editor in a package called
+`tilde`, at 1.1.2. To apt that was an upgrade of Tilde's own `tilde` 0.1.0:
+in the e2e VM, unattended-upgrades replaced Tilde with the editor overnight,
+and the service was gone. So the package is `tilde-desktop`. Only the
+package's name and its doc folder change: the command, the service,
+`/etc/default/tilde` and the PAM service stay `tilde`, so nothing anyone
+has written down breaks. Both packages own `/usr/bin/tilde`, so
+`tilde-desktop` conflicts with and replaces `tilde`, which also takes over
+from an install under the old name; the cost is that the editor and Tilde
+cannot be installed together. Rejected: a version above 1.1.2 (the next
+editor release brings it back, and a version number should not depend on
+someone else's), an epoch (the same fight, for good), renaming the command
+too (more to change, for a clash that only matters if someone wants both).
+The e2e VM checks each run that an upgrade would not bring the editor in.
+
 ---
 
 ## Open decisions

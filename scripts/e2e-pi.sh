@@ -112,17 +112,17 @@ install_build() {
   # The tests are plain Go: built here for the Pi.
   (cd "$ROOT/server" && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go test -c -tags e2e -o "$OUT/e2e.test" ./e2e)
 
-  rm -f "$OUT"/tilde_*.deb
+  rm -f "$OUT"/tilde-desktop_*.deb
   (cd "$ROOT" && TILDE_VERSION="0.0.0+e2e.$(date +%s)" TILDE_ARCH=arm64 TILDE_BIN="$OUT/tilde" \
     go run "$NFPM" package -f packaging/nfpm.yaml -p deb -t "$OUT/" >/dev/null)
 
   log "Installing the package on the Pi"
-  pi_scp "$OUT/e2e.test" "$OUT"/tilde_*.deb "$PI:tilde-e2e/"
+  pi_scp "$OUT/e2e.test" "$OUT"/tilde-desktop_*.deb "$PI:tilde-e2e/"
   pi_ssh 'set -e
     cd ~/tilde-e2e
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-downgrades \
-      -o Dpkg::Options::=--force-confnew ./tilde_*.deb >/dev/null
-    rm -f tilde_*.deb
+      -o Dpkg::Options::=--force-confnew ./tilde-desktop_*.deb >/dev/null
+    rm -f tilde-desktop_*.deb
     systemctl is-enabled --quiet tilde || { echo "the package did not enable tilde" >&2; exit 1; }'
   restart_tilde
 }

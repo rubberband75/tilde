@@ -192,12 +192,12 @@ install_build() {
   (cd "$ROOT/server" && go test -c -tags e2e -o "$out/e2e.test" ./e2e)
   # The package (D65), so the run tests it too: a newer version each run,
   # so each install is an upgrade, which restarts Tilde.
-  rm -f "$out"/tilde_*.deb
+  rm -f "$out"/tilde-desktop_*.deb
   (cd "$ROOT" && TILDE_VERSION="0.0.0+e2e.$(date +%s)" TILDE_ARCH=amd64 TILDE_BIN="$out/tilde" \
     go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1 package -f packaging/nfpm.yaml -p deb -t "$out/" >/dev/null)
 
   log "Installing the package into the VM"
-  vm_scp "$out/e2e.test" "$out"/tilde_*.deb ubuntu@127.0.0.1:
+  vm_scp "$out/e2e.test" "$out"/tilde-desktop_*.deb ubuntu@127.0.0.1:
   # The package's own files, every time: the two-factor setup below edits
   # /etc/pam.d/tilde, and confmiss puts back what is removed here. The rest
   # is what "make install" left in earlier VMs.
@@ -205,9 +205,15 @@ install_build() {
     sudo rm -f /etc/pam.d/tilde /etc/default/tilde /usr/local/bin/tilde /etc/systemd/system/tilde.service
     wants=/etc/systemd/system/multi-user.target.wants/tilde.service
     [ -e $wants ] || sudo rm -f $wants
-    sudo DEBIAN_FRONTEND=noninteractive dpkg -i --force-confnew,confmiss tilde_*.deb >/dev/null
-    rm -f tilde_*.deb
+    sudo DEBIAN_FRONTEND=noninteractive dpkg -i --force-confnew,confmiss tilde-desktop_*.deb >/dev/null
+    rm -f tilde-desktop_*.deb
     systemctl is-enabled --quiet tilde || { echo "the package did not enable tilde" >&2; exit 1; }
+    # Ubuntu'"'"'s text editor is also called tilde, at a higher version: an
+    # upgrade must not bring it in over this package (D81).
+    if apt-get -s dist-upgrade 2>/dev/null | grep -q "^Inst tilde "; then
+      echo "an upgrade would replace the package with the tilde editor" >&2
+      exit 1
+    fi
     # Installed over a Tilde that "make install" started, the package only
     # starts it, which leaves that one running; and a fresh server forgets
     # the login rate limit of earlier runs.

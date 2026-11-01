@@ -57,7 +57,7 @@ x86-64.
 ## Packages
 
 `make deb` packages the build (`bin/tilde`, with the UI) as
-`dist/tilde_<version>_<arch>.deb`, with nfpm (`packaging/nfpm.yaml`, run
+`dist/tilde-desktop_<version>_<arch>.deb`, with nfpm (`packaging/nfpm.yaml`, run
 through `go run`, so nothing to install). The version is the latest
 `vX.Y.Z` tag, with `+N.gHASH` for commits since it, or
 `0.0.0+gitDATE.HASH` without a tag. The package puts the binary in
@@ -66,7 +66,9 @@ through `go run`, so nothing to install). The version is the latest
 across upgrades; its scripts (`packaging/deb/`) enable and start Tilde on
 a new install, restart it on an upgrade (which ends the sessions running),
 stop it on removal, and delete `/var/lib/tilde` on purge. The e2e VM
-installs it, so every run tests it.
+installs it, so every run tests it. The package is `tilde-desktop`, not
+`tilde`, which is a text editor in Debian and Ubuntu (D81); everything else
+(the command, the service, `/etc/default/tilde`) is still `tilde`.
 
 Releases: pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`,
 which builds the amd64 and arm64 packages natively (cgo, for PAM) in a
