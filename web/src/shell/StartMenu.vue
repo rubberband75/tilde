@@ -10,6 +10,8 @@ import type { HostApp } from '@/api/types'
 import { apps } from '@/apps/registry'
 import type { AppManifest } from '@/apps/types'
 import { useHostApps } from '@/stores/hostApps'
+import { useHostWindows } from '@/stores/hostWindows'
+import { useSettings } from '@/stores/settings'
 import ThemeIcon from '@/components/ThemeIcon.vue'
 import SymbolicIcon from '@/components/SymbolicIcon.vue'
 import { desktopFullscreen, toggleDesktopFullscreen } from '@/lib/fullscreen'
@@ -39,6 +41,8 @@ const favoriteApps = computed(() =>
 
 // The host's own apps (D78), next to Tilde's: they open in the Xpra window.
 const hostApps = useHostApps()
+const hostWindows = useHostWindows()
+const settings = useSettings()
 
 /** One line of the menu: one of Tilde's apps, or the host's. */
 interface Entry {
@@ -89,13 +93,18 @@ function launch(app: AppManifest) {
   open.value = false
 }
 
-/** A host app: the Xpra window first, then the app in the session. */
+/**
+ * A host app: the Xpra window first, then the app in the session; or, with
+ * Tilde's own client (D80), the app, whose window then opens by itself.
+ */
 async function launchHost(h: HostApp) {
   launched = true
-  wm.open('xpra')
+  const tildeWindows = settings.settings.hostApps.tildeWindows
+  if (!tildeWindows) wm.open('xpra')
   open.value = false
   try {
     await hostAppsApi.launch(h.id)
+    if (tildeWindows) await hostWindows.connect()
   } catch (e) {
     notices.push(`Could not start ${h.name}: ${(e as Error).message}`, 'error')
   }

@@ -359,7 +359,7 @@ const buttonLabels: Record<WindowButton, string> = { minimize: 'Minimize', maxim
               <SymbolicIcon :name="buttonIcon(b)" :size="14" />
             </button>
           </div>
-          <ThemeIcon class="title-icon" :name="win.icon" :size="16" />
+          <ThemeIcon class="title-icon" :name="win.icon" :src="win.iconSrc" :size="16" />
           <span class="title">{{ win.title }}</span>
           <div class="buttons right">
             <button

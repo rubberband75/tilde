@@ -19,7 +19,7 @@ const wm = useWindows()
       @click="wm.activate(w.id)"
       @auxclick.middle="wm.requestClose(w.id)"
     >
-      <ThemeIcon :name="w.icon" :size="24" />
+      <ThemeIcon :name="w.icon" :src="w.iconSrc" :size="24" />
       <span class="label">{{ w.title }}</span>
     </button>
   </div>

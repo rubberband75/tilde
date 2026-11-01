@@ -304,7 +304,13 @@ App.vue ── LoginScreen (logged out)
   (headers, chunks, LZ4 through `lz4.ts`), `rencode.ts` (rencodeplus),
   `packets.ts` (Xpra 7's names read as Xpra 6's) and `client.ts` (hello,
   pings, a `Transport` to send and receive bytes on: `websocket.ts`, or a
-  test's).
+  test's). `draw.ts` checks draw packets and makes raw pixels RGBA,
+  `decode.worker.ts` and `decoder.ts` decode off the page's thread.
+  `stores/hostWindows.ts` holds the browser's one connection, a Tilde window
+  (`apps/host-window`, not saved with the layout) and canvas for each X
+  window, and paints and acknowledges draws. System Settings' Host Apps turns
+  it on (`hostApps.tildeWindows`), and the desktop connects if the session
+  runs; off, the menu opens stage 1's Host Apps window.
 - **Font** (D56): the bundled Ubuntu font in `src/assets/fonts`, its
   `@font-face` rules and size-adjusted fallbacks in `src/styles/fonts.css`
   (both made by `make fonts`), used through `--font-ui`.

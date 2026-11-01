@@ -38,6 +38,7 @@ describe('lz4Decode', () => {
     ['an offset of zero', [8, 0, 0, 0, 0x10, 0x61, 0, 0, 0x10, 0x61]],
     ['a match past the size', [5, 0, 0, 0, 0x1f, 0x61, 1, 0, 0x10, 0x61]],
     ['a short block', [9, 0, 0, 0, 0x30, 0x61, 0x62, 0x63]],
+    ['a size its bytes could not make', [0, 0, 0, 16, 0x10, 0x61]],
   ])('refuses %s', (_, data) => {
     expect(() => lz4Decode(new Uint8Array(data), 100)).toThrow(LZ4Error)
   })

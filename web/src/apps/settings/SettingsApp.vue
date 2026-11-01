@@ -18,12 +18,13 @@ const ctx = props.ctx
 const store = useSettings()
 const s = computed(() => store.settings)
 
-type Section = 'themes' | 'lock' | 'effects' | 'panel' | 'background' | 'logins'
+type Section = 'themes' | 'lock' | 'effects' | 'panel' | 'hostApps' | 'background' | 'logins'
 const sections: { id: Section; name: string; icon: string[] }[] = [
   { id: 'themes', name: 'Themes', icon: ['preferences-desktop-theme', 'preferences-desktop'] },
   { id: 'lock', name: 'Screen Lock', icon: ['preferences-desktop-screensaver', 'system-lock-screen'] },
   { id: 'effects', name: 'Effects', icon: ['preferences-desktop-effects', 'preferences-desktop'] },
   { id: 'panel', name: 'Panel', icon: ['preferences-desktop-panel', 'preferences-desktop'] },
+  { id: 'hostApps', name: 'Host Apps', icon: ['preferences-desktop-remote-desktop'] },
   { id: 'background', name: 'Backgrounds', icon: ['preferences-desktop-wallpaper'] },
   { id: 'logins', name: 'Recent Logins', icon: ['preferences-system-privacy', 'dialog-password'] },
 ]
@@ -236,6 +237,27 @@ const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle
         </div>
       </div>
       <p class="note">A system set to reduce motion turns them off too.</p>
+    </section>
+
+    <section v-else-if="section === 'hostApps'" class="pane" aria-labelledby="h-host-apps">
+      <h2 id="h-host-apps">Host Apps</h2>
+      <div class="group">
+        <div class="row">
+          <span class="what">
+            <strong>Show in Tilde windows (experimental)</strong>
+            <span class="note">Each host window gets its own window on the desktop. They cannot be used yet.</span>
+          </span>
+          <SwitchRoot
+            class="switch"
+            aria-label="Show host apps in Tilde windows"
+            :model-value="s.hostApps.tildeWindows"
+            @update:model-value="(on: boolean) => change((n) => (n.hostApps.tildeWindows = on))"
+          >
+            <SwitchThumb class="thumb" />
+          </SwitchRoot>
+        </div>
+      </div>
+      <p class="note">Off, they all open in the one Host Apps window.</p>
     </section>
 
     <section v-else-if="section === 'panel'" class="pane" aria-labelledby="h-panel">

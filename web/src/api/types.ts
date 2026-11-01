@@ -394,6 +394,8 @@ export interface Settings {
   appearance: Appearance
   effects: { animations: boolean }
   panel: { resources: boolean; network: boolean; sound: boolean; notifications: boolean; fullscreen: boolean }
+  /** tildeWindows: each host window a Tilde window (D80), not all in Host Apps. */
+  hostApps: { tildeWindows: boolean }
 }
 
 export type ThemeMode = 'dark' | 'light' | 'mixed'

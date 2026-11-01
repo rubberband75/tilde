@@ -110,7 +110,7 @@ to; tick items off as they land.
 - [x] Xpra, stage 1 (D78): the host's `.desktop` apps in the menu, run in the user's Xpra session (started on first use, on a socket in the runtime folder, stopped at logout) and shown by Xpra's own HTML5 client in the Host Apps window, from the app port
 - [ ] Xpra, stage 2 (D78, D80): Tilde's own Xpra client, so each host window is a Tilde window (title bar, snapping, window list). The plan and its steps: `docs/xpra-client.md`
   - [x] 1. Connection and protocol: the worker's `/api/v1/host-apps/connect` relay; framing, LZ4, rencodeplus; hello, ping; the packet name table. Tested against Xpra 6.5 in the VM
-  - [ ] 2. Windows appear: a setting chooses Tilde's client; host windows as Tilde windows with title and icon; drawing (RGB, PNG, JPEG, WebP, scroll) in a Worker, acknowledged; reconnect on reload and unlock
+  - [x] 2. Windows appear: a setting chooses Tilde's client; host windows as Tilde windows with title and icon; drawing (RGB, PNG, JPEG, WebP, scroll) in a Worker, acknowledged; reconnect on reload and unlock
   - [ ] 3. Input: pointer, wheel, keyboard and layout, focus, cursors
   - [ ] 4. Window management: moves, resizes, maximize, tiling, minimize told to Xpra and back; size constraints; the X screen follows the browser; dialogs
   - [ ] 5. Popups: menus, dropdowns and tooltips in a layer of their own, placed by their parent

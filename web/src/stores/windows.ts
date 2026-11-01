@@ -21,6 +21,8 @@ export interface AppWindow {
   appId: string
   title: string
   icon: string
+  /** A picture the window brought (a host app's own), shown instead of icon. */
+  iconSrc?: string
   rect: Rect
   state: WindowState
   /** Whether a minimized window was maximized before. */
@@ -385,6 +387,11 @@ export const useWindows = defineStore('windows', () => {
     if (w && w.title !== title) w.title = title
   }
 
+  function setIconSrc(id: string, src: string) {
+    const w = get(id)
+    if (w) w.iconSrc = src
+  }
+
   function setIcon(id: string, icon: string) {
     const w = get(id)
     if (w && w.icon !== icon) w.icon = icon
@@ -427,7 +434,7 @@ export const useWindows = defineStore('windows', () => {
       if (!raw) return
       const saved = JSON.parse(raw) as { version: number; windows: AppWindow[]; focusedId?: string }
       if (saved.version !== LAYOUT_VERSION || !Array.isArray(saved.windows)) return
-      windows.value = saved.windows.filter((w) => getApp(w.appId) && !w.parentId)
+      windows.value = saved.windows.filter((w) => getApp(w.appId) && !w.parentId && !getApp(w.appId)?.ephemeral)
       for (const w of windows.value) if (w.tile !== undefined && !isTile(w.tile)) delete w.tile
       zTop = Math.max(10, ...windows.value.map((w) => w.z))
       focusedId.value = saved.focusedId && get(saved.focusedId) ? saved.focusedId : null
@@ -465,7 +472,7 @@ export const useWindows = defineStore('windows', () => {
         storageKey,
         JSON.stringify({
           version: LAYOUT_VERSION,
-          windows: windows.value.filter((w) => !w.parentId),
+          windows: windows.value.filter((w) => !w.parentId && !getApp(w.appId)?.ephemeral),
           focusedId: get(focusedId.value ?? '')?.parentId ?? focusedId.value,
         }),
       )
@@ -523,6 +530,7 @@ export const useWindows = defineStore('windows', () => {
     setRect,
     setTitle,
     setIcon,
+    setIconSrc,
     saveState,
     setCloseGuard,
     setLaunchHandler,

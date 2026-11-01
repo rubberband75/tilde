@@ -5,7 +5,7 @@
 import { computed, onMounted } from 'vue'
 import { fallbackGlyph, iconIndex, loadIconIndex, resolveIcon } from '@/icons/theme'
 
-const props = withDefaults(defineProps<{ name: string | string[]; size?: number }>(), { size: 24 })
+const props = withDefaults(defineProps<{ name: string | string[]; size?: number; src?: string }>(), { size: 24 })
 
 const names = computed(() => (Array.isArray(props.name) ? props.name : [props.name]))
 const resolved = computed(() => (iconIndex.value ? resolveIcon(names.value, props.size) : null))
@@ -15,8 +15,9 @@ onMounted(loadIconIndex)
 </script>
 
 <template>
+  <img v-if="src" class="theme-icon" :src="src" :width="size" :height="size" alt="" draggable="false" />
   <img
-    v-if="resolved"
+    v-else-if="resolved"
     class="theme-icon"
     :src="resolved.src"
     :srcset="resolved.srcset || undefined"

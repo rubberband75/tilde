@@ -122,3 +122,72 @@ test("Tilde's Xpra client says hello to the session, and pings it", async ({ des
   expect(client.state).toBe('connected')
   client.close('done')
 })
+
+// Step 2 (docs/xpra-client.md): with the setting on, a host window is a
+// Tilde window of its own, drawn by Tilde's client. They cannot be used yet.
+test('a host window opens as a Tilde window, and is drawn', async ({ desktop: page }) => {
+  test.setTimeout(90_000)
+  const origin = new URL(page.url()).origin
+  const setting = async (on: boolean) => {
+    const got = (await (await page.request.get('/api/v1/settings')).json()) as { settings: object }
+    const res = await page.request.put('/api/v1/settings', {
+      data: { ...got.settings, hostApps: { tildeWindows: on } },
+      headers: { Origin: origin },
+    })
+    expect(res.status(), await res.text()).toBe(200)
+  }
+  // Xpra would send a refused draw again some other way, hiding the mistake.
+  const refused: string[] = []
+  page.on('console', (m) => {
+    if (m.text().includes('draw refused')) refused.push(m.text())
+  })
+  try {
+    await page.keyboard.press('Alt+F1')
+    await page.getByRole('searchbox', { name: 'Search applications' }).fill('System Settings')
+    await page.locator('.start-menu .apps li', { hasText: 'System Settings' }).click()
+    const settingsWindow = windowNamed(page, 'System Settings')
+    await settingsWindow.getByRole('button', { name: 'Host Apps' }).click()
+    await settingsWindow.getByRole('switch', { name: 'Show host apps in Tilde windows' }).click()
+    await settingsWindow.getByRole('button', { name: 'Close' }).click()
+
+    await page.keyboard.press('Alt+F1')
+    await page.getByRole('searchbox', { name: 'Search applications' }).fill('XTerm')
+    await page.locator('.start-menu .apps li', { hasText: /^XTerm$/ }).click()
+
+    const title = new RegExp(`xterm|${user}@`)
+    const win = windowNamed(page, title).first()
+    await expect(win).toBeVisible({ timeout: 60_000 })
+    await expect(windowNamed(page, 'Host Apps')).toHaveCount(0)
+    await expect(
+      page.getByRole('navigation', { name: 'Panel' }).getByRole('button', { name: title }).first(),
+    ).toBeVisible()
+
+    // XTerm draws: more than one colour on the canvas.
+    const canvas = win.locator('canvas')
+    const colours = () =>
+      canvas.evaluate((c: HTMLCanvasElement) => {
+        const { data } = c.getContext('2d')!.getImageData(0, 0, c.width, c.height)
+        const seen = new Set<number>()
+        for (let i = 0; i < data.length; i += 4) seen.add(new DataView(data.buffer).getUint32(i))
+        return seen.size
+      })
+    await expect.poll(colours, { timeout: 15_000 }).toBeGreaterThan(1)
+    await page.screenshot({ path: test.info().outputPath('host-window.png') })
+
+    // A reload finds it again: Xpra sends its windows on connecting.
+    const count = await windowNamed(page, title).count()
+    await page.reload()
+    await expect(windowNamed(page, title)).toHaveCount(count, { timeout: 30_000 })
+    await expect.poll(colours, { timeout: 15_000 }).toBeGreaterThan(1)
+
+    expect(refused).toEqual([])
+
+    // Closing asks the app; all of them, as earlier tests leave XTerms.
+    for (let left = count; left > 0; left--) {
+      await windowNamed(page, title).first().getByRole('button', { name: 'Close' }).click()
+      await expect(windowNamed(page, title)).toHaveCount(left - 1, { timeout: 15_000 })
+    }
+  } finally {
+    await setting(false)
+  }
+})

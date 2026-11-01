@@ -47,6 +47,11 @@ export interface AppManifest {
   reuseWindow?: boolean
   /** Hide from the menu (helpers launched by other apps). */
   hidden?: boolean
+  /**
+   * Not saved with the layout: what the window shows comes back by itself
+   * after a reload, or not at all (a host app's window, D80).
+   */
+  ephemeral?: boolean
   defaultSize: { w: number; h: number }
   minSize?: { w: number; h: number }
   component: () => Promise<Component>

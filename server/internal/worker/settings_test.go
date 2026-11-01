@@ -136,3 +136,31 @@ func TestSettingsFileFromOlderOrBroken(t *testing.T) {
 		t.Fatalf("fifo: %+v", got)
 	}
 }
+
+// TestHostAppPrefs: off by default, an older settings file included (D80),
+// and kept when saved.
+func TestHostAppPrefs(t *testing.T) {
+	c, home := startWorker(t)
+	type got struct{ Settings Settings }
+	file := filepath.Join(home, ".config", "tilde", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(`{"effects":{"animations":false}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := decode[got](t, mustGet(t, c, api("/api/v1/settings", nil)), http.StatusOK)
+	if g.Settings.HostApps.TildeWindows || g.Settings.Effects.Animations {
+		t.Fatalf("an older file: %+v", g.Settings)
+	}
+	s := defaultSettings()
+	s.HostApps.TildeWindows = true
+	body, _ := json.Marshal(s)
+	if resp := putSettings(t, c, string(body)); resp.StatusCode != http.StatusOK {
+		t.Fatalf("save: %d", resp.StatusCode)
+	}
+	g = decode[got](t, mustGet(t, c, api("/api/v1/settings", nil)), http.StatusOK)
+	if !g.Settings.HostApps.TildeWindows {
+		t.Fatalf("after saving: %+v", g.Settings)
+	}
+}

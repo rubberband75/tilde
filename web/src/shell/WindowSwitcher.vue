@@ -22,7 +22,7 @@ const switcher = useSwitcher()
         @pointerenter="switcher.select(w.id)"
         @click="switcher.commit()"
       >
-        <ThemeIcon :name="w.icon" :size="48" />
+        <ThemeIcon :name="w.icon" :src="w.iconSrc" :size="48" />
       </button>
     </div>
     <div class="title">{{ switcher.items.find((w) => w.id === switcher.selectedId)?.title }}</div>

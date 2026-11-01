@@ -3,6 +3,7 @@
 // windows or the page: the host windows store gives it its capabilities
 // and takes its packets, and tests drive it with a fake transport.
 
+import { encodings } from './draw'
 import { encodePacket, PacketReader, type Limits, type Packet } from './framing'
 import type { Dict, Encodable, EncodableDict } from './rencode'
 import { packetName } from './packets'
@@ -53,6 +54,70 @@ export function helloCaps(o: HelloOptions): EncodableDict {
     // Xpra's defaults but "aliases", which would number packet types.
     wants: ['versions', 'features', 'display', 'encodings', 'packet-types'],
     network: { pings: 5 },
+  }
+}
+
+/** The browser's desktop, as the X screen is to be (docs/xpra-client.md). */
+export interface ScreenSize {
+  w: number
+  h: number
+  /** The height windows may use: the screen without the panel. */
+  workHeight: number
+}
+
+/**
+ * What a client that shows windows adds to its hello. Only what Tilde
+ * handles so far is on: no keyboard, cursors, clipboard or sound yet, and no
+ * transparency, as windows are drawn opaque.
+ */
+export function windowCaps(screen: ScreenSize, dpi = 96): EncodableDict {
+  const { w, h, workHeight } = screen
+  const wmm = Math.round((w * 25.4) / dpi)
+  const hmm = Math.round((h * 25.4) / dpi)
+  const monitor = {
+    geometry: [0, 0, w, h],
+    primary: true,
+    'width-mm': wmm,
+    'height-mm': hmm,
+    workarea: [0, 0, w, workHeight],
+    name: 'Tilde',
+  }
+  const sizes = [['Tilde', w, h, wmm, hmm, [['Tilde', 0, 0, w, h, wmm, hmm]], 0, 0, w, workHeight]]
+  return {
+    windows: true,
+    'window.pre-map': true,
+    display: {
+      desktop_size: [w, h],
+      desktop_mode_size: [w, h],
+      screen_sizes: sizes,
+      monitors: new Map([[0, monitor]]),
+    },
+    desktop_size: [w, h],
+    screen_sizes: sizes,
+    dpi: { x: dpi, y: dpi },
+    encodings: {
+      '': encodings,
+      core: encodings,
+      rgb_formats: ['RGBX', 'RGBA', 'RGB'],
+      'window-icon': ['png'],
+      cursor: ['png'],
+      packet: true,
+    },
+    encoding: {
+      '': 'auto',
+      icons: { max_size: [64, 64], greedy: true },
+      transparency: false,
+      rgb_lz4: true,
+    },
+    'metadata.supported': ['title', 'size-hints', 'class-instance', 'transient-for', 'window-type', 'modal'],
+    auto_refresh_delay: 500,
+    keyboard: false,
+    cursors: false,
+    bell: false,
+    system_tray: false,
+    notifications: { enabled: false },
+    clipboard: { enabled: false },
+    audio: { receive: false, send: false },
   }
 }
 

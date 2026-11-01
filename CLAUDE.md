@@ -53,7 +53,7 @@ web/                    Vue 3 + Vite + Pinia + TypeScript frontend
   src/apps/             apps: registry.ts, types.ts (shell API), files/, terminal/,
                         editor/, chooser/ (ctx.chooseFile), image-viewer/,
                         media-player/, properties/, system-info/, backgrounds/,
-                        settings/, web-apps/, xpra/
+                        settings/, web-apps/, xpra/, host-window/
   src/lib/              shared helpers: fileops (paste, trash, delete), dnd, bus,
                         folderSiblings (a file's folder, for viewers)
   src/xpra/             Tilde's Xpra client (D80): protocol, framing, rencodeplus, LZ4

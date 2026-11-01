@@ -10,7 +10,9 @@ export class LZ4Error extends Error {}
 export function lz4Decode(data: Uint8Array, max: number): Uint8Array {
   if (data.length < 4) throw new LZ4Error('truncated')
   const size = (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)) >>> 0
-  if (size === 0 || size > max) throw new LZ4Error(`bad size ${size}`)
+  // A block makes at most about 255 times its length: nothing is allocated
+  // for a size its bytes could not fill.
+  if (size === 0 || size > max || size > (data.length - 4) * 256) throw new LZ4Error(`bad size ${size}`)
   const out = new Uint8Array(size)
   if (decompressBlock(data, 4, out) !== size) throw new LZ4Error('short block')
   return out

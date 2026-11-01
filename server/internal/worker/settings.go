@@ -21,10 +21,11 @@ import (
 
 // Settings are the System Settings app's.
 type Settings struct {
-	Lock       LockPrefs  `json:"lock"`
-	Appearance Appearance `json:"appearance"`
-	Effects    Effects    `json:"effects"`
-	Panel      PanelPrefs `json:"panel"`
+	Lock       LockPrefs    `json:"lock"`
+	Appearance Appearance   `json:"appearance"`
+	Effects    Effects      `json:"effects"`
+	Panel      PanelPrefs   `json:"panel"`
+	HostApps   HostAppPrefs `json:"hostApps"`
 }
 
 // Appearance is the look (D77): a mode (dark, light, mixed) and an accent,
@@ -56,6 +57,12 @@ type PanelPrefs struct {
 	Sound         bool `json:"sound"`
 	Notifications bool `json:"notifications"`
 	Fullscreen    bool `json:"fullscreen"`
+}
+
+// HostAppPrefs: TildeWindows shows each host window as a Tilde window, with
+// Tilde's own Xpra client (D80), not all of them in the Host Apps window.
+type HostAppPrefs struct {
+	TildeWindows bool `json:"tildeWindows"`
 }
 
 // defaultSettings: the desktop's lock delay, animations, every applet.

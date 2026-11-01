@@ -179,9 +179,11 @@ bug in Tilde can never give more than the account already has.
   the client checks every length (`src/xpra/framing.ts`, `rencode.ts`,
   `lz4.ts`), bounds a packet to 64 MiB decompressed (chunks included), a
   million values and 100 levels of nesting, and builds decoded dicts
-  without a prototype. Later steps keep to the rules in
-  `docs/xpra-client.md` ("Security"): text shown only as text, images only
-  decoded as images, the CSP unchanged. The client takes the session over
+  without a prototype. Titles and Xpra's messages are shown only as text,
+  cut short and without control or bidi characters; icons and frames are
+  only decoded as images, in a same-origin Worker, so the CSP is
+  unchanged. `docs/xpra-client.md` ("Security") lists the bounds on
+  windows, canvases, draws and images. The client takes the session over
   from another (`steal`), as the Host Apps window does: any of the user's
   Tilde tabs may take it from another, by design. The relay gives up on
   an Xpra that stops reading for a minute.

@@ -167,6 +167,19 @@ export const apps: AppManifest[] = [
     component: () => import('./xpra/XpraApp.vue'),
   },
   {
+    id: 'host-window',
+    name: 'Host App',
+    comment: 'A window of one of the host’s graphical apps',
+    icon: 'application-x-executable',
+    category: 'Internet',
+    // Opened by the host windows store for each of Xpra's windows (D80).
+    hidden: true,
+    ephemeral: true,
+    defaultSize: { w: 640, h: 480 },
+    minSize: { w: 200, h: 120 },
+    component: () => import('./host-window/HostWindow.vue'),
+  },
+  {
     id: 'system-monitor',
     name: 'System Monitor',
     comment: 'View current processes and monitor system state',

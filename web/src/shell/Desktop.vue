@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { applyLook } from '@/lib/theme'
 import { useBackground } from '@/stores/background'
+import { useHostWindows } from '@/stores/hostWindows'
 import { useSettings } from '@/stores/settings'
 import DesktopIcons from './DesktopIcons.vue'
 import Dialogs from './Dialogs.vue'
@@ -28,6 +29,20 @@ watch(
   (look) => look && applyLook(look),
   { immediate: true },
 )
+
+// Host apps in Tilde windows (D80): back with the desktop (a reload, an
+// unlock) if the session runs, and ended with it. Only the desktop's own
+// launches start the session.
+const hostWindows = useHostWindows()
+watch(
+  () => !!settings.desktopTheme && settings.settings.hostApps.tildeWindows,
+  (on) => {
+    if (on) hostWindows.connect().catch(() => {})
+    else hostWindows.disconnect()
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => hostWindows.disconnect())
 
 onMounted(() => {
   void background.load()

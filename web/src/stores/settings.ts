@@ -11,6 +11,7 @@ export function defaultSettings(): Settings {
     appearance: { mode: 'desktop', accent: 'desktop' },
     effects: { animations: true },
     panel: { resources: true, network: true, sound: true, notifications: true, fullscreen: true },
+    hostApps: { tildeWindows: false },
   }
 }
 

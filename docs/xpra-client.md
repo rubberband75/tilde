@@ -59,14 +59,15 @@ browser (Tilde's origin)                    worker (the user)          Xpra
   shell, not an app), and keeps what each window needs (metadata, size
   constraints, its canvas).
 - **The app** (`apps/host-window/`, hidden from the menu): one per host
-  window, a `<canvas>` the size of the window's content. It reports its
-  content area's geometry and turns pointer and key events into packets.
-  It reaches the store through the shell API (`ctx`), never the window
-  store.
+  window, showing the `<canvas>` the store owns, so drawing can start
+  before the app has loaded. It reports its content area's geometry and
+  turns pointer and key events into packets. It uses the host windows
+  store, and never the window store.
 - **Decoding** in a Worker: `createImageBitmap` for PNG, JPEG and WebP,
   `ImageData` for raw RGB, later WebCodecs' `VideoDecoder` for H.264,
-  VP8 and VP9. The bitmap is drawn on the window's canvas on the next
-  animation frame, then acknowledged.
+  VP8 and VP9. Each window paints in the server's order, as a scroll moves
+  what came before it, and acknowledges each paint at once; the browser
+  shows them at its next frame.
 - **Popups** (menus, tooltips, dropdowns: X's override-redirect windows)
   are not Tilde windows: they are canvases in a layer above the windows,
   placed relative to the window they belong to.
@@ -151,6 +152,10 @@ ever. One user may be signed in from several browsers (D47). So:
   host windows close, and a notice says the host apps are open in
   another browser, with Take Over.
 - Reloads and unlocking reconnect, as they are this browser's own.
+- Turning the setting on tells every open desktop, and each connects:
+  the last one has the session, and the others say so. A background
+  browser that reloads or unlocks takes the session too; step 9's Take
+  Over is where that gets decided properly.
 - Stage 1's Host Apps window is a client too: until it goes (the last
   step), opening it takes the session from Tilde's client, and the other
   way round.
@@ -172,10 +177,19 @@ spelt out here and in `docs/security.md` as the steps land.
   is only ever shown as text (Vue interpolation, never `v-html`);
   icons, cursors and frames are decoded as images (`createImageBitmap`),
   never put into markup; a cursor becomes a `data:image/png;base64` URL
-  built by Tilde from bytes, and only after it decodes. Sizes are bound:
-  a packet to 64 MiB decompressed and a million values (step 1), and as
-  the steps land, windows, icon and cursor sizes, and draw rectangles
-  inside their window, so a host app cannot use up the tab's memory.
+  built by Tilde from bytes, and only after it decodes. Sizes are bound,
+  so a host app cannot use up the tab's memory: a packet to 64 MiB
+  decompressed and a million values; 64 windows, of 64 million pixels each
+  and 256 million in all; draws and scrolls inside their window, and 1024
+  regions to a scroll; encoded images no larger than their draw, or 256
+  pixels a side for an icon, read from their headers before decoding; 256
+  draws or 256 MiB waiting, past which the connection ends. Icons are given
+  back when they change, canvases and icons when a window goes.
+- **New windows and the keyboard.** A new Tilde window takes the focus, which
+  is harmless while no keys reach Xpra. Once they do (step 3), a host app
+  must not be able to open a window while the user types a password into a
+  Tilde terminal and read the keys: a new host window takes the focus only
+  if the user has just launched something.
 - **The CSP stays as it is.** Decoding uses the browser's own decoders
   (images, WebCodecs) in a Worker loaded from `'self'`: no WebAssembly,
   no `wasm-unsafe-eval`, no `blob:` scripts.
@@ -212,9 +226,12 @@ Until step 9, Tilde's client is chosen in System Settings (Host apps:
    `rgb32`, `png`, `jpeg`, `webp`, `scroll` and `void`, decoded in a
    Worker and acknowledged (`damage-sequence`, or Xpra slows down and
    stops sending); close asks the app. Reload and unlock reconnect.
+   Windows are opaque until step 7 (`transparency` off); windows ignore
+   resizing until step 4, and menus do not show until step 5.
    Test: XTerm opens as a Tilde window, its title follows its shell.
 3. **Input.** Pointer, buttons, wheel, keyboard (keysym tables and the
-   layout), focus both ways, cursors. Host apps become usable. Test: type
+   layout), focus both ways, cursors; new windows do not take the keyboard
+   (see Security). Host apps become usable. Test: type
    into XTerm, a file appears.
 4. **Window management.** Moves, resizes, maximize, tiling, minimize
    and Always on Top told to Xpra; the app's own moves and resizes told
